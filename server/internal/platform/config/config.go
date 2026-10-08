@@ -2,10 +2,7 @@
 package config
 
 import (
-	"errors"
 	"fmt"
-	"net/netip"
-	"slices"
 	"strings"
 	"time"
 
@@ -20,19 +17,24 @@ const (
 	EnvProduction  = "production"
 )
 
-const envPrefix = "JIKELOG_"
-
-var (
-	validEnvs       = []string{EnvDevelopment, EnvTest, EnvStaging, EnvProduction}
-	validLogLevels  = []string{"debug", "info", "warn", "error"}
-	validLogFormats = []string{"json", "text"}
+// 短信通道。
+const (
+	// SMSProviderMock 只把验证码写入日志，仅用于开发与测试，生产环境禁止使用。
+	SMSProviderMock   = "mock"
+	SMSProviderAliyun = "aliyun"
 )
+
+const envPrefix = "JIKELOG_"
 
 // Config 为服务完整配置。
 type Config struct {
-	Env  string `env:"ENV" envDefault:"development"`
-	HTTP HTTP   `envPrefix:"HTTP_"`
-	Log  Log    `envPrefix:"LOG_"`
+	Env   string `env:"ENV" envDefault:"development"`
+	HTTP  HTTP   `envPrefix:"HTTP_"`
+	Log   Log    `envPrefix:"LOG_"`
+	DB    DB     `envPrefix:"DB_"`
+	Redis Redis  `envPrefix:"REDIS_"`
+	Auth  Auth   `envPrefix:"AUTH_"`
+	SMS   SMS    `envPrefix:"SMS_"`
 }
 
 // HTTP 为 HTTP 服务配置。
@@ -46,12 +48,42 @@ type HTTP struct {
 	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"8s"`
 	// TrustedProxies 为可信反向代理地址；为空时不信任 X-Forwarded-For，防止伪造客户端 IP。
 	TrustedProxies []string `env:"TRUSTED_PROXIES" envSeparator:","`
+	// CORSOrigins 为允许跨域访问的来源（如管理后台域名）；为空时不返回任何 CORS 头。
+	CORSOrigins []string `env:"CORS_ORIGINS" envSeparator:","`
 }
 
 // Log 为日志配置。
 type Log struct {
 	Level  string `env:"LEVEL" envDefault:"info"`
 	Format string `env:"FORMAT" envDefault:"json"`
+}
+
+// DB 为 PostgreSQL 配置。
+type DB struct {
+	// URL 形如 postgres://user:pass@host:5432/db?sslmode=require
+	URL      string `env:"URL"`
+	MaxConns int32  `env:"MAX_CONNS" envDefault:"20"`
+}
+
+// Redis 为 Redis 配置。
+type Redis struct {
+	// URL 形如 redis://:pass@host:6379/0，TLS 连接使用 rediss://
+	URL string `env:"URL"`
+}
+
+// Auth 为认证配置。
+type Auth struct {
+	// JWTSecret 为 Access Token 的 HMAC 签名密钥，至少 32 字节。
+	JWTSecret string `env:"JWT_SECRET"`
+	// JWTPreviousSecret 为轮换前的旧密钥，仅用于验签，让轮换期内签发的旧 token 继续有效。
+	JWTPreviousSecret string        `env:"JWT_PREVIOUS_SECRET"`
+	AccessTTL         time.Duration `env:"ACCESS_TTL" envDefault:"15m"`
+	RefreshTTL        time.Duration `env:"REFRESH_TTL" envDefault:"720h"`
+}
+
+// SMS 为短信配置。
+type SMS struct {
+	Provider string `env:"PROVIDER" envDefault:"mock"`
 }
 
 // Load 从进程环境变量加载配置。
@@ -70,64 +102,11 @@ func parse(opts env.Options) (Config, error) {
 		return Config{}, fmt.Errorf("解析配置失败: %w", err)
 	}
 	cfg.HTTP.TrustedProxies = normalizeList(cfg.HTTP.TrustedProxies)
+	cfg.HTTP.CORSOrigins = normalizeList(cfg.HTTP.CORSOrigins)
 	if err := cfg.Validate(); err != nil {
 		return Config{}, fmt.Errorf("配置校验失败: %w", err)
 	}
 	return cfg, nil
-}
-
-// Validate 校验配置取值，返回所有错误的合并结果。
-func (c Config) Validate() error {
-	var errs []error
-	if !slices.Contains(validEnvs, c.Env) {
-		errs = append(errs, fmt.Errorf("JIKELOG_ENV=%q 不合法，可选 %v", c.Env, validEnvs))
-	}
-	if strings.TrimSpace(c.HTTP.Addr) == "" {
-		errs = append(errs, errors.New("JIKELOG_HTTP_ADDR 不能为空"))
-	}
-	timeouts := []struct {
-		name string
-		d    time.Duration
-	}{
-		{"READ_TIMEOUT", c.HTTP.ReadTimeout}, {"WRITE_TIMEOUT", c.HTTP.WriteTimeout},
-		{"IDLE_TIMEOUT", c.HTTP.IdleTimeout}, {"SHUTDOWN_TIMEOUT", c.HTTP.ShutdownTimeout},
-	}
-	for _, t := range timeouts {
-		if t.d <= 0 {
-			errs = append(errs, fmt.Errorf("JIKELOG_HTTP_%s 必须大于 0", t.name))
-		}
-	}
-	errs = append(errs, c.validateTrustedProxies()...)
-	if !slices.Contains(validLogLevels, c.Log.Level) {
-		errs = append(errs, fmt.Errorf("JIKELOG_LOG_LEVEL=%q 不合法，可选 %v", c.Log.Level, validLogLevels))
-	}
-	if !slices.Contains(validLogFormats, c.Log.Format) {
-		errs = append(errs, fmt.Errorf("JIKELOG_LOG_FORMAT=%q 不合法，可选 %v", c.Log.Format, validLogFormats))
-	}
-	return errors.Join(errs...)
-}
-
-// validateTrustedProxies 校验每项为 IP 或 CIDR；生产环境禁止前缀为 0 的网段（等于信任所有来源）。
-func (c Config) validateTrustedProxies() []error {
-	var errs []error
-	for _, p := range c.HTTP.TrustedProxies {
-		prefix, err := parseIPOrPrefix(p)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("JIKELOG_HTTP_TRUSTED_PROXIES 中 %q 不是合法的 IP 或 CIDR", p))
-			continue
-		}
-		if c.IsProduction() && prefix.Bits() == 0 {
-			errs = append(errs, fmt.Errorf("生产环境不允许 JIKELOG_HTTP_TRUSTED_PROXIES 包含 %s（会让任何客户端伪造来源 IP）", p))
-		}
-	}
-	return errs
-}
-
-func parseIPOrPrefix(s string) (netip.Prefix, error) {
-	if addr, err := netip.ParseAddr(s); err == nil {
-		return netip.PrefixFrom(addr, addr.BitLen()), nil
-	}
-	return netip.ParsePrefix(s)
 }
 
 // normalizeList 去掉逗号分隔列表中的空白与空项。

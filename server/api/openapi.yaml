@@ -11,12 +11,23 @@ info:
     - 错误码使用大写蛇形字符串（如 `VALIDATION_FAILED`），HTTP 状态码表达错误类别。
     - 每个响应都带 `X-Request-ID` 头（客户端传入合法值时沿用，否则服务端生成 UUIDv7），与信封中的 `requestId` 一致。
     - 健康检查 `/healthz`、`/readyz` 同时支持 HEAD（供负载均衡探测）。
+    - 除标注 `security: []` 的接口外都需要登录：请求头 `Authorization: Bearer <accessToken>`。
+      令牌缺失、过期或设备已下线时返回 401 `UNAUTHORIZED`，客户端应先用 Refresh Token 刷新，刷新失败再回到登录页。
+    - 超出频率限制返回 429 `RATE_LIMITED` / `SMS_RATE_LIMITED`，响应头 `Retry-After` 与 `error.details.retryAfterSeconds` 给出需等待的秒数。
+    - 参数校验失败返回 422 `VALIDATION_FAILED`，`error.details.fields` 为 `{字段名: 原因}`。
 servers:
   - url: http://localhost:8080
     description: 本地开发
 tags:
   - name: system
     description: 健康检查与系统信息
+  - name: auth
+    description: 注册、登录、令牌刷新与找回密码
+  - name: account
+    description: 当前账号：资料、密码、手机号、设备与设置
+
+security:
+  - bearerAuth: []
 
 paths:
   /healthz:
@@ -75,7 +86,394 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  # ───────────────────────────── 认证（无需登录） ─────────────────────────────
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: 用户名密码注册
+      description: 注册成功即视为登录，返回会话。用户名不区分大小写唯一。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/auth/login/password:
+    post:
+      tags: [auth]
+      operationId: loginWithPassword
+      summary: 用户名密码登录
+      description: 连续失败 5 次后账号锁定 15 分钟（`ACCOUNT_LOCKED`）。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordLoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/auth/sms/send:
+    post:
+      tags: [auth]
+      operationId: sendAuthSms
+      summary: 发送登录或找回密码验证码
+      description: |
+        同一手机号 60 秒内只能发送 1 条、每天最多 10 条，同一 IP 每小时最多 20 条，超出返回 `SMS_RATE_LIMITED`。
+        找回密码时即使手机号未注册也返回成功（不发送），避免泄露手机号是否已注册。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthSmsRequest'
+      responses:
+        '200':
+          description: 已受理
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SmsSentEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/auth/login/sms:
+    post:
+      tags: [auth]
+      operationId: loginWithSms
+      summary: 手机号验证码登录
+      description: 手机号已绑定账号时直接登录；未绑定时返回注册凭证，客户端进入"完善注册"步骤。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SmsLoginRequest'
+      responses:
+        '200':
+          description: 登录成功或需要完善注册
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SmsLoginResultEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/auth/register/sms:
+    post:
+      tags: [auth]
+      operationId: completeSmsRegistration
+      summary: 完善注册（短信登录的新手机号）
+      description: 使用短信登录返回的注册凭证设置用户名和密码，创建账号并自动绑定该手机号。凭证 10 分钟内有效且只能使用一次。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteSmsRegistrationRequest'
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshToken
+      summary: 刷新令牌
+      description: |
+        每次刷新都会轮换 Refresh Token，旧令牌随即失效。为容忍网络重试，刚被轮换的旧令牌在 30 秒内仍可再刷新一次；
+        超过宽限期再次使用旧令牌会被视为令牌泄露，该设备会被强制下线。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: 新的令牌
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPairEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/auth/password/reset:
+    post:
+      tags: [auth]
+      operationId: resetPassword
+      summary: 通过手机号找回密码
+      description: 重置成功后该账号所有设备都会下线。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: 重置成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AckEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: 退出登录
+      description: 注销当前设备的会话。
+      responses:
+        '200':
+          description: 已退出
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AckEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  # ───────────────────────────── 当前账号（需登录） ─────────────────────────────
+  /api/v1/me:
+    get:
+      tags: [account]
+      operationId: getMe
+      summary: 当前账号信息
+      responses:
+        '200':
+          description: 账号信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      tags: [account]
+      operationId: updateMe
+      summary: 修改资料
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeRequest'
+      responses:
+        '200':
+          description: 修改后的账号信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/me/sms/send:
+    post:
+      tags: [account]
+      operationId: sendAccountSms
+      summary: 发送账号操作验证码
+      description: |
+        - `bind_phone`：向待绑定的新手机号发送，需提供 `phone`；该号码已被其他账号绑定时返回 `PHONE_TAKEN`。
+        - `verify_current`：向当前已绑定的手机号发送，用于换绑、修改密码、注销账号时验证身份。
+
+        频率限制与登录验证码相同。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountSmsRequest'
+      responses:
+        '200':
+          description: 已发送
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SmsSentEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/me/password:
+    put:
+      tags: [account]
+      operationId: changePassword
+      summary: 修改密码
+      description: 需提供当前密码，或当前绑定手机号的验证码（`verify_current`）。修改成功后其他设备全部下线。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: 修改成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AckEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/me/phone:
+    put:
+      tags: [account]
+      operationId: bindPhone
+      summary: 绑定或换绑手机号
+      description: 需要新手机号的验证码（`bind_phone`）；已绑定手机号时为换绑，还需要当前手机号的验证码（`verify_current`）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BindPhoneRequest'
+      responses:
+        '200':
+          description: 绑定后的账号信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/me/deletion:
+    post:
+      tags: [account]
+      operationId: deleteAccount
+      summary: 注销账号
+      description: 永久删除账号及其全部数据，不可恢复。需提供当前密码，或当前绑定手机号的验证码（`verify_current`）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyIdentityRequest'
+      responses:
+        '200':
+          description: 已注销
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AckEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/me/devices:
+    get:
+      tags: [account]
+      operationId: listDevices
+      summary: 已登录设备
+      responses:
+        '200':
+          description: 按最近活跃排序的设备列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceListEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/me/devices/{deviceId}:
+    delete:
+      tags: [account]
+      operationId: revokeDevice
+      summary: 将设备下线
+      description: 该设备的令牌立即失效。不能用此接口下线当前设备（请使用退出登录）。
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 已下线
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AckEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/me/settings:
+    get:
+      tags: [account]
+      operationId: getSettings
+      summary: 用户设置
+      responses:
+        '200':
+          description: 用户设置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      tags: [account]
+      operationId: updateSettings
+      summary: 保存用户设置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettingsInput'
+      responses:
+        '200':
+          description: 保存后的设置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   responses:
     Error:
       description: 错误（4xx/5xx），统一使用错误信封
@@ -197,3 +595,429 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/SystemInfo'
+
+    # ───────────────────────────── 认证与账号 ─────────────────────────────
+    Ack:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+
+    AckEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/Ack'
+
+    Username:
+      type: string
+      description: 4–20 位，字母开头，只含字母、数字、下划线；不区分大小写唯一
+      pattern: '^[A-Za-z][A-Za-z0-9_]{3,19}$'
+      example: zhang_san
+
+    Password:
+      type: string
+      description: 8–64 位，至少包含字母和数字
+      minLength: 8
+      maxLength: 64
+      format: password
+
+    Phone:
+      type: string
+      description: 中国大陆手机号，可带 +86 前缀
+      example: '13812345678'
+
+    SmsCode:
+      type: string
+      description: 6 位数字验证码，5 分钟内有效，最多尝试 5 次
+      pattern: '^[0-9]{6}$'
+
+    Nickname:
+      type: string
+      description: 昵称，最多 20 个字符
+      maxLength: 20
+
+    DeviceInfo:
+      type: object
+      description: 客户端设备信息。`installationId` 由客户端首次启动时生成并持久保存，同一安装实例重复登录同一账号时复用设备记录。
+      required: [installationId, platform]
+      properties:
+        installationId:
+          type: string
+          minLength: 8
+          maxLength: 64
+        platform:
+          type: string
+          enum: [android, ios, windows, macos, linux, web]
+        model:
+          type: string
+          maxLength: 64
+          example: Xiaomi 14
+        osVersion:
+          type: string
+          maxLength: 64
+          example: Android 15
+        appVersion:
+          type: string
+          maxLength: 32
+          example: 0.2.0
+
+    RegisterRequest:
+      type: object
+      required: [username, password, device]
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        password:
+          $ref: '#/components/schemas/Password'
+        nickname:
+          $ref: '#/components/schemas/Nickname'
+        device:
+          $ref: '#/components/schemas/DeviceInfo'
+
+    PasswordLoginRequest:
+      type: object
+      required: [username, password, device]
+      properties:
+        username:
+          type: string
+          maxLength: 64
+        password:
+          type: string
+          maxLength: 128
+          format: password
+        device:
+          $ref: '#/components/schemas/DeviceInfo'
+
+    SmsPurpose:
+      type: string
+      enum: [login, reset_password]
+
+    AuthSmsRequest:
+      type: object
+      required: [phone, purpose]
+      properties:
+        phone:
+          $ref: '#/components/schemas/Phone'
+        purpose:
+          $ref: '#/components/schemas/SmsPurpose'
+        captchaVerifyParam:
+          type: string
+          maxLength: 4096
+          description: 人机验证结果（阿里云验证码 2.0），开发环境可省略
+
+    AccountSmsPurpose:
+      type: string
+      enum: [bind_phone, verify_current]
+
+    AccountSmsRequest:
+      type: object
+      required: [purpose]
+      properties:
+        purpose:
+          $ref: '#/components/schemas/AccountSmsPurpose'
+        phone:
+          $ref: '#/components/schemas/Phone'
+        captchaVerifyParam:
+          type: string
+          maxLength: 4096
+
+    SmsSent:
+      type: object
+      required: [cooldownSeconds, expiresInSeconds]
+      properties:
+        cooldownSeconds:
+          type: integer
+          description: 距离可再次发送的秒数
+          example: 60
+        expiresInSeconds:
+          type: integer
+          description: 验证码有效期（秒）
+          example: 300
+
+    SmsSentEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/SmsSent'
+
+    SmsLoginRequest:
+      type: object
+      required: [phone, code, device]
+      properties:
+        phone:
+          $ref: '#/components/schemas/Phone'
+        code:
+          $ref: '#/components/schemas/SmsCode'
+        device:
+          $ref: '#/components/schemas/DeviceInfo'
+
+    SmsLoginResult:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [authenticated, registration_required]
+        session:
+          $ref: '#/components/schemas/AuthSession'
+        registrationTicket:
+          type: string
+          description: status 为 registration_required 时返回，用于完善注册
+        phoneMasked:
+          type: string
+          description: status 为 registration_required 时返回，供界面展示
+          example: 138****5678
+
+    SmsLoginResultEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/SmsLoginResult'
+
+    CompleteSmsRegistrationRequest:
+      type: object
+      required: [registrationTicket, username, password, device]
+      properties:
+        registrationTicket:
+          type: string
+          maxLength: 128
+        username:
+          $ref: '#/components/schemas/Username'
+        password:
+          $ref: '#/components/schemas/Password'
+        nickname:
+          $ref: '#/components/schemas/Nickname'
+        device:
+          $ref: '#/components/schemas/DeviceInfo'
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          maxLength: 128
+
+    ResetPasswordRequest:
+      type: object
+      required: [phone, code, newPassword]
+      properties:
+        phone:
+          $ref: '#/components/schemas/Phone'
+        code:
+          $ref: '#/components/schemas/SmsCode'
+        newPassword:
+          $ref: '#/components/schemas/Password'
+
+    TokenPair:
+      type: object
+      required: [tokenType, accessToken, accessExpiresAt, refreshToken, refreshExpiresAt]
+      properties:
+        tokenType:
+          type: string
+          enum: [Bearer]
+        accessToken:
+          type: string
+        accessExpiresAt:
+          type: string
+          format: date-time
+        refreshToken:
+          type: string
+        refreshExpiresAt:
+          type: string
+          format: date-time
+
+    TokenPairEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/TokenPair'
+
+    User:
+      type: object
+      required: [id, username, nickname, hasPhone, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        nickname:
+          type: string
+        hasPhone:
+          type: boolean
+        phoneMasked:
+          type: string
+          description: 脱敏后的手机号，未绑定时不返回
+          example: 138****5678
+        createdAt:
+          type: string
+          format: date-time
+
+    UserEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/User'
+
+    AuthSession:
+      type: object
+      required: [user, tokens, deviceId]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        tokens:
+          $ref: '#/components/schemas/TokenPair'
+        deviceId:
+          type: string
+          format: uuid
+          description: 服务端为本次登录分配的设备 ID
+
+    AuthSessionEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AuthSession'
+
+    UpdateMeRequest:
+      type: object
+      required: [nickname]
+      properties:
+        nickname:
+          $ref: '#/components/schemas/Nickname'
+
+    VerifyIdentityRequest:
+      type: object
+      description: 当前密码与当前手机号验证码二选一
+      properties:
+        currentPassword:
+          type: string
+          maxLength: 128
+          format: password
+        smsCode:
+          $ref: '#/components/schemas/SmsCode'
+
+    ChangePasswordRequest:
+      allOf:
+        - $ref: '#/components/schemas/VerifyIdentityRequest'
+        - type: object
+          required: [newPassword]
+          properties:
+            newPassword:
+              $ref: '#/components/schemas/Password'
+
+    BindPhoneRequest:
+      type: object
+      required: [phone, code]
+      properties:
+        phone:
+          $ref: '#/components/schemas/Phone'
+        code:
+          $ref: '#/components/schemas/SmsCode'
+        currentCode:
+          $ref: '#/components/schemas/SmsCode'
+
+    Device:
+      type: object
+      required: [id, platform, model, osVersion, appVersion, lastActiveAt, createdAt, current]
+      properties:
+        id:
+          type: string
+          format: uuid
+        platform:
+          type: string
+        model:
+          type: string
+        osVersion:
+          type: string
+        appVersion:
+          type: string
+        lastActiveAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+          description: 是否为发起请求的设备
+
+    DeviceListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Device'
+
+    ThemeMode:
+      type: string
+      enum: [system, light, dark]
+
+    SettingsInput:
+      type: object
+      required: [themeMode, fontScale, defaultReminders, weekStart]
+      properties:
+        themeMode:
+          $ref: '#/components/schemas/ThemeMode'
+        fontScale:
+          type: number
+          format: float
+          minimum: 0.8
+          maximum: 1.4
+          description: 字号缩放
+        defaultReminders:
+          type: array
+          maxItems: 5
+          description: 新建备忘录时默认的提前提醒（分钟，0 表示准时），不超过 30 天
+          items:
+            type: integer
+            format: int32
+            minimum: 0
+            maximum: 43200
+        weekStart:
+          type: integer
+          enum: [1, 7]
+          description: 一周的第一天：1 = 周一，7 = 周日
+
+    Settings:
+      allOf:
+        - $ref: '#/components/schemas/SettingsInput'
+        - type: object
+          required: [updatedAt]
+          properties:
+            updatedAt:
+              type: string
+              format: date-time
+
+    SettingsEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/Settings'

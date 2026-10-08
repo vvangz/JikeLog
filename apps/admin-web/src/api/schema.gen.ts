@@ -61,6 +61,324 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 用户名密码注册
+         * @description 注册成功即视为登录，返回会话。用户名不区分大小写唯一。
+         */
+        post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 用户名密码登录
+         * @description 连续失败 5 次后账号锁定 15 分钟（`ACCOUNT_LOCKED`）。
+         */
+        post: operations["loginWithPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/sms/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 发送登录或找回密码验证码
+         * @description 同一手机号 60 秒内只能发送 1 条、每天最多 10 条，同一 IP 每小时最多 20 条，超出返回 `SMS_RATE_LIMITED`。
+         *     找回密码时即使手机号未注册也返回成功（不发送），避免泄露手机号是否已注册。
+         */
+        post: operations["sendAuthSms"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login/sms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 手机号验证码登录
+         * @description 手机号已绑定账号时直接登录；未绑定时返回注册凭证，客户端进入"完善注册"步骤。
+         */
+        post: operations["loginWithSms"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/register/sms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 完善注册（短信登录的新手机号）
+         * @description 使用短信登录返回的注册凭证设置用户名和密码，创建账号并自动绑定该手机号。凭证 10 分钟内有效且只能使用一次。
+         */
+        post: operations["completeSmsRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 刷新令牌
+         * @description 每次刷新都会轮换 Refresh Token，旧令牌随即失效。为容忍网络重试，刚被轮换的旧令牌在 30 秒内仍可再刷新一次；
+         *     超过宽限期再次使用旧令牌会被视为令牌泄露，该设备会被强制下线。
+         */
+        post: operations["refreshToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 通过手机号找回密码
+         * @description 重置成功后该账号所有设备都会下线。
+         */
+        post: operations["resetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 退出登录
+         * @description 注销当前设备的会话。
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 当前账号信息 */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 修改资料 */
+        patch: operations["updateMe"];
+        trace?: never;
+    };
+    "/api/v1/me/sms/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 发送账号操作验证码
+         * @description - `bind_phone`：向待绑定的新手机号发送，需提供 `phone`；该号码已被其他账号绑定时返回 `PHONE_TAKEN`。
+         *     - `verify_current`：向当前已绑定的手机号发送，用于换绑、修改密码、注销账号时验证身份。
+         *
+         *     频率限制与登录验证码相同。
+         */
+        post: operations["sendAccountSms"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 修改密码
+         * @description 需提供当前密码，或当前绑定手机号的验证码（`verify_current`）。修改成功后其他设备全部下线。
+         */
+        put: operations["changePassword"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 绑定或换绑手机号
+         * @description 需要新手机号的验证码（`bind_phone`）；已绑定手机号时为换绑，还需要当前手机号的验证码（`verify_current`）。
+         */
+        put: operations["bindPhone"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 注销账号
+         * @description 永久删除账号及其全部数据，不可恢复。需提供当前密码，或当前绑定手机号的验证码（`verify_current`）。
+         */
+        post: operations["deleteAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 已登录设备 */
+        get: operations["listDevices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/devices/{deviceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 将设备下线
+         * @description 该设备的令牌立即失效。不能用此接口下线当前设备（请使用退出登录）。
+         */
+        delete: operations["revokeDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 用户设置 */
+        get: operations["getSettings"];
+        /** 保存用户设置 */
+        put: operations["updateSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -124,6 +442,220 @@ export interface components {
         };
         SystemInfoEnvelope: components["schemas"]["EnvelopeBase"] & {
             data: components["schemas"]["SystemInfo"];
+        };
+        Ack: {
+            ok: boolean;
+        };
+        AckEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["Ack"];
+        };
+        /**
+         * @description 4–20 位，字母开头，只含字母、数字、下划线；不区分大小写唯一
+         * @example zhang_san
+         */
+        Username: string;
+        /**
+         * Format: password
+         * @description 8–64 位，至少包含字母和数字
+         */
+        Password: string;
+        /**
+         * @description 中国大陆手机号，可带 +86 前缀
+         * @example 13812345678
+         */
+        Phone: string;
+        /** @description 6 位数字验证码，5 分钟内有效，最多尝试 5 次 */
+        SmsCode: string;
+        /** @description 昵称，最多 20 个字符 */
+        Nickname: string;
+        /** @description 客户端设备信息。`installationId` 由客户端首次启动时生成并持久保存，同一安装实例重复登录同一账号时复用设备记录。 */
+        DeviceInfo: {
+            installationId: string;
+            /** @enum {string} */
+            platform: "android" | "ios" | "windows" | "macos" | "linux" | "web";
+            /** @example Xiaomi 14 */
+            model?: string;
+            /** @example Android 15 */
+            osVersion?: string;
+            /** @example 0.2.0 */
+            appVersion?: string;
+        };
+        RegisterRequest: {
+            username: components["schemas"]["Username"];
+            password: components["schemas"]["Password"];
+            nickname?: components["schemas"]["Nickname"];
+            device: components["schemas"]["DeviceInfo"];
+        };
+        PasswordLoginRequest: {
+            username: string;
+            /** Format: password */
+            password: string;
+            device: components["schemas"]["DeviceInfo"];
+        };
+        /** @enum {string} */
+        SmsPurpose: "login" | "reset_password";
+        AuthSmsRequest: {
+            phone: components["schemas"]["Phone"];
+            purpose: components["schemas"]["SmsPurpose"];
+            /** @description 人机验证结果（阿里云验证码 2.0），开发环境可省略 */
+            captchaVerifyParam?: string;
+        };
+        /** @enum {string} */
+        AccountSmsPurpose: "bind_phone" | "verify_current";
+        AccountSmsRequest: {
+            purpose: components["schemas"]["AccountSmsPurpose"];
+            phone?: components["schemas"]["Phone"];
+            captchaVerifyParam?: string;
+        };
+        SmsSent: {
+            /**
+             * @description 距离可再次发送的秒数
+             * @example 60
+             */
+            cooldownSeconds: number;
+            /**
+             * @description 验证码有效期（秒）
+             * @example 300
+             */
+            expiresInSeconds: number;
+        };
+        SmsSentEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["SmsSent"];
+        };
+        SmsLoginRequest: {
+            phone: components["schemas"]["Phone"];
+            code: components["schemas"]["SmsCode"];
+            device: components["schemas"]["DeviceInfo"];
+        };
+        SmsLoginResult: {
+            /** @enum {string} */
+            status: "authenticated" | "registration_required";
+            session?: components["schemas"]["AuthSession"];
+            /** @description status 为 registration_required 时返回，用于完善注册 */
+            registrationTicket?: string;
+            /**
+             * @description status 为 registration_required 时返回，供界面展示
+             * @example 138****5678
+             */
+            phoneMasked?: string;
+        };
+        SmsLoginResultEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["SmsLoginResult"];
+        };
+        CompleteSmsRegistrationRequest: {
+            registrationTicket: string;
+            username: components["schemas"]["Username"];
+            password: components["schemas"]["Password"];
+            nickname?: components["schemas"]["Nickname"];
+            device: components["schemas"]["DeviceInfo"];
+        };
+        RefreshRequest: {
+            refreshToken: string;
+        };
+        ResetPasswordRequest: {
+            phone: components["schemas"]["Phone"];
+            code: components["schemas"]["SmsCode"];
+            newPassword: components["schemas"]["Password"];
+        };
+        TokenPair: {
+            /** @enum {string} */
+            tokenType: "Bearer";
+            accessToken: string;
+            /** Format: date-time */
+            accessExpiresAt: string;
+            refreshToken: string;
+            /** Format: date-time */
+            refreshExpiresAt: string;
+        };
+        TokenPairEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["TokenPair"];
+        };
+        User: {
+            /** Format: uuid */
+            id: string;
+            username: string;
+            nickname: string;
+            hasPhone: boolean;
+            /**
+             * @description 脱敏后的手机号，未绑定时不返回
+             * @example 138****5678
+             */
+            phoneMasked?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        UserEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["User"];
+        };
+        AuthSession: {
+            user: components["schemas"]["User"];
+            tokens: components["schemas"]["TokenPair"];
+            /**
+             * Format: uuid
+             * @description 服务端为本次登录分配的设备 ID
+             */
+            deviceId: string;
+        };
+        AuthSessionEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["AuthSession"];
+        };
+        UpdateMeRequest: {
+            nickname: components["schemas"]["Nickname"];
+        };
+        /** @description 当前密码与当前手机号验证码二选一 */
+        VerifyIdentityRequest: {
+            /** Format: password */
+            currentPassword?: string;
+            smsCode?: components["schemas"]["SmsCode"];
+        };
+        ChangePasswordRequest: components["schemas"]["VerifyIdentityRequest"] & {
+            newPassword: components["schemas"]["Password"];
+        };
+        BindPhoneRequest: {
+            phone: components["schemas"]["Phone"];
+            code: components["schemas"]["SmsCode"];
+            currentCode?: components["schemas"]["SmsCode"];
+        };
+        Device: {
+            /** Format: uuid */
+            id: string;
+            platform: string;
+            model: string;
+            osVersion: string;
+            appVersion: string;
+            /** Format: date-time */
+            lastActiveAt: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description 是否为发起请求的设备 */
+            current: boolean;
+        };
+        DeviceListEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["Device"][];
+        };
+        /** @enum {string} */
+        ThemeMode: "system" | "light" | "dark";
+        SettingsInput: {
+            themeMode: components["schemas"]["ThemeMode"];
+            /**
+             * Format: float
+             * @description 字号缩放
+             */
+            fontScale: number;
+            /** @description 新建备忘录时默认的提前提醒（分钟，0 表示准时），不超过 30 天 */
+            defaultReminders: number[];
+            /**
+             * @description 一周的第一天：1 = 周一，7 = 周日
+             * @enum {integer}
+             */
+            weekStart: 1 | 7;
+        };
+        Settings: components["schemas"]["SettingsInput"] & {
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SettingsEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["Settings"];
         };
     };
     responses: {
@@ -211,6 +743,438 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemInfoEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description 注册成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSessionEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    loginWithPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description 登录成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSessionEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    sendAuthSms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthSmsRequest"];
+            };
+        };
+        responses: {
+            /** @description 已受理 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SmsSentEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    loginWithSms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SmsLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description 登录成功或需要完善注册 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SmsLoginResultEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    completeSmsRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteSmsRegistrationRequest"];
+            };
+        };
+        responses: {
+            /** @description 注册成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSessionEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    refreshToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description 新的令牌 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenPairEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    resetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description 重置成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AckEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已退出 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AckEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 账号信息 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    updateMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMeRequest"];
+            };
+        };
+        responses: {
+            /** @description 修改后的账号信息 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    sendAccountSms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountSmsRequest"];
+            };
+        };
+        responses: {
+            /** @description 已发送 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SmsSentEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description 修改成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AckEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    bindPhone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BindPhoneRequest"];
+            };
+        };
+        responses: {
+            /** @description 绑定后的账号信息 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    deleteAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyIdentityRequest"];
+            };
+        };
+        responses: {
+            /** @description 已注销 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AckEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    listDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 按最近活跃排序的设备列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceListEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    revokeDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已下线 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AckEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 用户设置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    updateSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsInput"];
+            };
+        };
+        responses: {
+            /** @description 保存后的设置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsEnvelope"];
                 };
             };
             default: components["responses"]["Error"];

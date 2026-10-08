@@ -12,7 +12,57 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+// Defines values for AccountSmsPurpose.
+const (
+	AccountSmsPurposeBindPhone     AccountSmsPurpose = "bind_phone"
+	AccountSmsPurposeVerifyCurrent AccountSmsPurpose = "verify_current"
+)
+
+// Valid indicates whether the value is a known member of the AccountSmsPurpose enum.
+func (e AccountSmsPurpose) Valid() bool {
+	switch e {
+	case AccountSmsPurposeBindPhone:
+		return true
+	case AccountSmsPurposeVerifyCurrent:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeviceInfoPlatform.
+const (
+	DeviceInfoPlatformAndroid DeviceInfoPlatform = "android"
+	DeviceInfoPlatformIos     DeviceInfoPlatform = "ios"
+	DeviceInfoPlatformLinux   DeviceInfoPlatform = "linux"
+	DeviceInfoPlatformMacos   DeviceInfoPlatform = "macos"
+	DeviceInfoPlatformWeb     DeviceInfoPlatform = "web"
+	DeviceInfoPlatformWindows DeviceInfoPlatform = "windows"
+)
+
+// Valid indicates whether the value is a known member of the DeviceInfoPlatform enum.
+func (e DeviceInfoPlatform) Valid() bool {
+	switch e {
+	case DeviceInfoPlatformAndroid:
+		return true
+	case DeviceInfoPlatformIos:
+		return true
+	case DeviceInfoPlatformLinux:
+		return true
+	case DeviceInfoPlatformMacos:
+		return true
+	case DeviceInfoPlatformWeb:
+		return true
+	case DeviceInfoPlatformWindows:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for HealthStatus.
 const (
@@ -48,6 +98,260 @@ func (e HealthCheckStatus) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// Defines values for SettingsWeekStart.
+const (
+	SettingsWeekStartN1 SettingsWeekStart = 1
+	SettingsWeekStartN7 SettingsWeekStart = 7
+)
+
+// Valid indicates whether the value is a known member of the SettingsWeekStart enum.
+func (e SettingsWeekStart) Valid() bool {
+	switch e {
+	case SettingsWeekStartN1:
+		return true
+	case SettingsWeekStartN7:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SettingsInputWeekStart.
+const (
+	SettingsInputWeekStartN1 SettingsInputWeekStart = 1
+	SettingsInputWeekStartN7 SettingsInputWeekStart = 7
+)
+
+// Valid indicates whether the value is a known member of the SettingsInputWeekStart enum.
+func (e SettingsInputWeekStart) Valid() bool {
+	switch e {
+	case SettingsInputWeekStartN1:
+		return true
+	case SettingsInputWeekStartN7:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SmsLoginResultStatus.
+const (
+	SmsLoginResultStatusAuthenticated        SmsLoginResultStatus = "authenticated"
+	SmsLoginResultStatusRegistrationRequired SmsLoginResultStatus = "registration_required"
+)
+
+// Valid indicates whether the value is a known member of the SmsLoginResultStatus enum.
+func (e SmsLoginResultStatus) Valid() bool {
+	switch e {
+	case SmsLoginResultStatusAuthenticated:
+		return true
+	case SmsLoginResultStatusRegistrationRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SmsPurpose.
+const (
+	SmsPurposeLogin         SmsPurpose = "login"
+	SmsPurposeResetPassword SmsPurpose = "reset_password"
+)
+
+// Valid indicates whether the value is a known member of the SmsPurpose enum.
+func (e SmsPurpose) Valid() bool {
+	switch e {
+	case SmsPurposeLogin:
+		return true
+	case SmsPurposeResetPassword:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ThemeMode.
+const (
+	ThemeModeDark   ThemeMode = "dark"
+	ThemeModeLight  ThemeMode = "light"
+	ThemeModeSystem ThemeMode = "system"
+)
+
+// Valid indicates whether the value is a known member of the ThemeMode enum.
+func (e ThemeMode) Valid() bool {
+	switch e {
+	case ThemeModeDark:
+		return true
+	case ThemeModeLight:
+		return true
+	case ThemeModeSystem:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TokenPairTokenType.
+const (
+	TokenPairTokenTypeBearer TokenPairTokenType = "Bearer"
+)
+
+// Valid indicates whether the value is a known member of the TokenPairTokenType enum.
+func (e TokenPairTokenType) Valid() bool {
+	switch e {
+	case TokenPairTokenTypeBearer:
+		return true
+	default:
+		return false
+	}
+}
+
+// AccountSmsPurpose defines model for AccountSmsPurpose.
+type AccountSmsPurpose string
+
+// AccountSmsRequest defines model for AccountSmsRequest.
+type AccountSmsRequest struct {
+	CaptchaVerifyParam *string `json:"captchaVerifyParam,omitempty"`
+
+	// Phone 中国大陆手机号，可带 +86 前缀
+	//
+	// Example: 13812345678
+	Phone   *Phone            `json:"phone,omitempty"`
+	Purpose AccountSmsPurpose `json:"purpose"`
+}
+
+// Ack defines model for Ack.
+type Ack struct {
+	Ok bool `json:"ok"`
+}
+
+// AckEnvelope defines model for AckEnvelope.
+type AckEnvelope struct {
+	Data  Ack        `json:"data"`
+	Error *ErrorBody `json:"error,omitempty"`
+	Meta  *PageMeta  `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// AuthSession defines model for AuthSession.
+type AuthSession struct {
+	// DeviceId 服务端为本次登录分配的设备 ID
+	DeviceId openapi_types.UUID `json:"deviceId"`
+	Tokens   TokenPair          `json:"tokens"`
+	User     User               `json:"user"`
+}
+
+// AuthSessionEnvelope defines model for AuthSessionEnvelope.
+type AuthSessionEnvelope struct {
+	Data  AuthSession `json:"data"`
+	Error *ErrorBody  `json:"error,omitempty"`
+	Meta  *PageMeta   `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// AuthSmsRequest defines model for AuthSmsRequest.
+type AuthSmsRequest struct {
+	// CaptchaVerifyParam 人机验证结果（阿里云验证码 2.0），开发环境可省略
+	CaptchaVerifyParam *string `json:"captchaVerifyParam,omitempty"`
+
+	// Phone 中国大陆手机号，可带 +86 前缀
+	//
+	// Example: 13812345678
+	Phone   Phone      `json:"phone"`
+	Purpose SmsPurpose `json:"purpose"`
+}
+
+// BindPhoneRequest defines model for BindPhoneRequest.
+type BindPhoneRequest struct {
+	// Code 6 位数字验证码，5 分钟内有效，最多尝试 5 次
+	Code SmsCode `json:"code"`
+
+	// CurrentCode 6 位数字验证码，5 分钟内有效，最多尝试 5 次
+	CurrentCode *SmsCode `json:"currentCode,omitempty"`
+
+	// Phone 中国大陆手机号，可带 +86 前缀
+	//
+	// Example: 13812345678
+	Phone Phone `json:"phone"`
+}
+
+// ChangePasswordRequest defines model for ChangePasswordRequest.
+type ChangePasswordRequest struct {
+	CurrentPassword *string `json:"currentPassword,omitempty"`
+
+	// NewPassword 8–64 位，至少包含字母和数字
+	NewPassword Password `json:"newPassword"`
+
+	// SmsCode 6 位数字验证码，5 分钟内有效，最多尝试 5 次
+	SmsCode *SmsCode `json:"smsCode,omitempty"`
+}
+
+// CompleteSmsRegistrationRequest defines model for CompleteSmsRegistrationRequest.
+type CompleteSmsRegistrationRequest struct {
+	// Device 客户端设备信息。`installationId` 由客户端首次启动时生成并持久保存，同一安装实例重复登录同一账号时复用设备记录。
+	Device DeviceInfo `json:"device"`
+
+	// Nickname 昵称，最多 20 个字符
+	Nickname *Nickname `json:"nickname,omitempty"`
+
+	// Password 8–64 位，至少包含字母和数字
+	Password           Password `json:"password"`
+	RegistrationTicket string   `json:"registrationTicket"`
+
+	// Username 4–20 位，字母开头，只含字母、数字、下划线；不区分大小写唯一
+	//
+	// Example: zhang_san
+	Username Username `json:"username"`
+}
+
+// Device defines model for Device.
+type Device struct {
+	AppVersion string    `json:"appVersion"`
+	CreatedAt  time.Time `json:"createdAt"`
+
+	// Current 是否为发起请求的设备
+	Current      bool               `json:"current"`
+	Id           openapi_types.UUID `json:"id"`
+	LastActiveAt time.Time          `json:"lastActiveAt"`
+	Model        string             `json:"model"`
+	OsVersion    string             `json:"osVersion"`
+	Platform     string             `json:"platform"`
+}
+
+// DeviceInfo 客户端设备信息。`installationId` 由客户端首次启动时生成并持久保存，同一安装实例重复登录同一账号时复用设备记录。
+type DeviceInfo struct {
+	// AppVersion Example: 0.2.0
+	AppVersion     *string `json:"appVersion,omitempty"`
+	InstallationId string  `json:"installationId"`
+
+	// Model Example: Xiaomi 14
+	Model *string `json:"model,omitempty"`
+
+	// OsVersion Example: Android 15
+	OsVersion *string            `json:"osVersion,omitempty"`
+	Platform  DeviceInfoPlatform `json:"platform"`
+}
+
+// DeviceInfoPlatform defines model for DeviceInfo.Platform.
+type DeviceInfoPlatform string
+
+// DeviceListEnvelope defines model for DeviceListEnvelope.
+type DeviceListEnvelope struct {
+	Data  []Device   `json:"data"`
+	Error *ErrorBody `json:"error,omitempty"`
+	Meta  *PageMeta  `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
 }
 
 // EnvelopeBase defines model for EnvelopeBase.
@@ -118,11 +422,181 @@ type HealthEnvelope struct {
 	Success   bool   `json:"success"`
 }
 
+// Nickname 昵称，最多 20 个字符
+type Nickname = string
+
 // PageMeta defines model for PageMeta.
 type PageMeta struct {
 	Limit int   `json:"limit"`
 	Page  int   `json:"page"`
 	Total int64 `json:"total"`
+}
+
+// Password 8–64 位，至少包含字母和数字
+type Password = string
+
+// PasswordLoginRequest defines model for PasswordLoginRequest.
+type PasswordLoginRequest struct {
+	// Device 客户端设备信息。`installationId` 由客户端首次启动时生成并持久保存，同一安装实例重复登录同一账号时复用设备记录。
+	Device   DeviceInfo `json:"device"`
+	Password string     `json:"password"`
+	Username string     `json:"username"`
+}
+
+// Phone 中国大陆手机号，可带 +86 前缀
+//
+// Example: 13812345678
+type Phone = string
+
+// RefreshRequest defines model for RefreshRequest.
+type RefreshRequest struct {
+	RefreshToken string `json:"refreshToken"`
+}
+
+// RegisterRequest defines model for RegisterRequest.
+type RegisterRequest struct {
+	// Device 客户端设备信息。`installationId` 由客户端首次启动时生成并持久保存，同一安装实例重复登录同一账号时复用设备记录。
+	Device DeviceInfo `json:"device"`
+
+	// Nickname 昵称，最多 20 个字符
+	Nickname *Nickname `json:"nickname,omitempty"`
+
+	// Password 8–64 位，至少包含字母和数字
+	Password Password `json:"password"`
+
+	// Username 4–20 位，字母开头，只含字母、数字、下划线；不区分大小写唯一
+	//
+	// Example: zhang_san
+	Username Username `json:"username"`
+}
+
+// ResetPasswordRequest defines model for ResetPasswordRequest.
+type ResetPasswordRequest struct {
+	// Code 6 位数字验证码，5 分钟内有效，最多尝试 5 次
+	Code SmsCode `json:"code"`
+
+	// NewPassword 8–64 位，至少包含字母和数字
+	NewPassword Password `json:"newPassword"`
+
+	// Phone 中国大陆手机号，可带 +86 前缀
+	//
+	// Example: 13812345678
+	Phone Phone `json:"phone"`
+}
+
+// Settings defines model for Settings.
+type Settings struct {
+	// DefaultReminders 新建备忘录时默认的提前提醒（分钟，0 表示准时），不超过 30 天
+	DefaultReminders []int32 `json:"defaultReminders"`
+
+	// FontScale 字号缩放
+	FontScale float32   `json:"fontScale"`
+	ThemeMode ThemeMode `json:"themeMode"`
+	UpdatedAt time.Time `json:"updatedAt"`
+
+	// WeekStart 一周的第一天：1 = 周一，7 = 周日
+	WeekStart SettingsWeekStart `json:"weekStart"`
+}
+
+// SettingsWeekStart 一周的第一天：1 = 周一，7 = 周日
+type SettingsWeekStart int
+
+// SettingsEnvelope defines model for SettingsEnvelope.
+type SettingsEnvelope struct {
+	Data  Settings   `json:"data"`
+	Error *ErrorBody `json:"error,omitempty"`
+	Meta  *PageMeta  `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// SettingsInput defines model for SettingsInput.
+type SettingsInput struct {
+	// DefaultReminders 新建备忘录时默认的提前提醒（分钟，0 表示准时），不超过 30 天
+	DefaultReminders []int32 `json:"defaultReminders"`
+
+	// FontScale 字号缩放
+	FontScale float32   `json:"fontScale"`
+	ThemeMode ThemeMode `json:"themeMode"`
+
+	// WeekStart 一周的第一天：1 = 周一，7 = 周日
+	WeekStart SettingsInputWeekStart `json:"weekStart"`
+}
+
+// SettingsInputWeekStart 一周的第一天：1 = 周一，7 = 周日
+type SettingsInputWeekStart int
+
+// SmsCode 6 位数字验证码，5 分钟内有效，最多尝试 5 次
+type SmsCode = string
+
+// SmsLoginRequest defines model for SmsLoginRequest.
+type SmsLoginRequest struct {
+	// Code 6 位数字验证码，5 分钟内有效，最多尝试 5 次
+	Code SmsCode `json:"code"`
+
+	// Device 客户端设备信息。`installationId` 由客户端首次启动时生成并持久保存，同一安装实例重复登录同一账号时复用设备记录。
+	Device DeviceInfo `json:"device"`
+
+	// Phone 中国大陆手机号，可带 +86 前缀
+	//
+	// Example: 13812345678
+	Phone Phone `json:"phone"`
+}
+
+// SmsLoginResult defines model for SmsLoginResult.
+type SmsLoginResult struct {
+	// PhoneMasked status 为 registration_required 时返回，供界面展示
+	//
+	// Example: 138****5678
+	PhoneMasked *string `json:"phoneMasked,omitempty"`
+
+	// RegistrationTicket status 为 registration_required 时返回，用于完善注册
+	RegistrationTicket *string              `json:"registrationTicket,omitempty"`
+	Session            *AuthSession         `json:"session,omitempty"`
+	Status             SmsLoginResultStatus `json:"status"`
+}
+
+// SmsLoginResultStatus defines model for SmsLoginResult.Status.
+type SmsLoginResultStatus string
+
+// SmsLoginResultEnvelope defines model for SmsLoginResultEnvelope.
+type SmsLoginResultEnvelope struct {
+	Data  SmsLoginResult `json:"data"`
+	Error *ErrorBody     `json:"error,omitempty"`
+	Meta  *PageMeta      `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// SmsPurpose defines model for SmsPurpose.
+type SmsPurpose string
+
+// SmsSent defines model for SmsSent.
+type SmsSent struct {
+	// CooldownSeconds 距离可再次发送的秒数
+	//
+	// Example: 60
+	CooldownSeconds int `json:"cooldownSeconds"`
+
+	// ExpiresInSeconds 验证码有效期（秒）
+	//
+	// Example: 300
+	ExpiresInSeconds int `json:"expiresInSeconds"`
+}
+
+// SmsSentEnvelope defines model for SmsSentEnvelope.
+type SmsSentEnvelope struct {
+	Data  SmsSent    `json:"data"`
+	Error *ErrorBody `json:"error,omitempty"`
+	Meta  *PageMeta  `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
 }
 
 // SystemInfo defines model for SystemInfo.
@@ -149,11 +623,174 @@ type SystemInfoEnvelope struct {
 	Success   bool   `json:"success"`
 }
 
+// ThemeMode defines model for ThemeMode.
+type ThemeMode string
+
+// TokenPair defines model for TokenPair.
+type TokenPair struct {
+	AccessExpiresAt  time.Time          `json:"accessExpiresAt"`
+	AccessToken      string             `json:"accessToken"`
+	RefreshExpiresAt time.Time          `json:"refreshExpiresAt"`
+	RefreshToken     string             `json:"refreshToken"`
+	TokenType        TokenPairTokenType `json:"tokenType"`
+}
+
+// TokenPairTokenType defines model for TokenPair.TokenType.
+type TokenPairTokenType string
+
+// TokenPairEnvelope defines model for TokenPairEnvelope.
+type TokenPairEnvelope struct {
+	Data  TokenPair  `json:"data"`
+	Error *ErrorBody `json:"error,omitempty"`
+	Meta  *PageMeta  `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// UpdateMeRequest defines model for UpdateMeRequest.
+type UpdateMeRequest struct {
+	// Nickname 昵称，最多 20 个字符
+	Nickname Nickname `json:"nickname"`
+}
+
+// User defines model for User.
+type User struct {
+	CreatedAt time.Time          `json:"createdAt"`
+	HasPhone  bool               `json:"hasPhone"`
+	Id        openapi_types.UUID `json:"id"`
+	Nickname  string             `json:"nickname"`
+
+	// PhoneMasked 脱敏后的手机号，未绑定时不返回
+	//
+	// Example: 138****5678
+	PhoneMasked *string `json:"phoneMasked,omitempty"`
+	Username    string  `json:"username"`
+}
+
+// UserEnvelope defines model for UserEnvelope.
+type UserEnvelope struct {
+	Data  User       `json:"data"`
+	Error *ErrorBody `json:"error,omitempty"`
+	Meta  *PageMeta  `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// Username 4–20 位，字母开头，只含字母、数字、下划线；不区分大小写唯一
+//
+// Example: zhang_san
+type Username = string
+
+// VerifyIdentityRequest 当前密码与当前手机号验证码二选一
+type VerifyIdentityRequest struct {
+	CurrentPassword *string `json:"currentPassword,omitempty"`
+
+	// SmsCode 6 位数字验证码，5 分钟内有效，最多尝试 5 次
+	SmsCode *SmsCode `json:"smsCode,omitempty"`
+}
+
 // Error defines model for Error.
 type Error = ErrorEnvelope
 
+// LoginWithPasswordJSONRequestBody defines body for LoginWithPassword for application/json ContentType.
+type LoginWithPasswordJSONRequestBody = PasswordLoginRequest
+
+// LoginWithSmsJSONRequestBody defines body for LoginWithSms for application/json ContentType.
+type LoginWithSmsJSONRequestBody = SmsLoginRequest
+
+// ResetPasswordJSONRequestBody defines body for ResetPassword for application/json ContentType.
+type ResetPasswordJSONRequestBody = ResetPasswordRequest
+
+// RefreshTokenJSONRequestBody defines body for RefreshToken for application/json ContentType.
+type RefreshTokenJSONRequestBody = RefreshRequest
+
+// RegisterJSONRequestBody defines body for Register for application/json ContentType.
+type RegisterJSONRequestBody = RegisterRequest
+
+// CompleteSmsRegistrationJSONRequestBody defines body for CompleteSmsRegistration for application/json ContentType.
+type CompleteSmsRegistrationJSONRequestBody = CompleteSmsRegistrationRequest
+
+// SendAuthSmsJSONRequestBody defines body for SendAuthSms for application/json ContentType.
+type SendAuthSmsJSONRequestBody = AuthSmsRequest
+
+// UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
+type UpdateMeJSONRequestBody = UpdateMeRequest
+
+// DeleteAccountJSONRequestBody defines body for DeleteAccount for application/json ContentType.
+type DeleteAccountJSONRequestBody = VerifyIdentityRequest
+
+// ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
+type ChangePasswordJSONRequestBody = ChangePasswordRequest
+
+// BindPhoneJSONRequestBody defines body for BindPhone for application/json ContentType.
+type BindPhoneJSONRequestBody = BindPhoneRequest
+
+// UpdateSettingsJSONRequestBody defines body for UpdateSettings for application/json ContentType.
+type UpdateSettingsJSONRequestBody = SettingsInput
+
+// SendAccountSmsJSONRequestBody defines body for SendAccountSms for application/json ContentType.
+type SendAccountSmsJSONRequestBody = AccountSmsRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// LoginWithPassword 用户名密码登录
+	// (POST /api/v1/auth/login/password)
+	LoginWithPassword(c *gin.Context)
+	// LoginWithSms 手机号验证码登录
+	// (POST /api/v1/auth/login/sms)
+	LoginWithSms(c *gin.Context)
+	// Logout 退出登录
+	// (POST /api/v1/auth/logout)
+	Logout(c *gin.Context)
+	// ResetPassword 通过手机号找回密码
+	// (POST /api/v1/auth/password/reset)
+	ResetPassword(c *gin.Context)
+	// RefreshToken 刷新令牌
+	// (POST /api/v1/auth/refresh)
+	RefreshToken(c *gin.Context)
+	// Register 用户名密码注册
+	// (POST /api/v1/auth/register)
+	Register(c *gin.Context)
+	// CompleteSmsRegistration 完善注册（短信登录的新手机号）
+	// (POST /api/v1/auth/register/sms)
+	CompleteSmsRegistration(c *gin.Context)
+	// SendAuthSms 发送登录或找回密码验证码
+	// (POST /api/v1/auth/sms/send)
+	SendAuthSms(c *gin.Context)
+	// GetMe 当前账号信息
+	// (GET /api/v1/me)
+	GetMe(c *gin.Context)
+	// UpdateMe 修改资料
+	// (PATCH /api/v1/me)
+	UpdateMe(c *gin.Context)
+	// DeleteAccount 注销账号
+	// (POST /api/v1/me/deletion)
+	DeleteAccount(c *gin.Context)
+	// ListDevices 已登录设备
+	// (GET /api/v1/me/devices)
+	ListDevices(c *gin.Context)
+	// RevokeDevice 将设备下线
+	// (DELETE /api/v1/me/devices/{deviceId})
+	RevokeDevice(c *gin.Context, deviceId openapi_types.UUID)
+	// ChangePassword 修改密码
+	// (PUT /api/v1/me/password)
+	ChangePassword(c *gin.Context)
+	// BindPhone 绑定或换绑手机号
+	// (PUT /api/v1/me/phone)
+	BindPhone(c *gin.Context)
+	// GetSettings 用户设置
+	// (GET /api/v1/me/settings)
+	GetSettings(c *gin.Context)
+	// UpdateSettings 保存用户设置
+	// (PUT /api/v1/me/settings)
+	UpdateSettings(c *gin.Context)
+	// SendAccountSms 发送账号操作验证码
+	// (POST /api/v1/me/sms/send)
+	SendAccountSms(c *gin.Context)
 	// GetSystemInfo 服务版本信息
 	// (GET /api/v1/system/info)
 	GetSystemInfo(c *gin.Context)
@@ -173,6 +810,252 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(c *gin.Context)
+
+// LoginWithPassword operation middleware
+func (siw *ServerInterfaceWrapper) LoginWithPassword(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.LoginWithPassword(c)
+}
+
+// LoginWithSms operation middleware
+func (siw *ServerInterfaceWrapper) LoginWithSms(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.LoginWithSms(c)
+}
+
+// Logout operation middleware
+func (siw *ServerInterfaceWrapper) Logout(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.Logout(c)
+}
+
+// ResetPassword operation middleware
+func (siw *ServerInterfaceWrapper) ResetPassword(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ResetPassword(c)
+}
+
+// RefreshToken operation middleware
+func (siw *ServerInterfaceWrapper) RefreshToken(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.RefreshToken(c)
+}
+
+// Register operation middleware
+func (siw *ServerInterfaceWrapper) Register(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.Register(c)
+}
+
+// CompleteSmsRegistration operation middleware
+func (siw *ServerInterfaceWrapper) CompleteSmsRegistration(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.CompleteSmsRegistration(c)
+}
+
+// SendAuthSms operation middleware
+func (siw *ServerInterfaceWrapper) SendAuthSms(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.SendAuthSms(c)
+}
+
+// GetMe operation middleware
+func (siw *ServerInterfaceWrapper) GetMe(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetMe(c)
+}
+
+// UpdateMe operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMe(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.UpdateMe(c)
+}
+
+// DeleteAccount operation middleware
+func (siw *ServerInterfaceWrapper) DeleteAccount(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.DeleteAccount(c)
+}
+
+// ListDevices operation middleware
+func (siw *ServerInterfaceWrapper) ListDevices(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ListDevices(c)
+}
+
+// RevokeDevice operation middleware
+func (siw *ServerInterfaceWrapper) RevokeDevice(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "deviceId" -------------
+	var deviceId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "deviceId", c.Param("deviceId"), &deviceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter deviceId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.RevokeDevice(c, deviceId)
+}
+
+// ChangePassword operation middleware
+func (siw *ServerInterfaceWrapper) ChangePassword(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ChangePassword(c)
+}
+
+// BindPhone operation middleware
+func (siw *ServerInterfaceWrapper) BindPhone(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.BindPhone(c)
+}
+
+// GetSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetSettings(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetSettings(c)
+}
+
+// UpdateSettings operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSettings(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.UpdateSettings(c)
+}
+
+// SendAccountSms operation middleware
+func (siw *ServerInterfaceWrapper) SendAccountSms(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.SendAccountSms(c)
+}
 
 // GetSystemInfo operation middleware
 func (siw *ServerInterfaceWrapper) GetSystemInfo(c *gin.Context) {
@@ -243,9 +1126,725 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/healthz", wrapper.GetHealthz)
 	router.GET(options.BaseURL+"/readyz", wrapper.GetReadyz)
 	router.GET(options.BaseURL+"/api/v1/system/info", wrapper.GetSystemInfo)
+	router.POST(options.BaseURL+"/api/v1/auth/register", wrapper.Register)
+	router.POST(options.BaseURL+"/api/v1/auth/login/password", wrapper.LoginWithPassword)
+	router.POST(options.BaseURL+"/api/v1/auth/sms/send", wrapper.SendAuthSms)
+	router.POST(options.BaseURL+"/api/v1/auth/login/sms", wrapper.LoginWithSms)
+	router.POST(options.BaseURL+"/api/v1/auth/register/sms", wrapper.CompleteSmsRegistration)
+	router.POST(options.BaseURL+"/api/v1/auth/refresh", wrapper.RefreshToken)
+	router.POST(options.BaseURL+"/api/v1/auth/password/reset", wrapper.ResetPassword)
+	router.POST(options.BaseURL+"/api/v1/auth/logout", wrapper.Logout)
+	router.GET(options.BaseURL+"/api/v1/me", wrapper.GetMe)
+	router.PATCH(options.BaseURL+"/api/v1/me", wrapper.UpdateMe)
+	router.POST(options.BaseURL+"/api/v1/me/sms/send", wrapper.SendAccountSms)
+	router.PUT(options.BaseURL+"/api/v1/me/password", wrapper.ChangePassword)
+	router.PUT(options.BaseURL+"/api/v1/me/phone", wrapper.BindPhone)
+	router.POST(options.BaseURL+"/api/v1/me/deletion", wrapper.DeleteAccount)
+	router.GET(options.BaseURL+"/api/v1/me/devices", wrapper.ListDevices)
+	router.DELETE(options.BaseURL+"/api/v1/me/devices/:deviceId", wrapper.RevokeDevice)
+	router.GET(options.BaseURL+"/api/v1/me/settings", wrapper.GetSettings)
+	router.PUT(options.BaseURL+"/api/v1/me/settings", wrapper.UpdateSettings)
 }
 
 type ErrorJSONResponse ErrorEnvelope
+
+type LoginWithPasswordRequestObject struct {
+	Body *LoginWithPasswordJSONRequestBody
+}
+
+type LoginWithPasswordResponseObject interface {
+	VisitLoginWithPasswordResponse(w http.ResponseWriter) error
+}
+
+type LoginWithPassword200JSONResponse AuthSessionEnvelope
+
+func (response LoginWithPassword200JSONResponse) VisitLoginWithPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithPassworddefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response LoginWithPassworddefaultJSONResponse) VisitLoginWithPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithSmsRequestObject struct {
+	Body *LoginWithSmsJSONRequestBody
+}
+
+type LoginWithSmsResponseObject interface {
+	VisitLoginWithSmsResponse(w http.ResponseWriter) error
+}
+
+type LoginWithSms200JSONResponse SmsLoginResultEnvelope
+
+func (response LoginWithSms200JSONResponse) VisitLoginWithSmsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LoginWithSmsdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response LoginWithSmsdefaultJSONResponse) VisitLoginWithSmsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LogoutRequestObject struct {
+}
+
+type LogoutResponseObject interface {
+	VisitLogoutResponse(w http.ResponseWriter) error
+}
+
+type Logout200JSONResponse AckEnvelope
+
+func (response Logout200JSONResponse) VisitLogoutResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LogoutdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response LogoutdefaultJSONResponse) VisitLogoutResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResetPasswordRequestObject struct {
+	Body *ResetPasswordJSONRequestBody
+}
+
+type ResetPasswordResponseObject interface {
+	VisitResetPasswordResponse(w http.ResponseWriter) error
+}
+
+type ResetPassword200JSONResponse AckEnvelope
+
+func (response ResetPassword200JSONResponse) VisitResetPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResetPassworddefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response ResetPassworddefaultJSONResponse) VisitResetPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RefreshTokenRequestObject struct {
+	Body *RefreshTokenJSONRequestBody
+}
+
+type RefreshTokenResponseObject interface {
+	VisitRefreshTokenResponse(w http.ResponseWriter) error
+}
+
+type RefreshToken200JSONResponse TokenPairEnvelope
+
+func (response RefreshToken200JSONResponse) VisitRefreshTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RefreshTokendefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response RefreshTokendefaultJSONResponse) VisitRefreshTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterRequestObject struct {
+	Body *RegisterJSONRequestBody
+}
+
+type RegisterResponseObject interface {
+	VisitRegisterResponse(w http.ResponseWriter) error
+}
+
+type Register201JSONResponse AuthSessionEnvelope
+
+func (response Register201JSONResponse) VisitRegisterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response RegisterdefaultJSONResponse) VisitRegisterResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteSmsRegistrationRequestObject struct {
+	Body *CompleteSmsRegistrationJSONRequestBody
+}
+
+type CompleteSmsRegistrationResponseObject interface {
+	VisitCompleteSmsRegistrationResponse(w http.ResponseWriter) error
+}
+
+type CompleteSmsRegistration201JSONResponse AuthSessionEnvelope
+
+func (response CompleteSmsRegistration201JSONResponse) VisitCompleteSmsRegistrationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteSmsRegistrationdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response CompleteSmsRegistrationdefaultJSONResponse) VisitCompleteSmsRegistrationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendAuthSmsRequestObject struct {
+	Body *SendAuthSmsJSONRequestBody
+}
+
+type SendAuthSmsResponseObject interface {
+	VisitSendAuthSmsResponse(w http.ResponseWriter) error
+}
+
+type SendAuthSms200JSONResponse SmsSentEnvelope
+
+func (response SendAuthSms200JSONResponse) VisitSendAuthSmsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendAuthSmsdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response SendAuthSmsdefaultJSONResponse) VisitSendAuthSmsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeRequestObject struct {
+}
+
+type GetMeResponseObject interface {
+	VisitGetMeResponse(w http.ResponseWriter) error
+}
+
+type GetMe200JSONResponse UserEnvelope
+
+func (response GetMe200JSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMedefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response GetMedefaultJSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMeRequestObject struct {
+	Body *UpdateMeJSONRequestBody
+}
+
+type UpdateMeResponseObject interface {
+	VisitUpdateMeResponse(w http.ResponseWriter) error
+}
+
+type UpdateMe200JSONResponse UserEnvelope
+
+func (response UpdateMe200JSONResponse) VisitUpdateMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMedefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response UpdateMedefaultJSONResponse) VisitUpdateMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteAccountRequestObject struct {
+	Body *DeleteAccountJSONRequestBody
+}
+
+type DeleteAccountResponseObject interface {
+	VisitDeleteAccountResponse(w http.ResponseWriter) error
+}
+
+type DeleteAccount200JSONResponse AckEnvelope
+
+func (response DeleteAccount200JSONResponse) VisitDeleteAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteAccountdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response DeleteAccountdefaultJSONResponse) VisitDeleteAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDevicesRequestObject struct {
+}
+
+type ListDevicesResponseObject interface {
+	VisitListDevicesResponse(w http.ResponseWriter) error
+}
+
+type ListDevices200JSONResponse DeviceListEnvelope
+
+func (response ListDevices200JSONResponse) VisitListDevicesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDevicesdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response ListDevicesdefaultJSONResponse) VisitListDevicesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeDeviceRequestObject struct {
+	DeviceId openapi_types.UUID `json:"deviceId"`
+}
+
+type RevokeDeviceResponseObject interface {
+	VisitRevokeDeviceResponse(w http.ResponseWriter) error
+}
+
+type RevokeDevice200JSONResponse AckEnvelope
+
+func (response RevokeDevice200JSONResponse) VisitRevokeDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeDevicedefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response RevokeDevicedefaultJSONResponse) VisitRevokeDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ChangePasswordRequestObject struct {
+	Body *ChangePasswordJSONRequestBody
+}
+
+type ChangePasswordResponseObject interface {
+	VisitChangePasswordResponse(w http.ResponseWriter) error
+}
+
+type ChangePassword200JSONResponse AckEnvelope
+
+func (response ChangePassword200JSONResponse) VisitChangePasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ChangePassworddefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response ChangePassworddefaultJSONResponse) VisitChangePasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BindPhoneRequestObject struct {
+	Body *BindPhoneJSONRequestBody
+}
+
+type BindPhoneResponseObject interface {
+	VisitBindPhoneResponse(w http.ResponseWriter) error
+}
+
+type BindPhone200JSONResponse UserEnvelope
+
+func (response BindPhone200JSONResponse) VisitBindPhoneResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type BindPhonedefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response BindPhonedefaultJSONResponse) VisitBindPhoneResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSettingsRequestObject struct {
+}
+
+type GetSettingsResponseObject interface {
+	VisitGetSettingsResponse(w http.ResponseWriter) error
+}
+
+type GetSettings200JSONResponse SettingsEnvelope
+
+func (response GetSettings200JSONResponse) VisitGetSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSettingsdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response GetSettingsdefaultJSONResponse) VisitGetSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSettingsRequestObject struct {
+	Body *UpdateSettingsJSONRequestBody
+}
+
+type UpdateSettingsResponseObject interface {
+	VisitUpdateSettingsResponse(w http.ResponseWriter) error
+}
+
+type UpdateSettings200JSONResponse SettingsEnvelope
+
+func (response UpdateSettings200JSONResponse) VisitUpdateSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSettingsdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response UpdateSettingsdefaultJSONResponse) VisitUpdateSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendAccountSmsRequestObject struct {
+	Body *SendAccountSmsJSONRequestBody
+}
+
+type SendAccountSmsResponseObject interface {
+	VisitSendAccountSmsResponse(w http.ResponseWriter) error
+}
+
+type SendAccountSms200JSONResponse SmsSentEnvelope
+
+func (response SendAccountSms200JSONResponse) VisitSendAccountSmsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendAccountSmsdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response SendAccountSmsdefaultJSONResponse) VisitSendAccountSmsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type GetSystemInfoRequestObject struct {
 }
@@ -377,6 +1976,60 @@ func (response GetReadyzdefaultJSONResponse) VisitGetReadyzResponse(w http.Respo
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// LoginWithPassword 用户名密码登录
+	// (POST /api/v1/auth/login/password)
+	LoginWithPassword(ctx context.Context, request LoginWithPasswordRequestObject) (LoginWithPasswordResponseObject, error)
+	// LoginWithSms 手机号验证码登录
+	// (POST /api/v1/auth/login/sms)
+	LoginWithSms(ctx context.Context, request LoginWithSmsRequestObject) (LoginWithSmsResponseObject, error)
+	// Logout 退出登录
+	// (POST /api/v1/auth/logout)
+	Logout(ctx context.Context, request LogoutRequestObject) (LogoutResponseObject, error)
+	// ResetPassword 通过手机号找回密码
+	// (POST /api/v1/auth/password/reset)
+	ResetPassword(ctx context.Context, request ResetPasswordRequestObject) (ResetPasswordResponseObject, error)
+	// RefreshToken 刷新令牌
+	// (POST /api/v1/auth/refresh)
+	RefreshToken(ctx context.Context, request RefreshTokenRequestObject) (RefreshTokenResponseObject, error)
+	// Register 用户名密码注册
+	// (POST /api/v1/auth/register)
+	Register(ctx context.Context, request RegisterRequestObject) (RegisterResponseObject, error)
+	// CompleteSmsRegistration 完善注册（短信登录的新手机号）
+	// (POST /api/v1/auth/register/sms)
+	CompleteSmsRegistration(ctx context.Context, request CompleteSmsRegistrationRequestObject) (CompleteSmsRegistrationResponseObject, error)
+	// SendAuthSms 发送登录或找回密码验证码
+	// (POST /api/v1/auth/sms/send)
+	SendAuthSms(ctx context.Context, request SendAuthSmsRequestObject) (SendAuthSmsResponseObject, error)
+	// GetMe 当前账号信息
+	// (GET /api/v1/me)
+	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// UpdateMe 修改资料
+	// (PATCH /api/v1/me)
+	UpdateMe(ctx context.Context, request UpdateMeRequestObject) (UpdateMeResponseObject, error)
+	// DeleteAccount 注销账号
+	// (POST /api/v1/me/deletion)
+	DeleteAccount(ctx context.Context, request DeleteAccountRequestObject) (DeleteAccountResponseObject, error)
+	// ListDevices 已登录设备
+	// (GET /api/v1/me/devices)
+	ListDevices(ctx context.Context, request ListDevicesRequestObject) (ListDevicesResponseObject, error)
+	// RevokeDevice 将设备下线
+	// (DELETE /api/v1/me/devices/{deviceId})
+	RevokeDevice(ctx context.Context, request RevokeDeviceRequestObject) (RevokeDeviceResponseObject, error)
+	// ChangePassword 修改密码
+	// (PUT /api/v1/me/password)
+	ChangePassword(ctx context.Context, request ChangePasswordRequestObject) (ChangePasswordResponseObject, error)
+	// BindPhone 绑定或换绑手机号
+	// (PUT /api/v1/me/phone)
+	BindPhone(ctx context.Context, request BindPhoneRequestObject) (BindPhoneResponseObject, error)
+	// GetSettings 用户设置
+	// (GET /api/v1/me/settings)
+	GetSettings(ctx context.Context, request GetSettingsRequestObject) (GetSettingsResponseObject, error)
+	// UpdateSettings 保存用户设置
+	// (PUT /api/v1/me/settings)
+	UpdateSettings(ctx context.Context, request UpdateSettingsRequestObject) (UpdateSettingsResponseObject, error)
+	// SendAccountSms 发送账号操作验证码
+	// (POST /api/v1/me/sms/send)
+	SendAccountSms(ctx context.Context, request SendAccountSmsRequestObject) (SendAccountSmsResponseObject, error)
 	// GetSystemInfo 服务版本信息
 	// (GET /api/v1/system/info)
 	GetSystemInfo(ctx context.Context, request GetSystemInfoRequestObject) (GetSystemInfoResponseObject, error)
@@ -443,6 +2096,531 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictGinServerOptions
+}
+
+// LoginWithPassword operation middleware
+func (sh *strictHandler) LoginWithPassword(ctx *gin.Context) {
+	var request LoginWithPasswordRequestObject
+
+	var body LoginWithPasswordJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.LoginWithPassword(ctx, request.(LoginWithPasswordRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LoginWithPassword")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(LoginWithPasswordResponseObject); ok {
+		if err := validResponse.VisitLoginWithPasswordResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LoginWithSms operation middleware
+func (sh *strictHandler) LoginWithSms(ctx *gin.Context) {
+	var request LoginWithSmsRequestObject
+
+	var body LoginWithSmsJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.LoginWithSms(ctx, request.(LoginWithSmsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LoginWithSms")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(LoginWithSmsResponseObject); ok {
+		if err := validResponse.VisitLoginWithSmsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// Logout operation middleware
+func (sh *strictHandler) Logout(ctx *gin.Context) {
+	var request LogoutRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.Logout(ctx, request.(LogoutRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "Logout")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(LogoutResponseObject); ok {
+		if err := validResponse.VisitLogoutResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ResetPassword operation middleware
+func (sh *strictHandler) ResetPassword(ctx *gin.Context) {
+	var request ResetPasswordRequestObject
+
+	var body ResetPasswordJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.ResetPassword(ctx, request.(ResetPasswordRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ResetPassword")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(ResetPasswordResponseObject); ok {
+		if err := validResponse.VisitResetPasswordResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RefreshToken operation middleware
+func (sh *strictHandler) RefreshToken(ctx *gin.Context) {
+	var request RefreshTokenRequestObject
+
+	var body RefreshTokenJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.RefreshToken(ctx, request.(RefreshTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RefreshToken")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(RefreshTokenResponseObject); ok {
+		if err := validResponse.VisitRefreshTokenResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// Register operation middleware
+func (sh *strictHandler) Register(ctx *gin.Context) {
+	var request RegisterRequestObject
+
+	var body RegisterJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.Register(ctx, request.(RegisterRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "Register")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(RegisterResponseObject); ok {
+		if err := validResponse.VisitRegisterResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CompleteSmsRegistration operation middleware
+func (sh *strictHandler) CompleteSmsRegistration(ctx *gin.Context) {
+	var request CompleteSmsRegistrationRequestObject
+
+	var body CompleteSmsRegistrationJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.CompleteSmsRegistration(ctx, request.(CompleteSmsRegistrationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompleteSmsRegistration")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(CompleteSmsRegistrationResponseObject); ok {
+		if err := validResponse.VisitCompleteSmsRegistrationResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SendAuthSms operation middleware
+func (sh *strictHandler) SendAuthSms(ctx *gin.Context) {
+	var request SendAuthSmsRequestObject
+
+	var body SendAuthSmsJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.SendAuthSms(ctx, request.(SendAuthSmsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SendAuthSms")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(SendAuthSmsResponseObject); ok {
+		if err := validResponse.VisitSendAuthSmsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMe operation middleware
+func (sh *strictHandler) GetMe(ctx *gin.Context) {
+	var request GetMeRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMe(ctx, request.(GetMeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMe")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetMeResponseObject); ok {
+		if err := validResponse.VisitGetMeResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateMe operation middleware
+func (sh *strictHandler) UpdateMe(ctx *gin.Context) {
+	var request UpdateMeRequestObject
+
+	var body UpdateMeJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateMe(ctx, request.(UpdateMeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateMe")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(UpdateMeResponseObject); ok {
+		if err := validResponse.VisitUpdateMeResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteAccount operation middleware
+func (sh *strictHandler) DeleteAccount(ctx *gin.Context) {
+	var request DeleteAccountRequestObject
+
+	var body DeleteAccountJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteAccount(ctx, request.(DeleteAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteAccount")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(DeleteAccountResponseObject); ok {
+		if err := validResponse.VisitDeleteAccountResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListDevices operation middleware
+func (sh *strictHandler) ListDevices(ctx *gin.Context) {
+	var request ListDevicesRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.ListDevices(ctx, request.(ListDevicesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListDevices")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(ListDevicesResponseObject); ok {
+		if err := validResponse.VisitListDevicesResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeDevice operation middleware
+func (sh *strictHandler) RevokeDevice(ctx *gin.Context, deviceId openapi_types.UUID) {
+	var request RevokeDeviceRequestObject
+
+	request.DeviceId = deviceId
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeDevice(ctx, request.(RevokeDeviceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeDevice")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(RevokeDeviceResponseObject); ok {
+		if err := validResponse.VisitRevokeDeviceResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ChangePassword operation middleware
+func (sh *strictHandler) ChangePassword(ctx *gin.Context) {
+	var request ChangePasswordRequestObject
+
+	var body ChangePasswordJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.ChangePassword(ctx, request.(ChangePasswordRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ChangePassword")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(ChangePasswordResponseObject); ok {
+		if err := validResponse.VisitChangePasswordResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// BindPhone operation middleware
+func (sh *strictHandler) BindPhone(ctx *gin.Context) {
+	var request BindPhoneRequestObject
+
+	var body BindPhoneJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.BindPhone(ctx, request.(BindPhoneRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "BindPhone")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(BindPhoneResponseObject); ok {
+		if err := validResponse.VisitBindPhoneResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSettings operation middleware
+func (sh *strictHandler) GetSettings(ctx *gin.Context) {
+	var request GetSettingsRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSettings(ctx, request.(GetSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSettings")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetSettingsResponseObject); ok {
+		if err := validResponse.VisitGetSettingsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateSettings operation middleware
+func (sh *strictHandler) UpdateSettings(ctx *gin.Context) {
+	var request UpdateSettingsRequestObject
+
+	var body UpdateSettingsJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateSettings(ctx, request.(UpdateSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateSettings")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(UpdateSettingsResponseObject); ok {
+		if err := validResponse.VisitUpdateSettingsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SendAccountSms operation middleware
+func (sh *strictHandler) SendAccountSms(ctx *gin.Context) {
+	var request SendAccountSmsRequestObject
+
+	var body SendAccountSmsJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.SendAccountSms(ctx, request.(SendAccountSmsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SendAccountSms")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(SendAccountSmsResponseObject); ok {
+		if err := validResponse.VisitSendAccountSmsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // GetSystemInfo operation middleware

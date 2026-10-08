@@ -13,8 +13,9 @@ export GOOS="$(go env GOHOSTOS)" GOARCH="$(go env GOHOSTARCH)"
 RACE=""
 [[ "${CGO_ENABLED:-$(go env CGO_ENABLED)}" == "1" ]] && RACE="-race"
 
-go test $RACE -covermode=atomic -coverprofile=coverage.raw.out ./...
-grep -vE '/internal/apigen/|/cmd/' coverage.raw.out > coverage.out
+# -coverpkg 让 internal/server 中的接口集成测试也计入 auth、account 等包的覆盖率
+go test $RACE -covermode=atomic -coverpkg=./... -coverprofile=coverage.raw.out ./...
+grep -vE '/internal/(apigen|dbgen|testinfra)/|/cmd/' coverage.raw.out > coverage.out
 rm -f coverage.raw.out
 
 TOTAL="$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print $3}')"

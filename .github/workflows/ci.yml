@@ -55,17 +55,20 @@ jobs:
         with:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
-      - name: 接口生成代码与契约一致
+      - name: 生成代码与契约、SQL 一致
         run: |
           bash ../scripts/gen-api.sh go
-          git diff --exit-code -- internal/apigen
+          bash ../scripts/gen-db.sh
+          git diff --exit-code -- internal/apigen internal/dbgen
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: server
       - name: 依赖漏洞扫描
         run: go run golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} ./...
-      - name: 测试与覆盖率（含 -race）
+      - name: 测试与覆盖率（含 -race，数据库集成测试使用 testcontainers）
+        env:
+          JIKELOG_TEST_REQUIRE_DOCKER: "1"
         run: bash ../scripts/go-coverage.sh 80
       - name: 构建镜像
         run: docker build --build-arg COMMIT=${GITHUB_SHA::7} -t jikelog-api:ci .

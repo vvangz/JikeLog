@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -73,10 +74,57 @@ func StrictOptions(logger *slog.Logger) apigen.StrictGinServerOptions {
 	}
 	return apigen.StrictGinServerOptions{
 		RequestErrorHandlerFunc: func(c *gin.Context, err error) {
+			if errors.As(err, new(*http.MaxBytesError)) {
+				Fail(c, http.StatusRequestEntityTooLarge, CodePayloadTooLarge, MsgPayloadTooLarge)
+				return
+			}
 			logger.InfoContext(c, "bad request", "request_id", RequestIDFrom(c), "error", err)
 			Fail(c, http.StatusBadRequest, CodeBadRequest, MsgBadRequest)
 		},
-		HandlerErrorFunc:         internal("handler error"),
+		HandlerErrorFunc: func(c *gin.Context, err error) {
+			if !WriteError(c, err) {
+				logger.ErrorContext(c, "handler error", "request_id", RequestIDFrom(c), "error", err)
+			}
+		},
 		ResponseErrorHandlerFunc: internal("response error"),
+	}
+}
+
+// BodyLimit 限制请求体大小，超出时解析请求体会失败并返回 413。
+func BodyLimit(maxBytes int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.ContentLength > maxBytes {
+			Fail(c, http.StatusRequestEntityTooLarge, CodePayloadTooLarge, MsgPayloadTooLarge)
+			return
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
+		c.Next()
+	}
+}
+
+// CORS 只对白名单中的来源返回跨域头；预检请求直接以 204 响应。白名单为空时不做任何处理。
+func CORS(origins []string) gin.HandlerFunc {
+	allowed := make(map[string]struct{}, len(origins))
+	for _, o := range origins {
+		allowed[o] = struct{}{}
+	}
+	return func(c *gin.Context) {
+		origin := c.GetHeader("Origin")
+		if _, ok := allowed[origin]; !ok || origin == "" {
+			c.Next()
+			return
+		}
+		h := c.Writer.Header()
+		h.Set("Access-Control-Allow-Origin", origin)
+		h.Add("Vary", "Origin")
+		h.Set("Access-Control-Expose-Headers", HeaderRequestID+", Retry-After")
+		if c.Request.Method == http.MethodOptions && c.GetHeader("Access-Control-Request-Method") != "" {
+			h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE")
+			h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type, "+HeaderRequestID)
+			h.Set("Access-Control-Max-Age", "600")
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
 	}
 }
