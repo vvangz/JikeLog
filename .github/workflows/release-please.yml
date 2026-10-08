@@ -1,0 +1,24 @@
+name: Release Please
+
+# 合入 main 后由 Release Please 根据 Conventional Commits 维护发布 PR：
+# 自动更新 CHANGELOG.md 与各端版本号；合并发布 PR 时打 tag 并创建 GitHub Release。
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          # 用 GITHUB_TOKEN 创建的 PR 不会触发 CI，main 受保护时发布 PR 无法通过检查。
+          # 配置 RELEASE_PLEASE_TOKEN（仅授予本仓库 contents/pull-requests 写权限的细粒度 PAT）后自动使用它。
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

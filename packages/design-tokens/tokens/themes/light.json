@@ -1,0 +1,41 @@
+{
+  "color": {
+    "$type": "color",
+    "primary":            { "$value": "{palette.coffee.600}" },
+    "onPrimary":          { "$value": "{palette.sand.0}" },
+    "primaryContainer":   { "$value": "{palette.coffee.100}" },
+    "onPrimaryContainer": { "$value": "{palette.coffee.900}" },
+
+    "background":     { "$value": "{palette.sand.50}" },
+    "surface":        { "$value": "{palette.sand.0}" },
+    "surfaceVariant": { "$value": "{palette.sand.100}" },
+    "scrim":          { "$value": "#0000007A" },
+
+    "textPrimary":   { "$value": "{palette.sand.800}" },
+    "textSecondary": { "$value": "{palette.sand.600}" },
+    "textDisabled":  { "$value": "{palette.sand.400}" },
+
+    "border":  { "$value": "{palette.sand.300}" },
+    "divider": { "$value": "{palette.sand.200}" },
+
+    "success":            { "$value": "{palette.green.600}" },
+    "onSuccess":          { "$value": "{palette.sand.0}" },
+    "successContainer":   { "$value": "{palette.green.50}" },
+    "onSuccessContainer": { "$value": "{palette.green.800}" },
+
+    "warning":            { "$value": "{palette.amber.600}" },
+    "onWarning":          { "$value": "{palette.sand.0}" },
+    "warningContainer":   { "$value": "{palette.amber.50}" },
+    "onWarningContainer": { "$value": "{palette.amber.800}" },
+
+    "error":            { "$value": "{palette.red.600}" },
+    "onError":          { "$value": "{palette.sand.0}" },
+    "errorContainer":   { "$value": "{palette.red.50}" },
+    "onErrorContainer": { "$value": "{palette.red.800}" },
+
+    "info":            { "$value": "{palette.blue.600}" },
+    "onInfo":          { "$value": "{palette.sand.0}" },
+    "infoContainer":   { "$value": "{palette.blue.50}" },
+    "onInfoContainer": { "$value": "{palette.blue.800}" }
+  }
+}

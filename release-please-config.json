@@ -1,0 +1,75 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "simple",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "bump-minor-pre-major": true,
+  "changelog-sections": [
+    {
+      "type": "feat",
+      "section": "新功能"
+    },
+    {
+      "type": "fix",
+      "section": "问题修复"
+    },
+    {
+      "type": "perf",
+      "section": "性能优化"
+    },
+    {
+      "type": "refactor",
+      "section": "重构"
+    },
+    {
+      "type": "docs",
+      "section": "文档"
+    },
+    {
+      "type": "revert",
+      "section": "回滚"
+    },
+    {
+      "type": "test",
+      "section": "测试",
+      "hidden": true
+    },
+    {
+      "type": "build",
+      "section": "构建",
+      "hidden": true
+    },
+    {
+      "type": "ci",
+      "section": "持续集成",
+      "hidden": true
+    },
+    {
+      "type": "chore",
+      "section": "杂项",
+      "hidden": true
+    },
+    {
+      "type": "style",
+      "section": "代码风格",
+      "hidden": true
+    }
+  ],
+  "packages": {
+    ".": {
+      "package-name": "jikelog",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        "server/internal/version/version.go",
+        "apps/mobile/lib/app/version.dart",
+        "apps/mobile/pubspec.yaml",
+        "server/api/openapi.yaml",
+        {
+          "type": "json",
+          "path": "apps/admin-web/package.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}

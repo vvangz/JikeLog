@@ -1,0 +1,14 @@
+{
+  "name": "@jikelog/design-tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "即刻日志设计令牌：颜色、字体、间距、圆角、动效，生成 Flutter 与 Web 两端代码",
+  "scripts": {
+    "build": "node src/build.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "devDependencies": {
+    "style-dictionary": "5.6.0"
+  }
+}

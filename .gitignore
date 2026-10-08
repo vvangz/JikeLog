@@ -1,0 +1,71 @@
+# ---- OS / IDE ----
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.iml
+*.swp
+
+# ---- 环境变量与密钥（公开仓库，严禁提交） ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+key.properties
+google-services.json
+**/secrets/
+*.pfx
+*.p8
+*.mobileprovision
+service-account*.json
+docker-compose.override.yml
+
+# ---- Node ----
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+playwright-report/
+test-results/
+
+# ---- Go ----
+server/bin/
+server/tmp/
+*.test
+*.out
+coverage.html
+
+# ---- Flutter / Dart ----
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.g.dart.bak
+
+# ---- 字体：MiSans 许可协议禁止单独再分发字体文件，统一由 scripts/fetch-fonts.sh 下载 ----
+apps/mobile/assets/fonts/
+apps/admin-web/public/fonts/
+
+# ---- 数据与转储（可能含用户数据） ----
+*.sqlite
+*.db
+*.dump
+*.sql.gz
+*.hprof
+backups/
+
+# ---- 其他 ----
+.cache/
+*.log
+.claude/
+CLAUDE.local.md

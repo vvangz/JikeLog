@@ -1,0 +1,11 @@
+bin/
+tmp/
+*.out
+*.test
+coverage.html
+.env*
+*.pem
+*.key
+.git
+Dockerfile
+.dockerignore

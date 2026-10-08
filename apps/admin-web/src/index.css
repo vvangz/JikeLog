@@ -1,0 +1,18 @@
+@import './theme/tokens.gen.css';
+@import './theme/fonts.css';
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--jk-color-background);
+  color: var(--jk-color-text-primary);
+  font-family: var(--jk-font-family);
+  font-size: var(--jk-font-size-body);
+  line-height: var(--jk-font-line-height-normal);
+  -webkit-font-smoothing: antialiased;
+}

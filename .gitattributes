@@ -1,0 +1,24 @@
+* text=auto eol=lf
+
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.ttf  binary
+*.otf  binary
+*.woff binary
+*.woff2 binary
+*.jar  binary
+*.zip  binary
+
+# 生成文件：在 PR diff 中折叠
+*.g.dart              linguist-generated=true
+**/gen/**             linguist-generated=true
+**/*.gen.go           linguist-generated=true
+**/*.gen.ts           linguist-generated=true

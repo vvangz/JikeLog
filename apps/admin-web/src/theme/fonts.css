@@ -1,0 +1,32 @@
+/* 字体文件由 scripts/fetch-fonts.sh 下载到 public/fonts（MiSans 许可禁止随源码分发）。
+   MiSans 按 unicode-range 切片的优化放在 v0.8.0 管理后台里程碑。 */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/SpaceGrotesk-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/SpaceGrotesk-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/SpaceGrotesk-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'MiSans';
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/MiSans-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'MiSans';
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/MiSans-Semibold.woff2') format('woff2');
+}

@@ -1,0 +1,40 @@
+# Git 钩子：执行 pnpm install 时自动安装（package.json 的 prepare 脚本）。
+# 跳过钩子仅限紧急情况：LEFTHOOK=0 git commit ...，CI 会再次执行同样的检查。
+
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: pnpm exec commitlint --edit {1}
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: gitleaks
+      run: |
+        if command -v gitleaks >/dev/null 2>&1; then
+          gitleaks git --pre-commit --staged --redact --no-banner
+        else
+          echo "⚠️  未安装 gitleaks，跳过本地密钥扫描（CI 仍会检查）。安装：winget install Gitleaks.Gitleaks"
+        fi
+
+    - name: gofmt
+      glob: "server/**/*.go"
+      run: |
+        out="$(gofmt -l {staged_files})"
+        if [ -n "$out" ]; then echo "以下文件未 gofmt：$out"; exit 1; fi
+
+    - name: eslint
+      root: "apps/admin-web/"
+      glob: "*.{ts,tsx}"
+      run: pnpm exec eslint {staged_files}
+
+    - name: dart-format
+      root: "apps/mobile/"
+      glob: "*.dart"
+      exclude:
+        - "*.g.dart"
+      run: dart format --output=none --set-exit-if-changed {staged_files}
+
+    - name: design-tokens
+      glob: "packages/design-tokens/**"
+      run: pnpm --filter @jikelog/design-tokens test

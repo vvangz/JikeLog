@@ -1,0 +1,42 @@
+name: 问题反馈
+description: 报告一个缺陷
+labels: [bug]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: 涉及端
+      options: [Android 客户端, Web 管理后台, 服务端, 其他]
+    validations:
+      required: true
+  - type: dropdown
+    id: module
+    attributes:
+      label: 涉及模块
+      options: [账号登录, 工作日志, 笔记, 备忘录, 记账, 搜索, 同步, 设置, 其他]
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: "1. 打开…\n2. 点击…\n3. 看到…"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果与实际结果
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本号
+      placeholder: v0.1.0
+  - type: textarea
+    id: env
+    attributes:
+      label: 环境
+      placeholder: 设备型号 / Android 版本 / 浏览器
+  - type: markdown
+    attributes:
+      value: "⚠️ 请勿在 Issue 中粘贴手机号、密码、验证码、日志原文等个人信息。"

@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+# 只取消同一 PR 的旧运行；main/develop 上的每次推送都完整跑完
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  LEFTHOOK: 0
+  FLUTTER_VERSION: 3.47.6
+  GITLEAKS_VERSION: 8.30.1
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+  GOLANGCI_LINT_VERSION: v2.14.0
+  GOVULNCHECK_VERSION: v1.8.0
+
+# 第三方 action 固定到提交 SHA（注释为对应版本），由 Dependabot 维护更新
+jobs:
+  secrets:
+    name: 密钥扫描
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: gitleaks
+        run: |
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL --proto '=https' --tlsv1.2 -o "$tarball" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  ${tarball}" | sha256sum -c -
+          tar xzf "$tarball" gitleaks
+          ./gitleaks git --redact --no-banner --verbose
+
+  server:
+    name: 服务端（Go）
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: 接口生成代码与契约一致
+        run: |
+          bash ../scripts/gen-api.sh go
+          git diff --exit-code -- internal/apigen
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: server
+      - name: 依赖漏洞扫描
+        run: go run golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} ./...
+      - name: 测试与覆盖率（含 -race）
+        run: bash ../scripts/go-coverage.sh 80
+      - name: 构建镜像
+        run: docker build --build-arg COMMIT=${GITHUB_SHA::7} -t jikelog-api:ci .
+
+  web:
+    name: 设计令牌与管理后台
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: 依赖漏洞扫描
+        run: pnpm audit --audit-level=high
+      - name: 设计令牌测试（含 WCAG 对比度）
+        run: pnpm --filter @jikelog/design-tokens test
+      - name: 生成文件与源一致
+        run: |
+          pnpm tokens
+          bash scripts/gen-api.sh ts
+          git diff --exit-code -- apps/mobile/lib/app/theme apps/admin-web/src/theme apps/admin-web/src/api
+      - name: 管理后台 lint / 类型检查 / 测试 / 构建
+        working-directory: apps/admin-web
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm test:coverage
+          pnpm build
+
+  mobile:
+    name: 移动端（Flutter）
+    runs-on: ubuntu-latest
+    env:
+      # pubspec.lock 记录的是国内镜像地址；锁文件含每个包的 sha256，--enforce-lockfile 会逐一校验
+      PUB_HOSTED_URL: https://pub.flutter-io.cn
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v6
+        with:
+          path: .cache/fonts
+          key: fonts-${{ hashFiles('scripts/fetch-fonts.sh') }}
+      - name: 下载字体（校验 SHA256）
+        working-directory: .
+        run: bash scripts/fetch-fonts.sh
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: 格式检查
+        run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze
+      - name: 测试与覆盖率（未被测试引用的文件也计入）
+        run: bash ../../scripts/flutter-coverage.sh 80
+      - name: 构建调试 APK
+        run: flutter build apk --debug --build-number=${{ github.run_number }}

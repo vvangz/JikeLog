@@ -1,0 +1,62 @@
+{
+  "font": {
+    "family": {
+      "$type": "fontFamily",
+      "latin": { "$value": "Space Grotesk", "$description": "英文、数字（金额）" },
+      "cjk":   { "$value": "MiSans", "$description": "中文，作为回退字体" }
+    },
+    "size": {
+      "$type": "number",
+      "caption":   { "$value": 12 },
+      "body":      { "$value": 14 },
+      "bodyLarge": { "$value": 16 },
+      "title":     { "$value": 18 },
+      "headline":  { "$value": 22 },
+      "display":   { "$value": 28 }
+    },
+    "weight": {
+      "$type": "fontWeight",
+      "regular":  { "$value": 400 },
+      "medium":   { "$value": 500 },
+      "semibold": { "$value": 600 },
+      "bold":     { "$value": 700 }
+    },
+    "lineHeight": {
+      "$type": "number",
+      "tight":   { "$value": 1.25 },
+      "normal":  { "$value": 1.5 },
+      "relaxed": { "$value": 1.7 }
+    }
+  },
+  "spacing": {
+    "$type": "number",
+    "xxs": { "$value": 2 },
+    "xs":  { "$value": 4 },
+    "sm":  { "$value": 8 },
+    "md":  { "$value": 12 },
+    "lg":  { "$value": 16 },
+    "xl":  { "$value": 24 },
+    "xxl": { "$value": 32 }
+  },
+  "radius": {
+    "$type": "number",
+    "sm":   { "$value": 6 },
+    "md":   { "$value": 10 },
+    "lg":   { "$value": 16 },
+    "full": { "$value": 999 }
+  },
+  "motion": {
+    "duration": {
+      "$type": "number",
+      "fast":   { "$value": 120, "$description": "毫秒" },
+      "normal": { "$value": 200 },
+      "slow":   { "$value": 320, "$description": "侧栏自上而下展开" }
+    }
+  },
+  "breakpoint": {
+    "$type": "number",
+    "medium":   { "$value": 600, "$description": "<600 抽屉导航" },
+    "expanded": { "$value": 840, "$description": "600–840 NavigationRail；>840 常驻侧栏 + 双栏" },
+    "large":    { "$value": 1200 }
+  }
+}

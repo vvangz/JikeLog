@@ -1,0 +1,199 @@
+openapi: 3.0.3
+info:
+  title: 即刻日志 JikeLog API
+  version: 0.1.0 # x-release-please-version
+  description: |
+    即刻日志服务端接口契约，是服务端、Android 客户端、Web 管理后台三端的唯一事实来源。
+
+    约定：
+    - 所有业务接口前缀 `/api/v1`；健康检查 `/healthz`、`/readyz` 供负载均衡与容器编排探测。
+    - 所有响应使用统一信封：`success`、`data`、`error`、`meta`、`requestId`。
+    - 错误码使用大写蛇形字符串（如 `VALIDATION_FAILED`），HTTP 状态码表达错误类别。
+    - 每个响应都带 `X-Request-ID` 头（客户端传入合法值时沿用，否则服务端生成 UUIDv7），与信封中的 `requestId` 一致。
+    - 健康检查 `/healthz`、`/readyz` 同时支持 HEAD（供负载均衡探测）。
+servers:
+  - url: http://localhost:8080
+    description: 本地开发
+tags:
+  - name: system
+    description: 健康检查与系统信息
+
+paths:
+  /healthz:
+    get:
+      tags: [system]
+      operationId: getHealthz
+      summary: 存活探针
+      description: 进程存活即返回 200，不检查外部依赖。
+      security: []
+      responses:
+        '200':
+          description: 存活
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /readyz:
+    get:
+      tags: [system]
+      operationId: getReadyz
+      summary: 就绪探针
+      description: 检查数据库、缓存等依赖；任一依赖不可用时返回 503。
+      security: []
+      responses:
+        '200':
+          description: 就绪
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthEnvelope'
+        '503':
+          description: 依赖不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/system/info:
+    get:
+      tags: [system]
+      operationId: getSystemInfo
+      summary: 服务版本信息
+      security: []
+      responses:
+        '200':
+          description: 版本信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemInfoEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+components:
+  responses:
+    Error:
+      description: 错误（4xx/5xx），统一使用错误信封
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: 机器可读错误码
+          example: VALIDATION_FAILED
+        message:
+          type: string
+          description: 面向用户的错误描述
+          example: 参数校验失败
+        details:
+          type: object
+          additionalProperties: true
+          description: 附加信息，如字段级校验错误
+
+    PageMeta:
+      type: object
+      required: [total, page, limit]
+      properties:
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    EnvelopeBase:
+      type: object
+      required: [success, requestId]
+      properties:
+        success:
+          type: boolean
+        error:
+          $ref: '#/components/schemas/ErrorBody'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+        requestId:
+          type: string
+          description: 请求 ID，与响应头 X-Request-ID 一致，便于排查
+
+    ErrorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [error]
+          properties:
+            error:
+              $ref: '#/components/schemas/ErrorBody'
+
+    HealthCheck:
+      type: object
+      required: [name, status]
+      properties:
+        name:
+          type: string
+          example: postgres
+        status:
+          type: string
+          enum: [up, down]
+        error:
+          type: string
+
+    Health:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [up, down]
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthCheck'
+
+    HealthEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/Health'
+
+    SystemInfo:
+      type: object
+      required: [name, version, commit, buildTime, serverTime]
+      properties:
+        name:
+          type: string
+          example: jikelog-api
+        version:
+          type: string
+          example: 0.1.0
+        commit:
+          type: string
+        buildTime:
+          type: string
+        serverTime:
+          type: string
+          format: date-time
+
+    SystemInfoEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/SystemInfo'

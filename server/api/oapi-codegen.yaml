@@ -1,0 +1,11 @@
+# oapi-codegen 配置：由仓库根目录 scripts/gen-api.sh 调用
+package: apigen
+output: apigen.gen.go
+generate:
+  models: true
+  gin-server: true
+  strict-server: true
+  # 不内嵌 spec：发布时 info.version 变化不应导致生成代码变化；运行时校验将通过 go:embed 加载 openapi.yaml
+  embedded-spec: false
+output-options:
+  skip-prune: true

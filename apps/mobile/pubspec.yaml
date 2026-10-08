@@ -1,0 +1,36 @@
+name: jikelog
+description: "即刻日志：工作日志、笔记、备忘录、记账"
+publish_to: 'none'
+
+# 版本号由 Release Please 维护
+version: 0.1.0 # x-release-please-version（Android versionCode 由构建参数 --build-number 提供）
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  # 字体文件由仓库根目录 `bash scripts/fetch-fonts.sh` 下载（MiSans 许可禁止随源码分发）
+  fonts:
+    - family: Space Grotesk
+      fonts:
+        - asset: assets/fonts/SpaceGrotesk-Regular.ttf
+        - asset: assets/fonts/SpaceGrotesk-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/SpaceGrotesk-Bold.ttf
+          weight: 700
+    - family: MiSans
+      fonts:
+        - asset: assets/fonts/MiSans-Regular.ttf
+        - asset: assets/fonts/MiSans-Semibold.ttf
+          weight: 600

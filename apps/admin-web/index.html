@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <title>即刻日志管理后台</title>
+    <!-- 首次绘制前确定主题，避免深色用户看到浅色闪烁；之后由 useThemeMode 接管。
+         键名与取值须与 src/theme/themeMode.ts 一致。v0.8.0 启用 CSP 时需为此脚本添加 hash。 -->
+    <script>
+      (function () {
+        var mode = 'system';
+        try {
+          mode = localStorage.getItem('jikelog.admin.theme') || 'system';
+        } catch (e) {
+          // 存储不可用时按跟随系统处理
+        }
+        var dark = mode === 'dark' || (mode !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
