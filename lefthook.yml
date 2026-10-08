@@ -10,18 +10,11 @@ pre-commit:
   parallel: true
   jobs:
     - name: gitleaks
-      run: |
-        if command -v gitleaks >/dev/null 2>&1; then
-          gitleaks git --pre-commit --staged --redact --no-banner
-        else
-          echo "⚠️  未安装 gitleaks，跳过本地密钥扫描（CI 仍会检查）。安装：winget install Gitleaks.Gitleaks"
-        fi
+      run: bash scripts/hooks/gitleaks.sh
 
     - name: gofmt
       glob: "server/**/*.go"
-      run: |
-        out="$(gofmt -l {staged_files})"
-        if [ -n "$out" ]; then echo "以下文件未 gofmt：$out"; exit 1; fi
+      run: bash scripts/hooks/gofmt.sh {staged_files}
 
     - name: eslint
       root: "apps/admin-web/"

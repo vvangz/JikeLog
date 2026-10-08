@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+  workflow_dispatch:
 
 # 只取消同一 PR 的旧运行；main/develop 上的每次推送都完整跑完
 concurrency:
