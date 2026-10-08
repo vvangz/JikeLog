@@ -6,11 +6,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/vvangz/JikeLog/server/internal/platform/httpx"
@@ -31,12 +31,15 @@ func newRedis(t *testing.T) (*redis.Client, *miniredis.Miniredis) {
 	return rdb, mr
 }
 
-var discard = slog.New(slog.NewTextHandler(io.Discard, nil))
+var (
+	discard     = slog.New(slog.NewTextHandler(io.Discard, nil))
+	testHashKey = []byte("test-sms-hash-key-test-sms-hash-key")
+)
 
 func TestSMSCodesSendAndVerify(t *testing.T) {
 	rdb, mr := newRedis(t)
 	sender := &MockSender{Logger: discard}
-	codes := NewSMSCodes(rdb, ratelimit.New(rdb), sender, discard)
+	codes := NewSMSCodes(rdb, ratelimit.New(rdb), sender, discard, testHashKey)
 	ctx := context.Background()
 	phone := "+8613800000000"
 
@@ -72,7 +75,7 @@ func TestSMSCodesSendAndVerify(t *testing.T) {
 
 func TestSMSCodesSendFailureReleasesCooldown(t *testing.T) {
 	rdb, mr := newRedis(t)
-	codes := NewSMSCodes(rdb, ratelimit.New(rdb), failingSender{}, discard)
+	codes := NewSMSCodes(rdb, ratelimit.New(rdb), failingSender{}, discard, testHashKey)
 	ctx := context.Background()
 	phone := "+8613800000001"
 	_ = codes.CheckRate(ctx, phone, "1.1.1.1")
@@ -91,7 +94,7 @@ func TestSMSCodesSendFailureReleasesCooldown(t *testing.T) {
 
 func TestSMSCodesDailyLimit(t *testing.T) {
 	rdb, mr := newRedis(t)
-	codes := NewSMSCodes(rdb, ratelimit.New(rdb), &MockSender{}, discard)
+	codes := NewSMSCodes(rdb, ratelimit.New(rdb), &MockSender{}, discard, testHashKey)
 	ctx := context.Background()
 	phone := "+8613800000002"
 	for i := range smsDailyPerPhone {
@@ -109,7 +112,7 @@ func TestSMSCodesDailyLimit(t *testing.T) {
 
 func TestSMSCodesRedisDown(t *testing.T) {
 	rdb, mr := newRedis(t)
-	codes := NewSMSCodes(rdb, ratelimit.New(rdb), &MockSender{}, discard)
+	codes := NewSMSCodes(rdb, ratelimit.New(rdb), &MockSender{}, discard, testHashKey)
 	mr.Close()
 	ctx := context.Background()
 	if err := codes.CheckRate(ctx, "+8613800000003", "ip"); err == nil {
@@ -123,44 +126,62 @@ func TestSMSCodesRedisDown(t *testing.T) {
 	}
 }
 
-func TestRevocations(t *testing.T) {
+func TestRefreshReplay(t *testing.T) {
 	rdb, mr := newRedis(t)
-	r := NewRevocations(rdb, 15*time.Minute)
+	r := NewRefreshReplay(rdb)
 	ctx := context.Background()
-	dev := uuid.New()
-	at := time.Now()
+	pair := TokenPair{AccessToken: "a", RefreshToken: "r", AccessExpiresAt: time.Now().UTC().Truncate(time.Second)}
 
-	if err := r.MarkRevoked(ctx, nil, at); err != nil {
+	if _, ok, err := r.Load(ctx, "presented"); ok || err != nil {
+		t.Fatalf("未缓存时 Load = %v, %v", ok, err)
+	}
+	if err := r.Save(ctx, "presented", pair); err != nil {
 		t.Fatal(err)
 	}
-	if revoked, _ := r.IsRevoked(ctx, Principal{DeviceID: dev, IssuedAt: at}); revoked {
-		t.Error("未标记的设备不应视为下线")
+	got, ok, err := r.Load(ctx, "presented")
+	if err != nil || !ok || got.RefreshToken != "r" || !got.AccessExpiresAt.Equal(pair.AccessExpiresAt) {
+		t.Fatalf("Load = %+v %v %v", got, ok, err)
 	}
-	if err := r.MarkRevoked(ctx, []uuid.UUID{dev}, at); err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range []struct {
-		issued time.Time
-		want   bool
-	}{{at.Add(-time.Second), true}, {at, true}, {at.Add(time.Millisecond), false}} {
-		if got, _ := r.IsRevoked(ctx, Principal{DeviceID: dev, IssuedAt: tc.issued}); got != tc.want {
-			t.Errorf("签发于 %v 的令牌 revoked = %v, want %v", tc.issued.Sub(at), got, tc.want)
+	for _, k := range mr.Keys() {
+		if v, _ := mr.Get(k); strings.Contains(v, `"r"`) || strings.Contains(v, "RefreshToken") {
+			t.Error("缓存内容应加密")
 		}
 	}
-	if ttl := mr.TTL("jk:rev:" + dev.String()); ttl < 15*time.Minute {
-		t.Errorf("下线标记 TTL = %v，应不短于 Access Token 有效期", ttl)
+	if _, ok, _ := r.Load(ctx, "other"); ok {
+		t.Error("其他令牌不应读到缓存")
 	}
-
-	_ = mr.Set("jk:rev:"+dev.String(), "garbage")
-	if got, _ := r.IsRevoked(ctx, Principal{DeviceID: dev, IssuedAt: at.Add(time.Hour)}); !got {
-		t.Error("标记损坏时应按已下线处理")
+	// 篡改密文或用错误的令牌解密都视为不存在
+	key := mr.Keys()[0]
+	_ = mr.Set(key, "short")
+	if _, ok, err := r.Load(ctx, "presented"); ok || err != nil {
+		t.Errorf("损坏的缓存应视为不存在: %v %v", ok, err)
+	}
+	_ = r.Save(ctx, "presented", pair)
+	mr.FastForward(refreshGrace + time.Second)
+	if _, ok, _ := r.Load(ctx, "presented"); ok {
+		t.Error("超过宽限期后缓存应过期")
 	}
 	mr.Close()
-	if _, err := r.IsRevoked(ctx, Principal{DeviceID: dev}); err == nil {
-		t.Error("Redis 故障应返回错误")
+	if err := r.Save(ctx, "p", pair); err == nil {
+		t.Error("Redis 故障 Save 应返回错误")
 	}
-	if err := r.MarkRevoked(ctx, []uuid.UUID{dev}, at); err == nil {
-		t.Error("Redis 故障应返回错误")
+	if _, _, err := r.Load(ctx, "p"); err == nil {
+		t.Error("Redis 故障 Load 应返回错误")
+	}
+}
+
+func TestIPKey(t *testing.T) {
+	cases := map[string]string{
+		"203.0.113.9":          "203.0.113.9",
+		"::ffff:203.0.113.9":   "203.0.113.9",
+		"2001:db8:1:2:3:4:5:6": "2001:db8:1:2::/64",
+		"2001:db8:1:2:ffff::1": "2001:db8:1:2::/64",
+		"unknown":              "unknown",
+	}
+	for in, want := range cases {
+		if got := ipKey(in); got != want {
+			t.Errorf("ipKey(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 

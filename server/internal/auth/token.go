@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -39,55 +38,47 @@ type accessClaims struct {
 	IssuedAtMs int64 `json:"iat_ms"`
 }
 
-// TokenManager 签发与校验 Access Token（HS256 JWT）。支持一把旧密钥用于平滑轮换。
+// TokenManager 签发与校验 Access Token（HS256 JWT）。支持一把旧密钥用于平滑轮换：
+// 验签时依次尝试当前密钥与旧密钥，令牌头不携带任何密钥标识。
 type TokenManager struct {
-	keys      map[string][]byte // kid -> secret
-	activeKid string
-	ttl       time.Duration
-	now       func() time.Time
+	active []byte
+	keys   jwt.VerificationKeySet
+	ttl    time.Duration
+	now    func() time.Time
 }
 
-// NewTokenManager 创建 TokenManager；previous 为空表示没有旧密钥。
+// NewTokenManager 创建 TokenManager；previous 为空表示没有旧密钥。now 为空时使用 time.Now。
 func NewTokenManager(secret, previous string, ttl time.Duration, now func() time.Time) *TokenManager {
 	if now == nil {
 		now = time.Now
 	}
-	m := &TokenManager{keys: map[string][]byte{}, ttl: ttl, now: now}
-	m.activeKid = keyID(secret)
-	m.keys[m.activeKid] = []byte(secret)
+	m := &TokenManager{active: []byte(secret), ttl: ttl, now: now}
+	m.keys.Keys = []jwt.VerificationKey{m.active}
 	if previous != "" {
-		m.keys[keyID(previous)] = []byte(previous)
+		m.keys.Keys = append(m.keys.Keys, []byte(previous))
 	}
 	return m
-}
-
-// keyID 由密钥派生公开的短标识，便于验签时选择密钥而无需逐个尝试。
-func keyID(secret string) string {
-	sum := sha256.Sum256([]byte("jikelog-kid:" + secret))
-	return hex.EncodeToString(sum[:4])
 }
 
 // TTL 返回 Access Token 有效期。
 func (m *TokenManager) TTL() time.Duration { return m.ttl }
 
-// IssueAccess 为指定设备会话签发 Access Token。
-func (m *TokenManager) IssueAccess(userID, deviceID uuid.UUID) (string, time.Time, error) {
-	now := m.now()
-	exp := now.Add(m.ttl)
+// IssueAccess 以 issuedAt 为签发时间为设备会话签发 Access Token。签发时间由调用方给出，
+// 以便与设备会话的 tokens_valid_after 使用同一时刻。
+func (m *TokenManager) IssueAccess(userID, deviceID uuid.UUID, issuedAt time.Time) (string, time.Time, error) {
+	exp := issuedAt.Add(m.ttl)
 	claims := accessClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    tokenIssuer,
 			Subject:   userID.String(),
 			Audience:  jwt.ClaimStrings{AudienceApp},
-			IssuedAt:  jwt.NewNumericDate(now),
+			IssuedAt:  jwt.NewNumericDate(issuedAt),
 			ExpiresAt: jwt.NewNumericDate(exp),
 		},
 		SessionID:  deviceID.String(),
-		IssuedAtMs: now.UnixMilli(),
+		IssuedAtMs: issuedAt.UnixMilli(),
 	}
-	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tok.Header["kid"] = m.activeKid
-	signed, err := tok.SignedString(m.keys[m.activeKid])
+	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.active)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("签发令牌失败: %w", err)
 	}
@@ -97,14 +88,7 @@ func (m *TokenManager) IssueAccess(userID, deviceID uuid.UUID) (string, time.Tim
 // ParseAccess 校验 Access Token 并返回调用方；任何问题都返回 ErrInvalidToken。
 func (m *TokenManager) ParseAccess(raw string) (Principal, error) {
 	var claims accessClaims
-	_, err := jwt.ParseWithClaims(raw, &claims, func(t *jwt.Token) (any, error) {
-		kid, _ := t.Header["kid"].(string)
-		key, ok := m.keys[kid]
-		if !ok {
-			return nil, ErrInvalidToken
-		}
-		return key, nil
-	},
+	_, err := jwt.ParseWithClaims(raw, &claims, func(*jwt.Token) (any, error) { return m.keys, nil },
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
 		jwt.WithIssuer(tokenIssuer),
 		jwt.WithAudience(AudienceApp),

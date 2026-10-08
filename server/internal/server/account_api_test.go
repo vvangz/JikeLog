@@ -38,7 +38,7 @@ func TestChangePasswordRevokesOtherDevices(t *testing.T) {
 	a.expect(a.login("kate", "newsecret456", "install-003"), http.StatusOK, "")
 
 	// 身份校验连续失败会被临时限制
-	for range 4 {
+	for range 5 {
 		a.expect(change(map[string]any{"currentPassword": "wrong-pass1", "newPassword": "another789x"}), http.StatusBadRequest, "INVALID_CREDENTIALS")
 	}
 	a.expect(change(map[string]any{"currentPassword": "newsecret456", "newPassword": "another789x"}), http.StatusTooManyRequests, "RATE_LIMITED")
@@ -48,10 +48,8 @@ func TestChangePasswordWithSMS(t *testing.T) {
 	a := newTestApp(t)
 	s := a.register("liam", "secret123", "install-001")
 	a.bindPhone(s.access, "13500000000")
-	code := a.sendSMS("", "verify_current", s.access)
-	if code == "" {
-		code = a.sms.LastCode("+8613500000000")
-	}
+	a.sendSMS("", "verify_current", s.access)
+	code := a.sms.LastCode("+8613500000000")
 	a.expect(a.call(http.MethodPut, "/api/v1/me/password", map[string]any{"smsCode": code, "newPassword": "newsecret456"}, s.access), http.StatusOK, "")
 	a.expect(a.login("liam", "newsecret456", "install-002"), http.StatusOK, "")
 }
@@ -61,31 +59,37 @@ func TestBindAndChangePhone(t *testing.T) {
 	s := a.register("mike", "secret123", "install-001")
 	other := a.register("nina", "secret123", "install-002")
 	a.bindPhone(other.access, "13400000000")
-
-	sendBind := func(phone string) apiResp {
-		return a.call(http.MethodPost, "/api/v1/me/sms/send", map[string]any{"purpose": "bind_phone", "phone": phone}, s.access)
+	bind := func(body map[string]any) apiResp {
+		return a.call(http.MethodPut, "/api/v1/me/phone", body, s.access)
 	}
-	a.expect(sendBind("13400000000"), http.StatusConflict, "PHONE_TAKEN")
+
+	// 已被占用的号码：同样返回成功但不发送，无法借此探测号码是否注册
+	before := a.sms.LastCode("+8613400000000")
+	a.expect(a.call(http.MethodPost, "/api/v1/me/sms/send", map[string]any{"purpose": "bind_phone", "phone": "13400000000"}, s.access), http.StatusOK, "")
+	if a.sms.LastCode("+8613400000000") != before {
+		t.Error("已被占用的号码不应收到验证码")
+	}
+	a.expect(bind(map[string]any{"phone": "13400000000", "code": "123456", "currentPassword": "secret123"}), http.StatusBadRequest, "SMS_CODE_INVALID")
 	a.expect(a.call(http.MethodPost, "/api/v1/me/sms/send", map[string]any{"purpose": "bind_phone"}, s.access), http.StatusUnprocessableEntity, "VALIDATION_FAILED")
 	a.expect(a.call(http.MethodPost, "/api/v1/me/sms/send", map[string]any{"purpose": "verify_current"}, s.access), http.StatusBadRequest, "PHONE_NOT_BOUND")
 
+	a.clock.Advance(time.Minute)
 	code := a.sendSMS("13400000001", "bind_phone", s.access)
-	a.expect(a.call(http.MethodPut, "/api/v1/me/phone", map[string]any{"phone": "13400000001", "code": "000000"}, s.access), http.StatusBadRequest, "SMS_CODE_INVALID")
-	bound := a.call(http.MethodPut, "/api/v1/me/phone", map[string]any{"phone": "13400000001", "code": code}, s.access)
+	a.expect(bind(map[string]any{"phone": "13400000001", "code": code}), http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+	a.expect(bind(map[string]any{"phone": "13400000001", "code": code, "currentPassword": "wrong-pass1"}), http.StatusBadRequest, "INVALID_CREDENTIALS")
+	bound := bind(map[string]any{"phone": "13400000001", "code": code, "currentPassword": "secret123"})
 	a.expect(bound, http.StatusOK, "")
 	if bound.str("data", "phoneMasked") != "134****0001" {
 		t.Errorf("phoneMasked = %q", bound.str("data", "phoneMasked"))
 	}
-	a.expect(sendBind("13400000001"), http.StatusUnprocessableEntity, "VALIDATION_FAILED") // 与当前号码相同
+	a.expect(a.call(http.MethodPost, "/api/v1/me/sms/send", map[string]any{"purpose": "bind_phone", "phone": "13400000001"}, s.access), http.StatusUnprocessableEntity, "VALIDATION_FAILED")
 
-	// 换绑：需要新号码与当前号码两条验证码
+	// 换绑：需要当前密码、新号码与当前号码的验证码
 	newCode := a.sendSMS("13400000002", "bind_phone", s.access)
-	a.expect(a.call(http.MethodPut, "/api/v1/me/phone", map[string]any{"phone": "13400000002", "code": newCode}, s.access), http.StatusUnprocessableEntity, "VALIDATION_FAILED")
-	oldCode := a.sendSMS("", "verify_current", s.access)
-	if oldCode == "" {
-		oldCode = a.sms.LastCode("+8613400000001")
-	}
-	changed := a.call(http.MethodPut, "/api/v1/me/phone", map[string]any{"phone": "13400000002", "code": newCode, "currentCode": oldCode}, s.access)
+	a.expect(bind(map[string]any{"phone": "13400000002", "code": newCode, "currentPassword": "secret123"}), http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+	a.sendSMS("", "verify_current", s.access)
+	oldCode := a.sms.LastCode("+8613400000001")
+	changed := bind(map[string]any{"phone": "13400000002", "code": newCode, "currentCode": oldCode, "currentPassword": "secret123"})
 	a.expect(changed, http.StatusOK, "")
 	if changed.str("data", "phoneMasked") != "134****0002" {
 		t.Errorf("换绑后 phoneMasked = %q", changed.str("data", "phoneMasked"))
@@ -210,16 +214,24 @@ func TestReadyzChecksDependencies(t *testing.T) {
 	a.expect(r, http.StatusServiceUnavailable, "DEPENDENCY_UNAVAILABLE")
 }
 
-func TestAuthenticatedRequestFailsClosedWhenRedisDown(t *testing.T) {
+// 下线状态保存在数据库中：Redis 故障或数据丢失不影响已登录请求，也不会让已下线的令牌复活。
+func TestRevocationDoesNotDependOnRedis(t *testing.T) {
 	a := newTestApp(t)
 	s := a.register("tina", "secret123", "install-001")
+	other := sessionFrom(a.login("tina", "secret123", "install-002"))
 	a.mr.Close()
-	a.expect(a.call(http.MethodGet, "/api/v1/me", nil, s.access), http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE")
+	a.expect(a.call(http.MethodGet, "/api/v1/me", nil, s.access), http.StatusOK, "")
+	a.expect(a.call(http.MethodDelete, "/api/v1/me/devices/"+other.deviceID, nil, s.access), http.StatusOK, "")
+	a.expect(a.call(http.MethodGet, "/api/v1/me", nil, other.access), http.StatusUnauthorized, "UNAUTHORIZED")
 }
 
-func TestNewAppRejectsUnsupportedSMSProvider(t *testing.T) {
-	cfg := testConfig(t, map[string]string{"JIKELOG_SMS_PROVIDER": "aliyun"})
-	if _, err := NewApp(context.Background(), Options{Config: cfg}); err == nil {
-		t.Fatal("尚未接入的短信通道应拒绝启动")
+func TestNewAppRejectsUnsupportedProviders(t *testing.T) {
+	for _, env := range []map[string]string{
+		{"JIKELOG_SMS_PROVIDER": "aliyun"},
+		{"JIKELOG_CAPTCHA_PROVIDER": "aliyun"},
+	} {
+		if _, err := NewApp(context.Background(), Options{Config: testConfig(t, env)}); err == nil {
+			t.Errorf("尚未接入的通道 %v 应拒绝启动", env)
+		}
 	}
 }

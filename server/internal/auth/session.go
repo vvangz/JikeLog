@@ -2,63 +2,93 @@ package auth
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/hkdf"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/vvangz/JikeLog/server/internal/platform/cache"
 )
 
-// Revocations 记录设备会话的下线时间。Access Token 是无状态的，设备下线后，
-// 在其剩余有效期内仍需逐个请求检查：签发时间不晚于下线时间的令牌一律拒绝。
-type Revocations struct {
+// RefreshReplay 让宽限期内的重复刷新请求幂等：用某枚 Refresh Token 刷新成功后，
+// 把换发结果缓存 refreshGrace 时长；同一枚令牌再次刷新时直接返回同一结果，而不是再换发一枚，
+// 避免客户端持有的令牌因为并发或重试而失效。
+//
+// 缓存内容用由该 Refresh Token 原文派生的密钥加密（AES-256-GCM），键为其哈希：
+// 只有持有原令牌的一方能解出结果，Redis 数据泄露也无法据此获得有效令牌。
+type RefreshReplay struct {
 	rdb redis.Cmdable
-	// ttl 至少为 Access Token 有效期：之后旧令牌已自然过期，标记可以删除
 	ttl time.Duration
 }
 
-// NewRevocations 创建 Revocations。
-func NewRevocations(rdb redis.Cmdable, accessTTL time.Duration) *Revocations {
-	return &Revocations{rdb: rdb, ttl: accessTTL + time.Minute}
+// NewRefreshReplay 创建 RefreshReplay。
+func NewRefreshReplay(rdb redis.Cmdable) *RefreshReplay {
+	return &RefreshReplay{rdb: rdb, ttl: refreshGrace}
 }
 
-func revokedKey(deviceID uuid.UUID) string { return cache.KeyPrefix + "rev:" + deviceID.String() }
+func replayKey(presented string) string {
+	return cache.KeyPrefix + "rr:" + base64.RawURLEncoding.EncodeToString(HashToken(presented))
+}
 
-// MarkRevoked 记录这些设备在 at 时刻下线。
-func (r *Revocations) MarkRevoked(ctx context.Context, deviceIDs []uuid.UUID, at time.Time) error {
-	if len(deviceIDs) == 0 {
-		return nil
+func replayAEAD(presented string) (cipher.AEAD, error) {
+	key, err := hkdf.Key(sha256.New, []byte(presented), nil, "jikelog-refresh-replay", 32)
+	if err != nil {
+		return nil, err
 	}
-	pipe := r.rdb.Pipeline()
-	for _, id := range deviceIDs {
-		pipe.Set(ctx, revokedKey(id), at.UnixMilli(), r.ttl)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
 	}
-	if _, err := pipe.Exec(ctx); err != nil {
-		return fmt.Errorf("记录设备下线失败: %w", err)
+	return cipher.NewGCM(block)
+}
+
+// Save 缓存用 presented 换发得到的令牌。
+func (r *RefreshReplay) Save(ctx context.Context, presented string, pair TokenPair) error {
+	plain, err := json.Marshal(pair) //nolint:gosec // 序列化后立即加密，不落明文
+	if err != nil {
+		return fmt.Errorf("序列化令牌失败: %w", err)
+	}
+	aead, err := replayAEAD(presented)
+	if err != nil {
+		return fmt.Errorf("派生密钥失败: %w", err)
+	}
+	nonce := make([]byte, aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return fmt.Errorf("生成随机数失败: %w", err)
+	}
+	sealed := aead.Seal(nonce, nonce, plain, nil)
+	if err := r.rdb.Set(ctx, replayKey(presented), sealed, r.ttl).Err(); err != nil {
+		return fmt.Errorf("缓存令牌失败: %w", err)
 	}
 	return nil
 }
 
-// IsRevoked 报告该令牌是否签发于设备下线之前。
-func (r *Revocations) IsRevoked(ctx context.Context, p Principal) (bool, error) {
-	v, err := r.rdb.Get(ctx, revokedKey(p.DeviceID)).Result()
+// Load 返回此前用 presented 换发的令牌；不存在或无法解密时 ok 为 false。
+func (r *RefreshReplay) Load(ctx context.Context, presented string) (pair TokenPair, ok bool, err error) {
+	sealed, err := r.rdb.Get(ctx, replayKey(presented)).Bytes()
 	if errors.Is(err, redis.Nil) {
-		return false, nil
+		return TokenPair{}, false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("读取设备下线状态失败: %w", err)
+		return TokenPair{}, false, fmt.Errorf("读取令牌缓存失败: %w", err)
 	}
-	revokedAt, err := strconv.ParseInt(v, 10, 64)
-	if err != nil {
-		return true, nil // 标记损坏时按已下线处理
+	aead, err := replayAEAD(presented)
+	if err != nil || len(sealed) < aead.NonceSize() {
+		return TokenPair{}, false, nil
 	}
-	return p.IssuedAt.UnixMilli() <= revokedAt, nil
+	plain, err := aead.Open(nil, sealed[:aead.NonceSize()], sealed[aead.NonceSize():], nil)
+	if err != nil || json.Unmarshal(plain, &pair) != nil {
+		return TokenPair{}, false, nil
+	}
+	return pair, true, nil
 }
 
 // RegistrationTickets 保存短信登录时为新手机号签发的一次性注册凭证。

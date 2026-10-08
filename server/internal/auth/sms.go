@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -88,11 +89,13 @@ type SMSCodes struct {
 	limiter *ratelimit.Limiter
 	sender  SMSSender
 	logger  *slog.Logger
+	// hashKey 用于对验证码做 HMAC：6 位数字只有一百万种可能，不加密钥的哈希泄露后可被直接穷举
+	hashKey []byte
 }
 
-// NewSMSCodes 创建 SMSCodes。
-func NewSMSCodes(rdb redis.Cmdable, limiter *ratelimit.Limiter, sender SMSSender, logger *slog.Logger) *SMSCodes {
-	return &SMSCodes{rdb: rdb, limiter: limiter, sender: sender, logger: logger}
+// NewSMSCodes 创建 SMSCodes。hashKey 为服务端密钥（至少 32 字节）。
+func NewSMSCodes(rdb redis.Cmdable, limiter *ratelimit.Limiter, sender SMSSender, logger *slog.Logger, hashKey []byte) *SMSCodes {
+	return &SMSCodes{rdb: rdb, limiter: limiter, sender: sender, logger: logger, hashKey: hashKey}
 }
 
 func codeKey(p Purpose, phone string) string {
@@ -100,14 +103,23 @@ func codeKey(p Purpose, phone string) string {
 }
 func cooldownKey(phone string) string { return cache.KeyPrefix + "sms:cd:" + phone }
 
-func hashCode(p Purpose, phone, code string) string {
-	sum := sha256.Sum256([]byte(string(p) + "|" + phone + "|" + code))
-	return hex.EncodeToString(sum[:])
+func (s *SMSCodes) hashCode(p Purpose, phone, code string) string {
+	mac := hmac.New(sha256.New, s.hashKey)
+	mac.Write([]byte(string(p) + "|" + phone + "|" + code))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// CheckRate 执行发送前的频率检查（冷却、单号每日上限、单 IP 每小时上限）并占用冷却期。
+// CheckRate 执行发送前的频率检查并占用冷却期：先查单 IP 每小时上限（被拒的请求不会占用该号码的冷却），
+// 再占用单号 60 秒冷却，最后计入单号每日上限。
 // 与 Send 分开，是为了让"手机号未注册时不实际发送"的分支也受同样的限制，从而无法通过响应差异探测号码。
 func (s *SMSCodes) CheckRate(ctx context.Context, phone, ip string) error {
+	r, err := s.limiter.Hit(ctx, "sms:ip:"+ipKey(ip), smsHourlyPerIP, time.Hour)
+	if err != nil {
+		return err
+	}
+	if !r.Allowed {
+		return httpx.TooManyRequests(CodeSMSRateLimited, "当前网络发送验证码过于频繁，请稍后再试", r.RetryAfter)
+	}
 	ok, err := s.rdb.SetNX(ctx, cooldownKey(phone), 1, SMSCooldown).Result()
 	if err != nil {
 		return fmt.Errorf("检查短信冷却失败: %w", err)
@@ -119,23 +131,12 @@ func (s *SMSCodes) CheckRate(ctx context.Context, phone, ip string) error {
 		}
 		return httpx.TooManyRequests(CodeSMSRateLimited, "验证码发送过于频繁，请稍后再试", ttl)
 	}
-	checks := []struct {
-		key    string
-		limit  int64
-		window time.Duration
-		msg    string
-	}{
-		{"sms:ip:" + ip, smsHourlyPerIP, time.Hour, "当前网络发送验证码过于频繁，请稍后再试"},
-		{"sms:day:" + phone, smsDailyPerPhone, 24 * time.Hour, "该手机号今日验证码发送次数已达上限"},
+	r, err = s.limiter.Hit(ctx, "sms:day:"+phone, smsDailyPerPhone, 24*time.Hour)
+	if err != nil {
+		return err
 	}
-	for _, c := range checks {
-		r, err := s.limiter.Hit(ctx, c.key, c.limit, c.window)
-		if err != nil {
-			return err
-		}
-		if !r.Allowed {
-			return httpx.TooManyRequests(CodeSMSRateLimited, c.msg, r.RetryAfter)
-		}
+	if !r.Allowed {
+		return httpx.TooManyRequests(CodeSMSRateLimited, "该手机号今日验证码发送次数已达上限", r.RetryAfter)
 	}
 	return nil
 }
@@ -149,7 +150,7 @@ func (s *SMSCodes) Send(ctx context.Context, p Purpose, phone string) error {
 	key := codeKey(p, phone)
 	pipe := s.rdb.TxPipeline()
 	pipe.Del(ctx, key)
-	pipe.HSet(ctx, key, "hash", hashCode(p, phone, code), "attempts", 0)
+	pipe.HSet(ctx, key, "hash", s.hashCode(p, phone, code), "attempts", 0)
 	pipe.PExpire(ctx, key, SMSCodeTTL)
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("保存验证码失败: %w", err)
@@ -179,7 +180,7 @@ return 0
 
 // Verify 校验并消费验证码：正确时返回 nil，验证码随即失效；否则返回 ErrSMSCodeInvalid。
 func (s *SMSCodes) Verify(ctx context.Context, p Purpose, phone, code string) error {
-	res, err := verifyScript.Run(ctx, s.rdb, []string{codeKey(p, phone)}, hashCode(p, phone, code), smsMaxAttempts).Int()
+	res, err := verifyScript.Run(ctx, s.rdb, []string{codeKey(p, phone)}, s.hashCode(p, phone, code), smsMaxAttempts).Int()
 	if err != nil {
 		return fmt.Errorf("校验验证码失败: %w", err)
 	}

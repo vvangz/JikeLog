@@ -34,14 +34,14 @@ func (s *Service) RevokeDevice(ctx context.Context, p auth.Principal, deviceID u
 	if deviceID == p.DeviceID {
 		return errRevokeCurrent
 	}
-	ids, err := s.tx.Queries().RevokeDevice(ctx, dbgen.RevokeDeviceParams{ID: deviceID, UserID: p.UserID})
+	ids, err := s.tx.Queries().RevokeDevice(ctx, dbgen.RevokeDeviceParams{ID: deviceID, UserID: p.UserID, Now: s.auth.Now()})
 	if err != nil {
 		return fmt.Errorf("下线设备失败: %w", err)
 	}
 	if len(ids) == 0 {
 		return errDeviceNotFound
 	}
-	return s.auth.RevokeDevices(ctx, ids)
+	return nil
 }
 
 const (

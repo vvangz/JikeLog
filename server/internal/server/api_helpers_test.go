@@ -183,9 +183,9 @@ func (a *testApp) sendSMS(phone, purpose, token string) string {
 
 func e164(phone string) string { return "+86" + strings.TrimPrefix(phone, "+86") }
 
-// bindPhone 为已登录账号绑定手机号。
+// bindPhone 为已登录账号（密码为 secret123）绑定手机号。
 func (a *testApp) bindPhone(token, phone string) {
 	a.t.Helper()
 	code := a.sendSMS(phone, "bind_phone", token)
-	a.expect(a.call(http.MethodPut, "/api/v1/me/phone", map[string]any{"phone": phone, "code": code}, token), http.StatusOK, "")
+	a.expect(a.call(http.MethodPut, "/api/v1/me/phone", map[string]any{"phone": phone, "code": code, "currentPassword": "secret123"}, token), http.StatusOK, "")
 }

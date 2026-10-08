@@ -71,40 +71,8 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
-const getActiveDevice = `-- name: GetActiveDevice :one
-SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, revoked_at FROM devices WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
-`
-
-type GetActiveDeviceParams struct {
-	ID     uuid.UUID
-	UserID uuid.UUID
-}
-
-func (q *Queries) GetActiveDevice(ctx context.Context, arg GetActiveDeviceParams) (Device, error) {
-	row := q.db.QueryRow(ctx, getActiveDevice, arg.ID, arg.UserID)
-	var i Device
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.InstallationID,
-		&i.Platform,
-		&i.Model,
-		&i.OsVersion,
-		&i.AppVersion,
-		&i.RefreshHash,
-		&i.RefreshPrevHash,
-		&i.RefreshRotatedAt,
-		&i.RefreshExpiresAt,
-		&i.LastIp,
-		&i.LastActiveAt,
-		&i.CreatedAt,
-		&i.RevokedAt,
-	)
-	return i, err
-}
-
 const getDeviceByID = `-- name: GetDeviceByID :one
-SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, revoked_at FROM devices WHERE id = $1
+SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at FROM devices WHERE id = $1
 `
 
 func (q *Queries) GetDeviceByID(ctx context.Context, id uuid.UUID) (Device, error) {
@@ -125,13 +93,14 @@ func (q *Queries) GetDeviceByID(ctx context.Context, id uuid.UUID) (Device, erro
 		&i.LastIp,
 		&i.LastActiveAt,
 		&i.CreatedAt,
+		&i.TokensValidAfter,
 		&i.RevokedAt,
 	)
 	return i, err
 }
 
 const getDeviceByRefreshHashForUpdate = `-- name: GetDeviceByRefreshHashForUpdate :one
-SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, revoked_at FROM devices
+SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at FROM devices
 WHERE (refresh_hash = $1 OR refresh_prev_hash = $1) AND revoked_at IS NULL
 LIMIT 1
 FOR UPDATE
@@ -156,8 +125,26 @@ func (q *Queries) GetDeviceByRefreshHashForUpdate(ctx context.Context, hash []by
 		&i.LastIp,
 		&i.LastActiveAt,
 		&i.CreatedAt,
+		&i.TokensValidAfter,
 		&i.RevokedAt,
 	)
+	return i, err
+}
+
+const getDeviceSession = `-- name: GetDeviceSession :one
+SELECT user_id, tokens_valid_after FROM devices WHERE id = $1 AND revoked_at IS NULL
+`
+
+type GetDeviceSessionRow struct {
+	UserID           uuid.UUID
+	TokensValidAfter time.Time
+}
+
+// 认证中间件每个请求调用一次（主键查询）。
+func (q *Queries) GetDeviceSession(ctx context.Context, id uuid.UUID) (GetDeviceSessionRow, error) {
+	row := q.db.QueryRow(ctx, getDeviceSession, id)
+	var i GetDeviceSessionRow
+	err := row.Scan(&i.UserID, &i.TokensValidAfter)
 	return i, err
 }
 
@@ -240,7 +227,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 }
 
 const listActiveDevices = `-- name: ListActiveDevices :many
-SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, revoked_at FROM devices
+SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at FROM devices
 WHERE user_id = $1 AND revoked_at IS NULL
 ORDER BY last_active_at DESC
 `
@@ -269,6 +256,7 @@ func (q *Queries) ListActiveDevices(ctx context.Context, userID uuid.UUID) ([]De
 			&i.LastIp,
 			&i.LastActiveAt,
 			&i.CreatedAt,
+			&i.TokensValidAfter,
 			&i.RevokedAt,
 		); err != nil {
 			return nil, err
@@ -283,13 +271,18 @@ func (q *Queries) ListActiveDevices(ctx context.Context, userID uuid.UUID) ([]De
 
 const revokeAllDevices = `-- name: RevokeAllDevices :many
 UPDATE devices
-SET revoked_at = now(), refresh_hash = NULL, refresh_prev_hash = NULL
-WHERE user_id = $1 AND revoked_at IS NULL
+SET revoked_at = $1::timestamptz, tokens_valid_after = $1::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
+WHERE user_id = $2 AND revoked_at IS NULL
 RETURNING id
 `
 
-func (q *Queries) RevokeAllDevices(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, revokeAllDevices, userID)
+type RevokeAllDevicesParams struct {
+	Now    time.Time
+	UserID uuid.UUID
+}
+
+func (q *Queries) RevokeAllDevices(ctx context.Context, arg RevokeAllDevicesParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, revokeAllDevices, arg.Now, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -310,18 +303,19 @@ func (q *Queries) RevokeAllDevices(ctx context.Context, userID uuid.UUID) ([]uui
 
 const revokeDevice = `-- name: RevokeDevice :many
 UPDATE devices
-SET revoked_at = now(), refresh_hash = NULL, refresh_prev_hash = NULL
-WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+SET revoked_at = $1::timestamptz, tokens_valid_after = $1::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
+WHERE id = $2 AND user_id = $3 AND revoked_at IS NULL
 RETURNING id
 `
 
 type RevokeDeviceParams struct {
+	Now    time.Time
 	ID     uuid.UUID
 	UserID uuid.UUID
 }
 
 func (q *Queries) RevokeDevice(ctx context.Context, arg RevokeDeviceParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, revokeDevice, arg.ID, arg.UserID)
+	rows, err := q.db.Query(ctx, revokeDevice, arg.Now, arg.ID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -342,18 +336,19 @@ func (q *Queries) RevokeDevice(ctx context.Context, arg RevokeDeviceParams) ([]u
 
 const revokeOtherDevices = `-- name: RevokeOtherDevices :many
 UPDATE devices
-SET revoked_at = now(), refresh_hash = NULL, refresh_prev_hash = NULL
-WHERE user_id = $1 AND id <> $2 AND revoked_at IS NULL
+SET revoked_at = $1::timestamptz, tokens_valid_after = $1::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
+WHERE user_id = $2 AND id <> $3 AND revoked_at IS NULL
 RETURNING id
 `
 
 type RevokeOtherDevicesParams struct {
+	Now    time.Time
 	UserID uuid.UUID
 	KeepID uuid.UUID
 }
 
 func (q *Queries) RevokeOtherDevices(ctx context.Context, arg RevokeOtherDevicesParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, revokeOtherDevices, arg.UserID, arg.KeepID)
+	rows, err := q.db.Query(ctx, revokeOtherDevices, arg.Now, arg.UserID, arg.KeepID)
 	if err != nil {
 		return nil, err
 	}
@@ -486,17 +481,18 @@ func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPassword
 }
 
 const updateUserPasswordHash = `-- name: UpdateUserPasswordHash :exec
-UPDATE users SET password_hash = $1 WHERE id = $2
+UPDATE users SET password_hash = $1 WHERE id = $2 AND password_hash = $3
 `
 
 type UpdateUserPasswordHashParams struct {
 	PasswordHash string
 	ID           uuid.UUID
+	OldHash      string
 }
 
-// 仅升级哈希参数（密码本身未变），不更新 password_changed_at。
+// 仅升级哈希参数（密码本身未变），不更新 password_changed_at；旧哈希不符说明密码已被并发修改，放弃升级。
 func (q *Queries) UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error {
-	_, err := q.db.Exec(ctx, updateUserPasswordHash, arg.PasswordHash, arg.ID)
+	_, err := q.db.Exec(ctx, updateUserPasswordHash, arg.PasswordHash, arg.ID, arg.OldHash)
 	return err
 }
 
@@ -517,10 +513,10 @@ func (q *Queries) UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams
 const upsertDevice = `-- name: UpsertDevice :one
 INSERT INTO devices (
     id, user_id, installation_id, platform, model, os_version, app_version,
-    refresh_hash, refresh_rotated_at, refresh_expires_at, last_ip
+    refresh_hash, refresh_rotated_at, refresh_expires_at, last_ip, tokens_valid_after
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7,
-    $8, now(), $9, $10
+    $8, $9::timestamptz, $10, $11, $9::timestamptz
 )
 ON CONFLICT (user_id, installation_id) DO UPDATE SET
     platform           = EXCLUDED.platform,
@@ -529,12 +525,14 @@ ON CONFLICT (user_id, installation_id) DO UPDATE SET
     app_version        = EXCLUDED.app_version,
     refresh_hash       = EXCLUDED.refresh_hash,
     refresh_prev_hash  = NULL,
-    refresh_rotated_at = now(),
+    refresh_rotated_at = EXCLUDED.refresh_rotated_at,
     refresh_expires_at = EXCLUDED.refresh_expires_at,
     last_ip            = EXCLUDED.last_ip,
     last_active_at     = now(),
+    -- 新会话：此前签发给该设备的令牌全部作废
+    tokens_valid_after = EXCLUDED.tokens_valid_after,
     revoked_at         = NULL
-RETURNING id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, revoked_at
+RETURNING id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at
 `
 
 type UpsertDeviceParams struct {
@@ -546,6 +544,7 @@ type UpsertDeviceParams struct {
 	OsVersion        string
 	AppVersion       string
 	RefreshHash      []byte
+	Now              time.Time
 	RefreshExpiresAt *time.Time
 	LastIp           string
 }
@@ -561,6 +560,7 @@ func (q *Queries) UpsertDevice(ctx context.Context, arg UpsertDeviceParams) (Dev
 		arg.OsVersion,
 		arg.AppVersion,
 		arg.RefreshHash,
+		arg.Now,
 		arg.RefreshExpiresAt,
 		arg.LastIp,
 	)
@@ -580,6 +580,7 @@ func (q *Queries) UpsertDevice(ctx context.Context, arg UpsertDeviceParams) (Dev
 		&i.LastIp,
 		&i.LastActiveAt,
 		&i.CreatedAt,
+		&i.TokensValidAfter,
 		&i.RevokedAt,
 	)
 	return i, err

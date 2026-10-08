@@ -19,6 +19,7 @@ var (
 )
 
 // SendSMS 发送账号操作验证码：bind_phone 发往待绑定的新号码，verify_current 发往当前号码。
+// 新号码已被其他账号绑定时同样返回成功但不发送，且照常占用频率额度，不泄露号码是否已注册。
 func (s *Service) SendSMS(ctx context.Context, p auth.Principal, purpose auth.Purpose, phone, captcha string) error {
 	u, err := s.currentUser(ctx, p)
 	if err != nil {
@@ -38,58 +39,71 @@ func (s *Service) SendSMS(ctx context.Context, p auth.Principal, purpose auth.Pu
 		if phone == "" {
 			return errNeedPhone
 		}
-		if err := s.checkPhoneAvailable(ctx, u, phone); err != nil {
+		if u.Phone != nil && *u.Phone == phone {
+			return errSamePhone
+		}
+		if err := s.auth.CheckSMSRate(ctx, phone, ip); err != nil {
 			return err
 		}
-		return s.auth.SendSMS(ctx, phone, purpose, ip)
+		taken, err := s.phoneTakenByOther(ctx, u, phone)
+		if err != nil || taken {
+			return err
+		}
+		return s.auth.SendCode(ctx, phone, purpose)
 	default:
 		return httpx.Validation(map[string]string{"purpose": "不支持的验证码用途"})
 	}
 }
 
-func (s *Service) checkPhoneAvailable(ctx context.Context, u dbgen.User, phone string) error {
-	if u.Phone != nil && *u.Phone == phone {
-		return errSamePhone
-	}
+func (s *Service) phoneTakenByOther(ctx context.Context, u dbgen.User, phone string) (bool, error) {
 	other, err := s.tx.Queries().GetUserByPhone(ctx, phone)
 	if db.IsNotFound(err) {
-		return nil
+		return false, nil
 	}
 	if err != nil {
-		return fmt.Errorf("查询手机号失败: %w", err)
+		return false, fmt.Errorf("查询手机号失败: %w", err)
 	}
-	if other.ID != u.ID {
-		return errPhoneTaken
-	}
-	return nil
+	return other.ID != u.ID, nil
 }
 
-// BindPhone 绑定或换绑手机号：新号码的验证码必需，换绑时还需当前号码的验证码。
-func (s *Service) BindPhone(ctx context.Context, p auth.Principal, phone, code string, currentCode *string) (dbgen.User, error) {
+// BindPhone 绑定或换绑手机号：需要当前密码与新号码的验证码，换绑时还需当前号码的验证码。
+// 先校验验证码（证明持有新号码）再写入；号码被占用由唯一约束兜底。
+func (s *Service) BindPhone(ctx context.Context, p auth.Principal, in BindPhoneInput) (dbgen.User, error) {
 	u, err := s.currentUser(ctx, p)
 	if err != nil {
 		return dbgen.User{}, err
 	}
-	if err := s.checkPhoneAvailable(ctx, u, phone); err != nil {
+	if u.Phone != nil && *u.Phone == in.Phone {
+		return dbgen.User{}, errSamePhone
+	}
+	if u.Phone != nil && in.CurrentCode == "" {
+		return dbgen.User{}, errNeedOldOTP
+	}
+	if err := s.verifyIdentity(ctx, u, &in.Password, nil); err != nil {
+		return dbgen.User{}, err
+	}
+	if err := s.auth.VerifySMS(ctx, auth.PurposeBindPhone, in.Phone, in.Code); err != nil {
 		return dbgen.User{}, err
 	}
 	if u.Phone != nil {
-		if currentCode == nil || *currentCode == "" {
-			return dbgen.User{}, errNeedOldOTP
-		}
-		if err := s.auth.VerifySMS(ctx, auth.PurposeVerifyCurrent, *u.Phone, *currentCode); err != nil {
+		if err := s.auth.VerifySMS(ctx, auth.PurposeVerifyCurrent, *u.Phone, in.CurrentCode); err != nil {
 			return dbgen.User{}, err
 		}
 	}
-	if err := s.auth.VerifySMS(ctx, auth.PurposeBindPhone, phone, code); err != nil {
-		return dbgen.User{}, err
-	}
-	if err := s.tx.Queries().UpdateUserPhone(ctx, dbgen.UpdateUserPhoneParams{ID: u.ID, Phone: &phone}); err != nil {
+	if err := s.tx.Queries().UpdateUserPhone(ctx, dbgen.UpdateUserPhoneParams{ID: u.ID, Phone: &in.Phone}); err != nil {
 		if db.IsUniqueViolation(err, "users_phone_key") {
 			return dbgen.User{}, errPhoneTaken
 		}
 		return dbgen.User{}, fmt.Errorf("绑定手机号失败: %w", err)
 	}
-	u.Phone = &phone
+	u.Phone = &in.Phone
 	return u, nil
+}
+
+// BindPhoneInput 为绑定手机号的已校验参数。
+type BindPhoneInput struct {
+	Phone       string
+	Code        string
+	Password    string
+	CurrentCode string
 }

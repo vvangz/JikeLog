@@ -6,6 +6,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -75,14 +76,29 @@ func TestPasswordLoginAndLockout(t *testing.T) {
 	if locked.Header.Get("Retry-After") == "" {
 		t.Error("锁定响应应带 Retry-After")
 	}
+	// 锁定只针对该网络：本人换一个网络仍可登录
+	a.ip = "198.51.100.77"
+	a.expect(a.login("carol", "secret123", "install-002"), http.StatusOK, "")
+	a.ip = "198.51.100.1"
 	a.clock.Advance(16 * time.Minute)
 	a.expect(a.login("carol", "secret123", "install-002"), http.StatusOK, "")
 }
 
+func TestLockoutAcrossNetworks(t *testing.T) {
+	a := newTestApp(t)
+	a.register("dora", "secret123", "install-001")
+	for i := range 20 {
+		a.ip = fmt.Sprintf("203.0.113.%d", i+1)
+		a.expect(a.login("dora", "wrong-pass1", "install-002"), http.StatusUnauthorized, "INVALID_CREDENTIALS")
+	}
+	a.ip = "203.0.113.200"
+	a.expect(a.login("dora", "secret123", "install-002"), http.StatusTooManyRequests, "ACCOUNT_LOCKED")
+}
+
 func TestLoginRateLimitedPerIP(t *testing.T) {
 	a := newTestApp(t)
-	for i := range 30 {
-		a.expect(a.login(fmt.Sprintf("user%02d", i), "secret123", "install-001"), http.StatusUnauthorized, "")
+	for i := range 100 {
+		a.expect(a.login(fmt.Sprintf("user%03d", i), "secret123", "install-001"), http.StatusUnauthorized, "")
 	}
 	a.expect(a.login("someone", "secret123", "install-001"), http.StatusTooManyRequests, "RATE_LIMITED")
 	a.ip = "198.51.100.2"
@@ -206,8 +222,8 @@ func TestSMSRateLimitAndAttempts(t *testing.T) {
 	}
 	a.expect(login(code), http.StatusBadRequest, "SMS_CODE_INVALID") // 尝试次数用尽后正确验证码也失效
 
-	// 同一 IP 每小时最多 20 条
-	for i := range 19 {
+	// 同一 IP 每小时最多 20 条（已用 2 条：首次发送与被冷却拒绝的那次）
+	for i := range 18 {
 		a.expect(send(fmt.Sprintf("137%08d", i)), http.StatusOK, "")
 	}
 	a.expect(send("13799999999"), http.StatusTooManyRequests, "SMS_RATE_LIMITED")
@@ -225,11 +241,14 @@ func TestRefreshRotationGraceAndReuse(t *testing.T) {
 	if newRefresh == s.refresh {
 		t.Fatal("刷新后应轮换 Refresh Token")
 	}
-	// 宽限期内重放旧令牌（客户端没收到上次响应）：仍可换发
+	// 宽限期内重放旧令牌（客户端没收到上次响应）：返回同一结果，客户端保留哪次响应都有效
 	a.clock.Advance(10 * time.Second)
 	r2 := refresh(s.refresh)
 	a.expect(r2, http.StatusOK, "")
 	latest := r2.str("data", "refreshToken")
+	if latest != newRefresh {
+		t.Fatal("宽限期内重复刷新应返回同一枚令牌")
+	}
 	a.expect(a.call(http.MethodGet, "/api/v1/me", nil, r2.str("data", "accessToken")), http.StatusOK, "")
 
 	// 超过宽限期再用旧令牌：视为泄露，设备下线
@@ -240,6 +259,45 @@ func TestRefreshRotationGraceAndReuse(t *testing.T) {
 
 	a.expect(refresh("garbage"), http.StatusUnauthorized, "REFRESH_INVALID")
 	a.expect(refresh(""), http.StatusUnauthorized, "REFRESH_INVALID")
+}
+
+func TestConcurrentRefreshIsIdempotent(t *testing.T) {
+	a := newTestApp(t)
+	s := a.register("eric", "secret123", "install-001")
+	const n = 4
+	results := make([]apiResp, n)
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = a.call(http.MethodPost, "/api/v1/auth/refresh", map[string]any{"refreshToken": s.refresh}, "")
+		}()
+	}
+	wg.Wait()
+	first := results[0].str("data", "refreshToken")
+	for _, r := range results {
+		if r.Status != http.StatusOK || r.str("data", "refreshToken") != first {
+			t.Fatalf("并发刷新结果不一致: %d %v", r.Status, r.Body)
+		}
+	}
+	a.clock.Advance(time.Second)
+	a.expect(a.call(http.MethodPost, "/api/v1/auth/refresh", map[string]any{"refreshToken": first}, ""), http.StatusOK, "")
+}
+
+func TestRefreshWhenReplayCacheLost(t *testing.T) {
+	a := newTestApp(t)
+	s := a.register("enzo", "secret123", "install-001")
+	a.expect(a.call(http.MethodPost, "/api/v1/auth/refresh", map[string]any{"refreshToken": s.refresh}, ""), http.StatusOK, "")
+	for _, k := range a.mr.Keys() {
+		if strings.HasPrefix(k, "jk:rr:") {
+			a.mr.Del(k)
+		}
+	}
+	// 缓存丢失时退化为再换发一次，用户不会被登出
+	r := a.call(http.MethodPost, "/api/v1/auth/refresh", map[string]any{"refreshToken": s.refresh}, "")
+	a.expect(r, http.StatusOK, "")
+	a.expect(a.call(http.MethodGet, "/api/v1/me", nil, r.str("data", "accessToken")), http.StatusOK, "")
 }
 
 func TestRefreshTokenExpires(t *testing.T) {

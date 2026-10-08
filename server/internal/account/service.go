@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/dbgen"
 	"github.com/vvangz/JikeLog/server/internal/platform/db"
@@ -60,37 +58,40 @@ func (s *Service) currentUser(ctx context.Context, p auth.Principal) (dbgen.User
 	return u, nil
 }
 
-// verifyIdentity 用当前密码或当前手机号验证码确认是本人操作；连续失败会被临时限制。
+// verifyIdentity 用当前密码或当前手机号验证码确认是本人操作。先计数再校验，
+// 并发请求也不能超过失败上限；校验成功时清零。
 func (s *Service) verifyIdentity(ctx context.Context, u dbgen.User, password, smsCode *string) error {
+	hasPassword := password != nil && *password != ""
+	hasCode := smsCode != nil && *smsCode != ""
+	if !hasPassword && !hasCode {
+		return errNeedIdentity
+	}
 	key := "verify:fail:" + u.ID.String()
-	lock, err := s.limiter.Peek(ctx, key, verifyFailLimit)
+	r, err := s.limiter.Hit(ctx, key, verifyFailLimit, verifyFailWindow)
 	if err != nil {
 		return err
 	}
-	if !lock.Allowed {
-		return httpx.TooManyRequests(httpx.CodeRateLimited, "验证失败次数过多，请稍后再试", lock.RetryAfter)
+	if !r.Allowed {
+		return httpx.TooManyRequests(httpx.CodeRateLimited, "验证失败次数过多，请稍后再试", r.RetryAfter)
 	}
-	switch {
-	case password != nil && *password != "":
+	if hasPassword {
 		ok, err := s.auth.CheckUserPassword(ctx, u, *password)
 		if err != nil {
 			return err
 		}
-		if ok {
-			return nil
+		if !ok {
+			return errWrongPassword
 		}
-		if _, err := s.limiter.Hit(ctx, key, verifyFailLimit, verifyFailWindow); err != nil {
-			return err
-		}
-		return errWrongPassword
-	case smsCode != nil && *smsCode != "":
+	} else {
 		if u.Phone == nil {
 			return errPhoneNotBound
 		}
-		return s.auth.VerifySMS(ctx, auth.PurposeVerifyCurrent, *u.Phone, *smsCode)
-	default:
-		return errNeedIdentity
+		if err := s.auth.VerifySMS(ctx, auth.PurposeVerifyCurrent, *u.Phone, *smsCode); err != nil {
+			return err
+		}
 	}
+	_ = s.limiter.Reset(ctx, key)
+	return nil
 }
 
 // UpdateNickname 修改昵称。
@@ -126,18 +127,9 @@ func (s *Service) DeleteAccount(ctx context.Context, p auth.Principal, current, 
 	if err := s.verifyIdentity(ctx, u, current, smsCode); err != nil {
 		return err
 	}
-	var revoked []uuid.UUID
-	err = s.tx.InTx(ctx, func(q *dbgen.Queries) error {
-		if revoked, err = q.RevokeAllDevices(ctx, u.ID); err != nil {
-			return fmt.Errorf("下线设备失败: %w", err)
-		}
-		if _, err := q.DeleteUser(ctx, u.ID); err != nil {
-			return fmt.Errorf("删除账号失败: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return err
+	// 设备行随账号级联删除，所有令牌随即失效
+	if _, err := s.tx.Queries().DeleteUser(ctx, u.ID); err != nil {
+		return fmt.Errorf("删除账号失败: %w", err)
 	}
-	return s.auth.RevokeDevices(ctx, append(revoked, p.DeviceID))
+	return nil
 }

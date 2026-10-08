@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
@@ -23,7 +24,7 @@ func TestTokenRoundTrip(t *testing.T) {
 	m := NewTokenManager(secretA, "", 15*time.Minute, fixedClock(now))
 	uid, did := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
 
-	tok, exp, err := m.IssueAccess(uid, did)
+	tok, exp, err := m.IssueAccess(uid, did, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +46,7 @@ func TestTokenRoundTrip(t *testing.T) {
 func TestTokenExpires(t *testing.T) {
 	now := time.Now()
 	issuer := NewTokenManager(secretA, "", time.Minute, fixedClock(now))
-	tok, _, _ := issuer.IssueAccess(uuid.New(), uuid.New())
+	tok, _, _ := issuer.IssueAccess(uuid.New(), uuid.New(), now)
 	later := NewTokenManager(secretA, "", time.Minute, fixedClock(now.Add(time.Minute+clockLeeway+time.Second)))
 	if _, err := later.ParseAccess(tok); !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("过期令牌 err = %v", err)
@@ -54,7 +55,7 @@ func TestTokenExpires(t *testing.T) {
 
 func TestTokenKeyRotation(t *testing.T) {
 	old := NewTokenManager(secretA, "", time.Minute, nil)
-	tok, _, _ := old.IssueAccess(uuid.New(), uuid.New())
+	tok, _, _ := old.IssueAccess(uuid.New(), uuid.New(), time.Now())
 
 	rotated := NewTokenManager(secretB, secretA, time.Minute, nil)
 	if _, err := rotated.ParseAccess(tok); err != nil {
@@ -69,9 +70,7 @@ func TestTokenKeyRotation(t *testing.T) {
 func TestTokenRejectsTampering(t *testing.T) {
 	m := NewTokenManager(secretA, "", time.Minute, nil)
 	sign := func(claims jwt.Claims, method jwt.SigningMethod, key any) string {
-		tok := jwt.NewWithClaims(method, claims)
-		tok.Header["kid"] = keyID(secretA)
-		s, err := tok.SignedString(key)
+		s, err := jwt.NewWithClaims(method, claims).SignedString(key)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -122,11 +121,10 @@ func TestTokenRejectsTampering(t *testing.T) {
 			t.Errorf("%s: err = %v, want ErrInvalidToken", name, err)
 		}
 	}
-	unknownKid := jwt.NewWithClaims(jwt.SigningMethodHS256, valid())
-	unknownKid.Header["kid"] = "deadbeef"
-	s, _ := unknownKid.SignedString([]byte(secretA))
-	if _, err := m.ParseAccess(s); !errors.Is(err, ErrInvalidToken) {
-		t.Errorf("未知 kid: err = %v", err)
+	tok, _, _ := m.IssueAccess(uuid.New(), uuid.New(), now)
+	header, _ := base64.RawURLEncoding.DecodeString(strings.Split(tok, ".")[0])
+	if strings.Contains(string(header), "kid") {
+		t.Errorf("令牌头不应携带密钥标识: %s", header)
 	}
 }
 

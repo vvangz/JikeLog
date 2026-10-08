@@ -56,6 +56,16 @@ func (s *Service) SendSMS(ctx context.Context, phone string, purpose Purpose, ip
 	return s.d.SMS.Send(ctx, purpose, phone)
 }
 
+// CheckSMSRate 执行发送频率检查并占用冷却期（不发送）。
+func (s *Service) CheckSMSRate(ctx context.Context, phone, ip string) error {
+	return s.d.SMS.CheckRate(ctx, phone, ip)
+}
+
+// SendCode 生成并发送验证码；调用前必须先通过 CheckSMSRate。
+func (s *Service) SendCode(ctx context.Context, phone string, purpose Purpose) error {
+	return s.d.SMS.Send(ctx, purpose, phone)
+}
+
 // VerifySMS 校验并消费验证码。
 func (s *Service) VerifySMS(ctx context.Context, purpose Purpose, phone, code string) error {
 	return s.d.SMS.Verify(ctx, purpose, phone, code)
@@ -63,7 +73,7 @@ func (s *Service) VerifySMS(ctx context.Context, purpose Purpose, phone, code st
 
 // LoginSMS 用手机号验证码登录；号码未绑定账号时签发注册凭证。
 func (s *Service) LoginSMS(ctx context.Context, phone, code string, dev DeviceMeta, ip string) (SMSLoginResult, error) {
-	if err := s.limitLoginIP(ctx, ip); err != nil {
+	if err := s.limitIP(ctx, bucketSMSLogin, ip); err != nil {
 		return SMSLoginResult{}, err
 	}
 	if err := s.d.SMS.Verify(ctx, PurposeLogin, phone, code); err != nil {
@@ -81,10 +91,11 @@ func (s *Service) LoginSMS(ctx context.Context, phone, code string, dev DeviceMe
 		return SMSLoginResult{}, fmt.Errorf("查询用户失败: %w", err)
 	}
 	// 短信登录成功说明本人持有手机，解除密码错误导致的锁定
-	_ = s.d.Limiter.Reset(ctx, loginFailKey(user.Username))
+	s.clearLoginFailures(ctx, user.Username, ip)
 	var sess Session
 	err = s.d.Tx.InTx(ctx, func(q *dbgen.Queries) error {
-		sess, err = s.openSession(ctx, q, user, dev, ip)
+		opened, err := s.openSession(ctx, q, user, dev, ip)
+		sess = opened
 		return err
 	})
 	if err != nil {
@@ -129,6 +140,7 @@ func (s *Service) ResetPassword(ctx context.Context, phone, code, newPassword st
 	if err := s.SetPassword(ctx, user.ID, newPassword, nil); err != nil {
 		return err
 	}
-	_ = s.d.Limiter.Reset(ctx, loginFailKey(user.Username))
+	_, perUser := loginFailKeys(user.Username, "")
+	_ = s.d.Limiter.Reset(ctx, perUser)
 	return nil
 }

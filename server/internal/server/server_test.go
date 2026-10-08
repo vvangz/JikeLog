@@ -13,9 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 
 	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/platform/config"
@@ -40,16 +38,12 @@ func testConfig(t *testing.T, extra map[string]string) config.Config {
 	return cfg
 }
 
-// testAuthService 返回只用于认证中间件的 auth.Service（不访问数据库）。
+// testAuthService 返回只用于认证中间件的 auth.Service；裸路由只访问公开接口，不会查询数据库。
 func testAuthService(t *testing.T, cfg config.Config) *auth.Service {
 	t.Helper()
-	mr := miniredis.RunT(t)
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	t.Cleanup(func() { _ = rdb.Close() })
 	svc, err := auth.NewService(context.Background(), auth.Deps{
-		Hasher:  auth.NewHasher(auth.Argon2Params{MemoryKiB: 64, Time: 1, Threads: 1}),
-		Tokens:  auth.NewTokenManager(cfg.Auth.JWTSecret, "", cfg.Auth.AccessTTL, nil),
-		Revoked: auth.NewRevocations(rdb, cfg.Auth.AccessTTL),
+		Hasher: auth.NewHasher(auth.Argon2Params{MemoryKiB: 64, Time: 1, Threads: 1}),
+		Tokens: auth.NewTokenManager(cfg.Auth.JWTSecret, "", cfg.Auth.AccessTTL, nil),
 	})
 	if err != nil {
 		t.Fatal(err)

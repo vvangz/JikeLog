@@ -18,6 +18,15 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
 var errEmptyBody = httpx.Validation(map[string]string{"body": "请求体不能为空"})
 
+// maxSecretBytes 限制待校验密码的长度，避免超长输入消耗哈希计算资源。
+const maxSecretBytes = 512
+
+func checkSecret(f auth.FieldErrors, field string, v *string) {
+	if v != nil && len(*v) > maxSecretBytes {
+		f.Add(field, "内容过长")
+	}
+}
+
 func userEnvelope(ctx context.Context, u apigen.User) apigen.UserEnvelope {
 	base := httpx.Base(ctx, nil)
 	return apigen.UserEnvelope{Success: base.Success, RequestId: base.RequestId, Data: u}
@@ -105,6 +114,7 @@ func (h *Handler) ChangePassword(ctx context.Context, req apigen.ChangePasswordR
 	}
 	f := auth.FieldErrors{}
 	auth.CheckPassword(f, "newPassword", b.NewPassword)
+	checkSecret(f, "currentPassword", b.CurrentPassword)
 	if b.SmsCode != nil && *b.SmsCode != "" {
 		auth.CheckSMSCode(f, "smsCode", *b.SmsCode)
 	}
@@ -128,15 +138,19 @@ func (h *Handler) BindPhone(ctx context.Context, req apigen.BindPhoneRequestObje
 		return nil, errEmptyBody
 	}
 	f := auth.FieldErrors{}
-	phone := auth.CheckPhone(f, "phone", b.Phone)
+	in := BindPhoneInput{Phone: auth.CheckPhone(f, "phone", b.Phone), Code: b.Code, Password: b.CurrentPassword}
 	auth.CheckSMSCode(f, "code", b.Code)
+	if b.CurrentPassword == "" || len(b.CurrentPassword) > maxSecretBytes {
+		f.Add("currentPassword", "请输入当前密码")
+	}
 	if b.CurrentCode != nil && *b.CurrentCode != "" {
 		auth.CheckSMSCode(f, "currentCode", *b.CurrentCode)
+		in.CurrentCode = *b.CurrentCode
 	}
 	if err := f.Err(); err != nil {
 		return nil, err
 	}
-	u, err := h.svc.BindPhone(ctx, p, phone, b.Code, b.CurrentCode)
+	u, err := h.svc.BindPhone(ctx, p, in)
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +165,11 @@ func (h *Handler) DeleteAccount(ctx context.Context, req apigen.DeleteAccountReq
 	}
 	if req.Body == nil {
 		return nil, errEmptyBody
+	}
+	f := auth.FieldErrors{}
+	checkSecret(f, "currentPassword", req.Body.CurrentPassword)
+	if err := f.Err(); err != nil {
+		return nil, err
 	}
 	if err := h.svc.DeleteAccount(ctx, p, req.Body.CurrentPassword, req.Body.SmsCode); err != nil {
 		return nil, err

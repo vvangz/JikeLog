@@ -92,7 +92,7 @@ export interface paths {
         put?: never;
         /**
          * 用户名密码登录
-         * @description 连续失败 5 次后账号锁定 15 分钟（`ACCOUNT_LOCKED`）。
+         * @description 同一账号在同一网络连续失败 5 次、或在所有网络累计失败 20 次后锁定 15 分钟（`ACCOUNT_LOCKED`），短信登录可解除锁定。
          */
         post: operations["loginWithPassword"];
         delete?: never;
@@ -252,7 +252,8 @@ export interface paths {
         put?: never;
         /**
          * 发送账号操作验证码
-         * @description - `bind_phone`：向待绑定的新手机号发送，需提供 `phone`；该号码已被其他账号绑定时返回 `PHONE_TAKEN`。
+         * @description - `bind_phone`：向待绑定的新手机号发送，需提供 `phone`。该号码已被其他账号绑定时同样返回成功但不发送，
+         *       避免借此探测号码是否已注册；绑定时会因验证码无效而失败。
          *     - `verify_current`：向当前已绑定的手机号发送，用于换绑、修改密码、注销账号时验证身份。
          *
          *     频率限制与登录验证码相同。
@@ -294,7 +295,8 @@ export interface paths {
         get?: never;
         /**
          * 绑定或换绑手机号
-         * @description 需要新手机号的验证码（`bind_phone`）；已绑定手机号时为换绑，还需要当前手机号的验证码（`verify_current`）。
+         * @description 需要当前密码与新手机号的验证码（`bind_phone`）；已绑定手机号时为换绑，还需要当前手机号的验证码（`verify_current`）。
+         *     验证码校验通过后号码仍被其他账号占用（并发绑定）时返回 `PHONE_TAKEN`。
          */
         put: operations["bindPhone"];
         post?: never;
@@ -456,7 +458,7 @@ export interface components {
         Username: string;
         /**
          * Format: password
-         * @description 8–64 位，至少包含字母和数字
+         * @description 8–128 位，至少包含字母和数字
          */
         Password: string;
         /**
@@ -614,6 +616,11 @@ export interface components {
         BindPhoneRequest: {
             phone: components["schemas"]["Phone"];
             code: components["schemas"]["SmsCode"];
+            /**
+             * Format: password
+             * @description 当前密码，防止他人用被盗的登录态绑定自己的号码接管账号
+             */
+            currentPassword: string;
             currentCode?: components["schemas"]["SmsCode"];
         };
         Device: {

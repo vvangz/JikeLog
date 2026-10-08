@@ -277,6 +277,9 @@ type BindPhoneRequest struct {
 	// CurrentCode 6 位数字验证码，5 分钟内有效，最多尝试 5 次
 	CurrentCode *SmsCode `json:"currentCode,omitempty"`
 
+	// CurrentPassword 当前密码，防止他人用被盗的登录态绑定自己的号码接管账号
+	CurrentPassword string `json:"currentPassword"`
+
 	// Phone 中国大陆手机号，可带 +86 前缀
 	//
 	// Example: 13812345678
@@ -287,7 +290,7 @@ type BindPhoneRequest struct {
 type ChangePasswordRequest struct {
 	CurrentPassword *string `json:"currentPassword,omitempty"`
 
-	// NewPassword 8–64 位，至少包含字母和数字
+	// NewPassword 8–128 位，至少包含字母和数字
 	NewPassword Password `json:"newPassword"`
 
 	// SmsCode 6 位数字验证码，5 分钟内有效，最多尝试 5 次
@@ -302,7 +305,7 @@ type CompleteSmsRegistrationRequest struct {
 	// Nickname 昵称，最多 20 个字符
 	Nickname *Nickname `json:"nickname,omitempty"`
 
-	// Password 8–64 位，至少包含字母和数字
+	// Password 8–128 位，至少包含字母和数字
 	Password           Password `json:"password"`
 	RegistrationTicket string   `json:"registrationTicket"`
 
@@ -432,7 +435,7 @@ type PageMeta struct {
 	Total int64 `json:"total"`
 }
 
-// Password 8–64 位，至少包含字母和数字
+// Password 8–128 位，至少包含字母和数字
 type Password = string
 
 // PasswordLoginRequest defines model for PasswordLoginRequest.
@@ -461,7 +464,7 @@ type RegisterRequest struct {
 	// Nickname 昵称，最多 20 个字符
 	Nickname *Nickname `json:"nickname,omitempty"`
 
-	// Password 8–64 位，至少包含字母和数字
+	// Password 8–128 位，至少包含字母和数字
 	Password Password `json:"password"`
 
 	// Username 4–20 位，字母开头，只含字母、数字、下划线；不区分大小写唯一
@@ -475,7 +478,7 @@ type ResetPasswordRequest struct {
 	// Code 6 位数字验证码，5 分钟内有效，最多尝试 5 次
 	Code SmsCode `json:"code"`
 
-	// NewPassword 8–64 位，至少包含字母和数字
+	// NewPassword 8–128 位，至少包含字母和数字
 	NewPassword Password `json:"newPassword"`
 
 	// Phone 中国大陆手机号，可带 +86 前缀

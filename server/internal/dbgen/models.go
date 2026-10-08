@@ -25,6 +25,7 @@ type Device struct {
 	LastIp           string
 	LastActiveAt     time.Time
 	CreatedAt        time.Time
+	TokensValidAfter time.Time
 	RevokedAt        *time.Time
 }
 

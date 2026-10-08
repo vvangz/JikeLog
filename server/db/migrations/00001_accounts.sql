@@ -40,6 +40,9 @@ CREATE TABLE devices (
     last_ip             text        NOT NULL DEFAULT '',
     last_active_at      timestamptz NOT NULL DEFAULT now(),
     created_at          timestamptz NOT NULL DEFAULT now(),
+    -- 只接受签发时间不早于该时刻的 Access Token：重新登录与下线时都会更新，
+    -- 使下线与数据库事务同时生效，且不依赖缓存
+    tokens_valid_after  timestamptz NOT NULL DEFAULT now(),
     -- 非空表示已退出或被踢下线
     revoked_at          timestamptz,
     CONSTRAINT devices_platform CHECK (platform IN ('android', 'ios', 'windows', 'macos', 'linux', 'web')),

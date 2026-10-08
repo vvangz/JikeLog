@@ -31,15 +31,6 @@ const (
 	CodeCaptchaFailed      = "CAPTCHA_FAILED"
 )
 
-const (
-	loginFailLimit  = 5
-	loginLockWindow = 15 * time.Minute
-	loginIPLimit    = 30
-	loginIPWindow   = 10 * time.Minute
-	// refreshGrace 内重复使用刚被轮换的 Refresh Token 视为网络重试而非泄露
-	refreshGrace = 30 * time.Second
-)
-
 var (
 	errInvalidCredentials = httpx.NewError(http.StatusUnauthorized, CodeInvalidCredentials, "用户名或密码错误")
 	errRefreshInvalid     = httpx.NewError(http.StatusUnauthorized, CodeRefreshInvalid, "登录已失效，请重新登录")
@@ -47,6 +38,7 @@ var (
 	errCaptchaFailed      = httpx.NewError(http.StatusBadRequest, CodeCaptchaFailed, "人机验证未通过，请重试")
 	errUsernameTaken      = httpx.NewError(http.StatusConflict, CodeUsernameTaken, "用户名已被占用")
 	errPhoneTaken         = httpx.NewError(http.StatusConflict, CodePhoneTaken, "该手机号已绑定其他账号")
+	errDeviceOffline      = httpx.Unauthorized("该设备已下线，请重新登录")
 )
 
 // CaptchaVerifier 校验人机验证结果。生产实现为阿里云验证码 2.0（v0.9.0）。
@@ -54,7 +46,7 @@ type CaptchaVerifier interface {
 	Verify(ctx context.Context, param, ip string) (bool, error)
 }
 
-// NoopCaptcha 总是通过，仅用于开发与测试。
+// NoopCaptcha 总是通过，仅用于开发与测试（配置校验禁止在其他环境使用）。
 type NoopCaptcha struct{}
 
 // Verify 实现 CaptchaVerifier。
@@ -67,7 +59,7 @@ type Deps struct {
 	Tokens     *TokenManager
 	SMS        *SMSCodes
 	Tickets    *RegistrationTickets
-	Revoked    *Revocations
+	Replay     *RefreshReplay
 	Limiter    *ratelimit.Limiter
 	Captcha    CaptchaVerifier
 	RefreshTTL time.Duration
@@ -100,6 +92,9 @@ func NewService(ctx context.Context, d Deps) (*Service, error) {
 	return &Service{d: d, dummyHash: dummy}, nil
 }
 
+// now 返回毫秒精度的当前时间：令牌的签发时间只精确到毫秒，会话时间点必须与之可比。
+func (s *Service) now() time.Time { return s.d.Now().Truncate(time.Millisecond) }
+
 // TokenPair 为签发给客户端的令牌。
 type TokenPair struct {
 	AccessToken      string
@@ -125,7 +120,7 @@ type NewUser struct {
 
 // Register 创建账号并登录。
 func (s *Service) Register(ctx context.Context, nu NewUser, dev DeviceMeta, ip string) (Session, error) {
-	if err := s.limitLoginIP(ctx, ip); err != nil {
+	if err := s.limitIP(ctx, bucketRegister, ip); err != nil {
 		return Session{}, err
 	}
 	return s.createAccount(ctx, nu, dev, ip)
@@ -148,7 +143,8 @@ func (s *Service) createAccount(ctx context.Context, nu NewUser, dev DeviceMeta,
 		if err := q.CreateDefaultSettings(ctx, user.ID); err != nil {
 			return fmt.Errorf("创建默认设置失败: %w", err)
 		}
-		sess, err = s.openSession(ctx, q, user, dev, ip)
+		opened, err := s.openSession(ctx, q, user, dev, ip)
+		sess = opened
 		return err
 	})
 	return sess, err
@@ -165,21 +161,23 @@ func mapUserConflict(err error) error {
 }
 
 // openSession 创建或复用设备会话并签发令牌，须在事务中调用。
+// 复用设备时 tokens_valid_after 更新为本次登录时刻，该设备此前的令牌全部作废。
 func (s *Service) openSession(ctx context.Context, q *dbgen.Queries, user dbgen.User, dev DeviceMeta, ip string) (Session, error) {
 	raw, hash, err := NewRefreshToken()
 	if err != nil {
 		return Session{}, err
 	}
-	refreshExp := s.d.Now().Add(s.d.RefreshTTL)
+	now := s.now()
+	refreshExp := now.Add(s.d.RefreshTTL)
 	device, err := q.UpsertDevice(ctx, dbgen.UpsertDeviceParams{
 		ID: uuid.Must(uuid.NewV7()), UserID: user.ID, InstallationID: dev.InstallationID, Platform: dev.Platform,
 		Model: dev.Model, OsVersion: dev.OSVersion, AppVersion: dev.AppVersion,
-		RefreshHash: hash, RefreshExpiresAt: &refreshExp, LastIp: ip,
+		RefreshHash: hash, RefreshExpiresAt: &refreshExp, LastIp: ip, Now: now,
 	})
 	if err != nil {
 		return Session{}, fmt.Errorf("保存设备会话失败: %w", err)
 	}
-	access, accessExp, err := s.d.Tokens.IssueAccess(user.ID, device.ID)
+	access, accessExp, err := s.d.Tokens.IssueAccess(user.ID, device.ID, now)
 	if err != nil {
 		return Session{}, err
 	}
@@ -188,87 +186,8 @@ func (s *Service) openSession(ctx context.Context, q *dbgen.Queries, user dbgen.
 	}}, nil
 }
 
-func (s *Service) limitLoginIP(ctx context.Context, ip string) error {
-	r, err := s.d.Limiter.Hit(ctx, "login:ip:"+ip, loginIPLimit, loginIPWindow)
-	if err != nil {
-		return err
-	}
-	if !r.Allowed {
-		return httpx.TooManyRequests(httpx.CodeRateLimited, "操作过于频繁，请稍后再试", r.RetryAfter)
-	}
-	return nil
-}
-
-func loginFailKey(username string) string { return "login:fail:" + strings.ToLower(username) }
-
-// LoginPassword 用户名密码登录；连续失败 loginFailLimit 次后锁定 loginLockWindow。
-func (s *Service) LoginPassword(ctx context.Context, username, password string, dev DeviceMeta, ip string) (Session, error) {
-	if err := s.limitLoginIP(ctx, ip); err != nil {
-		return Session{}, err
-	}
-	lock, err := s.d.Limiter.Peek(ctx, loginFailKey(username), loginFailLimit)
-	if err != nil {
-		return Session{}, err
-	}
-	if !lock.Allowed {
-		return Session{}, httpx.TooManyRequests(CodeAccountLocked, "密码错误次数过多，账号已临时锁定，可使用短信验证码登录", lock.RetryAfter)
-	}
-	user, ok, err := s.verifyLogin(ctx, username, password)
-	if err != nil {
-		return Session{}, err
-	}
-	if !ok {
-		if _, err := s.d.Limiter.Hit(ctx, loginFailKey(username), loginFailLimit, loginLockWindow); err != nil {
-			return Session{}, err
-		}
-		return Session{}, errInvalidCredentials
-	}
-	_ = s.d.Limiter.Reset(ctx, loginFailKey(username))
-	var sess Session
-	err = s.d.Tx.InTx(ctx, func(q *dbgen.Queries) error {
-		sess, err = s.openSession(ctx, q, user, dev, ip)
-		return err
-	})
-	return sess, err
-}
-
-// verifyLogin 校验用户名与密码；用户不存在时也做一次等价耗时的校验。参数过时时顺带升级哈希。
-func (s *Service) verifyLogin(ctx context.Context, username, password string) (dbgen.User, bool, error) {
-	q := s.d.Tx.Queries()
-	user, err := q.GetUserByUsername(ctx, username)
-	if db.IsNotFound(err) {
-		_, _, _ = s.d.Hasher.Verify(ctx, password, s.dummyHash)
-		return dbgen.User{}, false, nil
-	}
-	if err != nil {
-		return dbgen.User{}, false, fmt.Errorf("查询用户失败: %w", err)
-	}
-	ok, rehash, err := s.d.Hasher.Verify(ctx, password, user.PasswordHash)
-	if err != nil || !ok {
-		return dbgen.User{}, false, err
-	}
-	if rehash {
-		s.upgradeHash(ctx, user.ID, password)
-	}
-	return user, true, nil
-}
-
-func (s *Service) upgradeHash(ctx context.Context, userID uuid.UUID, password string) {
-	hash, err := s.d.Hasher.Hash(ctx, password)
-	if err == nil {
-		err = s.d.Tx.Queries().UpdateUserPasswordHash(ctx, dbgen.UpdateUserPasswordHashParams{ID: userID, PasswordHash: hash})
-	}
-	if err != nil {
-		s.d.Logger.WarnContext(ctx, "password rehash failed", "user_id", userID, "error", err)
-	}
-}
-
-// RevokeDevices 让这些设备立即下线：Access Token 通过下线标记失效，Refresh Token 已在库中清除。
-func (s *Service) RevokeDevices(ctx context.Context, ids []uuid.UUID) error {
-	return s.d.Revoked.MarkRevoked(ctx, ids, s.d.Now())
-}
-
-// Authenticate 校验 Bearer 令牌并确认设备未下线。
+// Authenticate 校验 Bearer 令牌，并在数据库中确认设备会话仍有效、令牌签发于本次会话开始之后。
+// 下线与修改密码都在同一事务中更新设备行，因此立即生效，不依赖缓存。
 func (s *Service) Authenticate(ctx context.Context, authorization string) (Principal, error) {
 	raw, ok := strings.CutPrefix(authorization, "Bearer ")
 	if !ok || raw == "" {
@@ -278,13 +197,16 @@ func (s *Service) Authenticate(ctx context.Context, authorization string) (Princ
 	if err != nil {
 		return Principal{}, httpx.Unauthorized("登录已失效，请重新登录")
 	}
-	revoked, err := s.d.Revoked.IsRevoked(ctx, p)
+	sess, err := s.d.Tx.Queries().GetDeviceSession(ctx, p.DeviceID)
+	if db.IsNotFound(err) {
+		return Principal{}, errDeviceOffline
+	}
 	if err != nil {
-		s.d.Logger.ErrorContext(ctx, "revocation check failed", "error", err)
+		s.d.Logger.ErrorContext(ctx, "device session lookup failed", "error", err)
 		return Principal{}, httpx.NewError(http.StatusServiceUnavailable, httpx.CodeUnavailable, "服务暂时不可用，请稍后重试")
 	}
-	if revoked {
-		return Principal{}, httpx.Unauthorized("该设备已下线，请重新登录")
+	if sess.UserID != p.UserID || p.IssuedAt.UnixMilli() < sess.TokensValidAfter.UnixMilli() {
+		return Principal{}, errDeviceOffline
 	}
 	return p, nil
 }

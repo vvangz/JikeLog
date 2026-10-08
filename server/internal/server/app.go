@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -45,6 +47,9 @@ func NewApp(ctx context.Context, o Options) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	if o.Config.Captcha.Provider != config.CaptchaProviderNone {
+		return nil, errors.New("阿里云验证码将在 v0.9.0 接入，当前版本请使用 JIKELOG_CAPTCHA_PROVIDER=none")
+	}
 	params := auth.DefaultArgon2Params
 	if o.Argon2 != nil {
 		params = *o.Argon2
@@ -54,9 +59,10 @@ func NewApp(ctx context.Context, o Options) (*App, error) {
 	tokens := auth.NewTokenManager(o.Config.Auth.JWTSecret, o.Config.Auth.JWTPreviousSecret, o.Config.Auth.AccessTTL, o.Now)
 	authSvc, err := auth.NewService(ctx, auth.Deps{
 		Tx: tx, Hasher: auth.NewHasher(params), Tokens: tokens,
-		SMS:        auth.NewSMSCodes(o.Redis, limiter, sender, o.Logger),
+		SMS:        auth.NewSMSCodes(o.Redis, limiter, sender, o.Logger, smsHashKey(o.Config.Auth.JWTSecret)),
 		Tickets:    auth.NewRegistrationTickets(o.Redis),
-		Revoked:    auth.NewRevocations(o.Redis, o.Config.Auth.AccessTTL),
+		Replay:     auth.NewRefreshReplay(o.Redis),
+		Captcha:    auth.NoopCaptcha{},
 		Limiter:    limiter,
 		RefreshTTL: o.Config.Auth.RefreshTTL,
 		Logger:     o.Logger,
@@ -79,6 +85,13 @@ func NewApp(ctx context.Context, o Options) (*App, error) {
 		return nil, err
 	}
 	return &App{Handler: router, SMS: sender}, nil
+}
+
+// smsHashKey 由服务端密钥派生验证码 HMAC 密钥（与签名用途分离）。轮换 JWT 密钥只会让 5 分钟内未使用的验证码失效。
+func smsHashKey(secret string) []byte {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte("jikelog-sms-code-hmac"))
+	return mac.Sum(nil)
 }
 
 func newSMSSender(cfg config.SMS, logger *slog.Logger) (auth.SMSSender, error) {

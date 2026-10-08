@@ -24,17 +24,25 @@ const (
 	SMSProviderAliyun = "aliyun"
 )
 
+// 人机验证通道。
+const (
+	// CaptchaProviderNone 不做人机验证，仅用于开发与测试。
+	CaptchaProviderNone   = "none"
+	CaptchaProviderAliyun = "aliyun"
+)
+
 const envPrefix = "JIKELOG_"
 
 // Config 为服务完整配置。
 type Config struct {
-	Env   string `env:"ENV" envDefault:"development"`
-	HTTP  HTTP   `envPrefix:"HTTP_"`
-	Log   Log    `envPrefix:"LOG_"`
-	DB    DB     `envPrefix:"DB_"`
-	Redis Redis  `envPrefix:"REDIS_"`
-	Auth  Auth   `envPrefix:"AUTH_"`
-	SMS   SMS    `envPrefix:"SMS_"`
+	Env     string  `env:"ENV" envDefault:"development"`
+	HTTP    HTTP    `envPrefix:"HTTP_"`
+	Log     Log     `envPrefix:"LOG_"`
+	DB      DB      `envPrefix:"DB_"`
+	Redis   Redis   `envPrefix:"REDIS_"`
+	Auth    Auth    `envPrefix:"AUTH_"`
+	SMS     SMS     `envPrefix:"SMS_"`
+	Captcha Captcha `envPrefix:"CAPTCHA_"`
 }
 
 // HTTP 为 HTTP 服务配置。
@@ -86,6 +94,11 @@ type SMS struct {
 	Provider string `env:"PROVIDER" envDefault:"mock"`
 }
 
+// Captcha 为人机验证配置（发送短信前校验）。
+type Captcha struct {
+	Provider string `env:"PROVIDER" envDefault:"none"`
+}
+
 // Load 从进程环境变量加载配置。
 func Load() (Config, error) {
 	return parse(env.Options{Prefix: envPrefix})
@@ -122,3 +135,7 @@ func normalizeList(items []string) []string {
 
 // IsProduction 报告是否为生产环境。
 func (c Config) IsProduction() bool { return c.Env == EnvProduction }
+
+// IsDeployed 报告是否为对外部署的环境（staging 与 production）：
+// 这类环境禁止使用示例密钥、模拟短信与空人机验证。
+func (c Config) IsDeployed() bool { return c.Env == EnvStaging || c.Env == EnvProduction }

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"unicode/utf8"
 
 	"github.com/vvangz/JikeLog/server/internal/apigen"
 	"github.com/vvangz/JikeLog/server/internal/dbgen"
@@ -58,7 +59,7 @@ func (h *Handler) LoginWithPassword(ctx context.Context, req apigen.LoginWithPas
 	if b.Username == "" || len(b.Username) > 64 {
 		f.Add("username", "请输入用户名")
 	}
-	if b.Password == "" || len(b.Password) > 128 {
+	if b.Password == "" || utf8.RuneCountInString(b.Password) > maxPasswordLen {
 		f.Add("password", "请输入密码")
 	}
 	dev := CheckDevice(f, b.Device)

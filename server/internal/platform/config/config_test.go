@@ -59,6 +59,8 @@ func TestLoadFromDefaults(t *testing.T) {
 func TestLoadFromOverrides(t *testing.T) {
 	cfg, err := LoadFrom(with(map[string]string{
 		"JIKELOG_ENV":                   "staging",
+		"JIKELOG_SMS_PROVIDER":          "aliyun",
+		"JIKELOG_CAPTCHA_PROVIDER":      "aliyun",
 		"JIKELOG_HTTP_ADDR":             "127.0.0.1:9000",
 		"JIKELOG_HTTP_SHUTDOWN_TIMEOUT": "3s",
 		"JIKELOG_HTTP_TRUSTED_PROXIES":  " 10.0.0.1, 10.0.0.2 ,",
@@ -101,13 +103,17 @@ func TestLoadFromRejectsInvalidValues(t *testing.T) {
 		{"超时为零", map[string]string{"JIKELOG_HTTP_READ_TIMEOUT": "0s"}},
 		{"超时无法解析", map[string]string{"JIKELOG_HTTP_WRITE_TIMEOUT": "abc"}},
 		{"监听地址为空", map[string]string{"JIKELOG_HTTP_ADDR": " "}},
-		{"生产环境信任全部 IPv4 代理", map[string]string{"JIKELOG_ENV": "production", "JIKELOG_HTTP_TRUSTED_PROXIES": "10.0.0.1,0.0.0.0/0"}},
-		{"生产环境信任全部 IPv6 代理", map[string]string{"JIKELOG_ENV": "production", "JIKELOG_HTTP_TRUSTED_PROXIES": "::/0"}},
-		{"生产环境信任前缀为 0 的网段", map[string]string{"JIKELOG_ENV": "production", "JIKELOG_HTTP_TRUSTED_PROXIES": "0.0.0.0/00"}},
+		{"生产环境信任全部 IPv4 代理", prod(map[string]string{"JIKELOG_HTTP_TRUSTED_PROXIES": "10.0.0.1,0.0.0.0/0"})},
+		{"生产环境信任全部 IPv6 代理", prod(map[string]string{"JIKELOG_HTTP_TRUSTED_PROXIES": "::/0"})},
+		{"生产环境信任前缀为 0 的网段", prod(map[string]string{"JIKELOG_HTTP_TRUSTED_PROXIES": "0.0.0.0/00"})},
 		{"代理地址非法", map[string]string{"JIKELOG_HTTP_TRUSTED_PROXIES": "10.0.0.1,not-an-ip"}},
 		{"跨域来源带路径", map[string]string{"JIKELOG_HTTP_CORS_ORIGINS": "https://a.example.com/admin"}},
 		{"跨域来源为通配符", map[string]string{"JIKELOG_HTTP_CORS_ORIGINS": "*"}},
-		{"生产环境允许 http 跨域来源", map[string]string{"JIKELOG_ENV": "production", "JIKELOG_SMS_PROVIDER": "aliyun", "JIKELOG_HTTP_CORS_ORIGINS": "http://a.example.com"}},
+		{"生产环境允许 http 跨域来源", prod(map[string]string{"JIKELOG_HTTP_CORS_ORIGINS": "http://a.example.com"})},
+		{"生产环境未设置可信代理", prod(map[string]string{"JIKELOG_HTTP_TRUSTED_PROXIES": ""})},
+		{"staging 使用模拟短信", map[string]string{"JIKELOG_ENV": "staging", "JIKELOG_CAPTCHA_PROVIDER": "aliyun"}},
+		{"staging 未启用人机验证", map[string]string{"JIKELOG_ENV": "staging", "JIKELOG_SMS_PROVIDER": "aliyun"}},
+		{"未知人机验证通道", map[string]string{"JIKELOG_CAPTCHA_PROVIDER": "recaptcha"}},
 		{"缺少数据库地址", map[string]string{"JIKELOG_DB_URL": ""}},
 		{"数据库地址协议错误", map[string]string{"JIKELOG_DB_URL": "mysql://u:p@h/db"}},
 		{"连接池为零", map[string]string{"JIKELOG_DB_MAX_CONNS": "0"}},
@@ -119,8 +125,8 @@ func TestLoadFromRejectsInvalidValues(t *testing.T) {
 		{"Access Token 有效期过长", map[string]string{"JIKELOG_AUTH_ACCESS_TTL": "2h"}},
 		{"Refresh Token 短于 Access Token", map[string]string{"JIKELOG_AUTH_REFRESH_TTL": "10m"}},
 		{"未知短信通道", map[string]string{"JIKELOG_SMS_PROVIDER": "twilio"}},
-		{"生产环境使用模拟短信", map[string]string{"JIKELOG_ENV": "production"}},
-		{"生产环境使用占位密钥", map[string]string{"JIKELOG_ENV": "production", "JIKELOG_SMS_PROVIDER": "aliyun", "JIKELOG_AUTH_JWT_SECRET": "change-me-local-only-change-me-local-only"}},
+		{"生产环境使用模拟短信", prod(map[string]string{"JIKELOG_SMS_PROVIDER": "mock"})},
+		{"生产环境使用占位密钥", prod(map[string]string{"JIKELOG_AUTH_JWT_SECRET": "change-me-local-only-change-me-local-only"})},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -131,12 +137,24 @@ func TestLoadFromRejectsInvalidValues(t *testing.T) {
 	}
 }
 
+// prod 返回其余项都合规的生产环境变量，extra 覆盖其中的值。
+func prod(extra map[string]string) map[string]string {
+	env := map[string]string{
+		"JIKELOG_ENV":                  "production",
+		"JIKELOG_SMS_PROVIDER":         "aliyun",
+		"JIKELOG_CAPTCHA_PROVIDER":     "aliyun",
+		"JIKELOG_HTTP_TRUSTED_PROXIES": "127.0.0.1",
+		"JIKELOG_HTTP_CORS_ORIGINS":    "https://admin.example.com",
+	}
+	maps.Copy(env, extra)
+	return env
+}
+
 func TestProductionConfigAccepted(t *testing.T) {
-	_, err := LoadFrom(with(map[string]string{
-		"JIKELOG_ENV":               "production",
-		"JIKELOG_SMS_PROVIDER":      "aliyun",
-		"JIKELOG_HTTP_CORS_ORIGINS": "https://admin.example.com",
-	}))
+	cfg, err := LoadFrom(with(prod(nil)))
+	if err == nil && (!cfg.IsDeployed() || !cfg.IsProduction()) {
+		t.Error("production 应视为已部署环境")
+	}
 	if err != nil {
 		t.Fatalf("LoadFrom() error = %v", err)
 	}

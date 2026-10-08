@@ -38,8 +38,8 @@ func TestMaskPhone(t *testing.T) {
 }
 
 func TestCheckPassword(t *testing.T) {
-	good := []string{"secret123", "密码abc123", strings.Repeat("a1", 32)}
-	bad := []string{"short1", "onlyletters", "12345678", strings.Repeat("a1", 33), "secret12\x00"}
+	good := []string{"secret123", "密码abc123", strings.Repeat("a1", 64)}
+	bad := []string{"short1", "onlyletters", "12345678", strings.Repeat("a1", 65), "secret12\x00"}
 	for _, pw := range good {
 		f := FieldErrors{}
 		CheckPassword(f, "p", pw)

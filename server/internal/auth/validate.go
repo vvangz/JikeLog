@@ -18,7 +18,7 @@ var (
 
 const (
 	minPasswordLen    = 8
-	maxPasswordLen    = 64
+	maxPasswordLen    = 128
 	maxNicknameLen    = 20
 	maxDeviceFieldLen = 64
 	maxAppVersionLen  = 32
@@ -60,11 +60,11 @@ func CheckUsername(f FieldErrors, field, username string) {
 	}
 }
 
-// CheckPassword 校验密码强度：8–64 位，同时包含字母和数字，不含控制字符。
+// CheckPassword 校验密码强度：8–128 位，同时包含字母和数字，不含控制字符。
 func CheckPassword(f FieldErrors, field, password string) {
 	n := utf8.RuneCountInString(password)
 	if n < minPasswordLen || n > maxPasswordLen {
-		f.Add(field, "密码长度为 8–64 位")
+		f.Add(field, "密码长度为 8–128 位")
 		return
 	}
 	var letter, digit bool

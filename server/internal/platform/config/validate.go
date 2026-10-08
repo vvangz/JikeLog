@@ -20,6 +20,7 @@ var (
 	validLogLevels    = []string{"debug", "info", "warn", "error"}
 	validLogFormats   = []string{"json", "text"}
 	validSMSProviders = []string{SMSProviderMock, SMSProviderAliyun}
+	validCaptchas     = []string{CaptchaProviderNone, CaptchaProviderAliyun}
 )
 
 // Validate 校验配置取值，返回所有错误的合并结果。错误信息不包含密钥、密码等敏感值。
@@ -58,6 +59,9 @@ func (c Config) validateHTTP() []error {
 		}
 	}
 	errs = append(errs, c.validateTrustedProxies()...)
+	if c.IsProduction() && len(c.HTTP.TrustedProxies) == 0 {
+		errs = append(errs, errors.New("生产环境必须设置 JIKELOG_HTTP_TRUSTED_PROXIES（反向代理地址），否则所有请求的客户端 IP 都相同，限流会误伤全部用户"))
+	}
 	errs = append(errs, c.validateCORSOrigins()...)
 	return errs
 }
@@ -124,8 +128,8 @@ func (c Config) validateAuth() []error {
 		errs = append(errs, errors.New("JIKELOG_AUTH_JWT_SECRET 不能为空"))
 	case len(c.Auth.JWTSecret) < minJWTSecretLen:
 		errs = append(errs, fmt.Errorf("JIKELOG_AUTH_JWT_SECRET 至少 %d 字节", minJWTSecretLen))
-	case c.IsProduction() && strings.Contains(c.Auth.JWTSecret, "change-me"):
-		errs = append(errs, errors.New("生产环境不能使用示例中的 JIKELOG_AUTH_JWT_SECRET"))
+	case c.IsDeployed() && strings.Contains(c.Auth.JWTSecret, "change-me"):
+		errs = append(errs, errors.New("staging / production 环境不能使用示例中的 JIKELOG_AUTH_JWT_SECRET（仓库公开，任何人都能用它伪造令牌）"))
 	}
 	if c.Auth.JWTPreviousSecret != "" && len(c.Auth.JWTPreviousSecret) < minJWTSecretLen {
 		errs = append(errs, fmt.Errorf("JIKELOG_AUTH_JWT_PREVIOUS_SECRET 至少 %d 字节", minJWTSecretLen))
@@ -139,8 +143,14 @@ func (c Config) validateAuth() []error {
 	if !slices.Contains(validSMSProviders, c.SMS.Provider) {
 		errs = append(errs, fmt.Errorf("JIKELOG_SMS_PROVIDER=%q 不合法，可选 %v", c.SMS.Provider, validSMSProviders))
 	}
-	if c.IsProduction() && c.SMS.Provider == SMSProviderMock {
-		errs = append(errs, errors.New("生产环境不能使用模拟短信通道（JIKELOG_SMS_PROVIDER=mock）"))
+	if c.IsDeployed() && c.SMS.Provider == SMSProviderMock {
+		errs = append(errs, errors.New("staging / production 环境不能使用模拟短信通道（JIKELOG_SMS_PROVIDER=mock）"))
+	}
+	if !slices.Contains(validCaptchas, c.Captcha.Provider) {
+		errs = append(errs, fmt.Errorf("JIKELOG_CAPTCHA_PROVIDER=%q 不合法，可选 %v", c.Captcha.Provider, validCaptchas))
+	}
+	if c.IsDeployed() && c.Captcha.Provider == CaptchaProviderNone {
+		errs = append(errs, errors.New("staging / production 环境必须启用人机验证（JIKELOG_CAPTCHA_PROVIDER）"))
 	}
 	return errs
 }

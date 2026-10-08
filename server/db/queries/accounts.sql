@@ -20,8 +20,8 @@ SET password_hash = @password_hash, password_changed_at = now(), updated_at = no
 WHERE id = @id;
 
 -- name: UpdateUserPasswordHash :exec
--- 仅升级哈希参数（密码本身未变），不更新 password_changed_at。
-UPDATE users SET password_hash = @password_hash WHERE id = @id;
+-- 仅升级哈希参数（密码本身未变），不更新 password_changed_at；旧哈希不符说明密码已被并发修改，放弃升级。
+UPDATE users SET password_hash = @password_hash WHERE id = @id AND password_hash = @old_hash;
 
 -- name: UpdateUserPhone :exec
 UPDATE users SET phone = sqlc.narg(phone), updated_at = now() WHERE id = @id;
@@ -37,10 +37,10 @@ DELETE FROM users WHERE id = @id;
 -- 同一安装实例再次登录同一账号时复用设备行：重新激活、更新设备信息并换发 Refresh Token。
 INSERT INTO devices (
     id, user_id, installation_id, platform, model, os_version, app_version,
-    refresh_hash, refresh_rotated_at, refresh_expires_at, last_ip
+    refresh_hash, refresh_rotated_at, refresh_expires_at, last_ip, tokens_valid_after
 ) VALUES (
     @id, @user_id, @installation_id, @platform, @model, @os_version, @app_version,
-    @refresh_hash, now(), @refresh_expires_at, @last_ip
+    @refresh_hash, @now::timestamptz, @refresh_expires_at, @last_ip, @now::timestamptz
 )
 ON CONFLICT (user_id, installation_id) DO UPDATE SET
     platform           = EXCLUDED.platform,
@@ -49,10 +49,12 @@ ON CONFLICT (user_id, installation_id) DO UPDATE SET
     app_version        = EXCLUDED.app_version,
     refresh_hash       = EXCLUDED.refresh_hash,
     refresh_prev_hash  = NULL,
-    refresh_rotated_at = now(),
+    refresh_rotated_at = EXCLUDED.refresh_rotated_at,
     refresh_expires_at = EXCLUDED.refresh_expires_at,
     last_ip            = EXCLUDED.last_ip,
     last_active_at     = now(),
+    -- 新会话：此前签发给该设备的令牌全部作废
+    tokens_valid_after = EXCLUDED.tokens_valid_after,
     revoked_at         = NULL
 RETURNING *;
 
@@ -76,8 +78,9 @@ WHERE id = @id;
 -- name: GetDeviceByID :one
 SELECT * FROM devices WHERE id = @id;
 
--- name: GetActiveDevice :one
-SELECT * FROM devices WHERE id = @id AND user_id = @user_id AND revoked_at IS NULL;
+-- name: GetDeviceSession :one
+-- 认证中间件每个请求调用一次（主键查询）。
+SELECT user_id, tokens_valid_after FROM devices WHERE id = @id AND revoked_at IS NULL;
 
 -- name: ListActiveDevices :many
 SELECT * FROM devices
@@ -86,19 +89,19 @@ ORDER BY last_active_at DESC;
 
 -- name: RevokeDevice :many
 UPDATE devices
-SET revoked_at = now(), refresh_hash = NULL, refresh_prev_hash = NULL
+SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
 WHERE id = @id AND user_id = @user_id AND revoked_at IS NULL
 RETURNING id;
 
 -- name: RevokeOtherDevices :many
 UPDATE devices
-SET revoked_at = now(), refresh_hash = NULL, refresh_prev_hash = NULL
+SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
 WHERE user_id = @user_id AND id <> @keep_id AND revoked_at IS NULL
 RETURNING id;
 
 -- name: RevokeAllDevices :many
 UPDATE devices
-SET revoked_at = now(), refresh_hash = NULL, refresh_prev_hash = NULL
+SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
 WHERE user_id = @user_id AND revoked_at IS NULL
 RETURNING id;
 
