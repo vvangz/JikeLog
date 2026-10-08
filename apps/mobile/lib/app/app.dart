@@ -1,53 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../shared/ui/jk_logo.dart';
+import '../features/settings/settings_controller.dart';
+import 'router.dart';
 import 'theme/app_theme.dart';
-import 'version.dart';
 
-/// 应用根组件。
-class JikeLogApp extends StatelessWidget {
-  const JikeLogApp({super.key, this.themeMode = ThemeMode.system});
-
-  final ThemeMode themeMode;
+/// 应用根组件：主题与字号来自用户设置，路由由登录态与隐私同意状态驱动。
+class JikeLogApp extends ConsumerWidget {
+  const JikeLogApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsControllerProvider);
+    return MaterialApp.router(
       title: '即刻日志',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: themeMode,
-      home: const _PlaceholderHome(),
-    );
-  }
-}
-
-/// v0.1.0 占位首页；导航外壳与四个模块从 v0.2.0 起逐步替换。
-class _PlaceholderHome extends StatelessWidget {
-  const _PlaceholderHome();
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const JkLogo(size: 72),
-            const SizedBox(height: 16),
-            Text('即刻日志', style: text.displaySmall),
-            const SizedBox(height: 8),
-            Text(
-              'v$appVersion · 工作日志 / 笔记 / 备忘录 / 记账',
-              style: text.bodyMedium?.copyWith(
-                color: context.jkColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ),
+      themeMode: themeModeOf(settings),
+      routerConfig: ref.watch(routerProvider),
+      builder: (context, child) {
+        // 应用内字号与系统字号叠加，并限制最大缩放，避免布局溢出
+        final mq = MediaQuery.of(context);
+        final scale = (mq.textScaler.scale(1) * settings.fontScale).clamp(
+          0.8,
+          2.0,
+        );
+        return MediaQuery(
+          data: mq.copyWith(textScaler: TextScaler.linear(scale)),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
     );
   }
 }

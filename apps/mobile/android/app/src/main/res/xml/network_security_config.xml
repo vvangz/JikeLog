@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 正式构建：只允许 HTTPS，且只信任系统证书（不信任用户安装的证书）。
+     证书锁定（pin-set）在 v0.9.0 确定生产域名与证书后加入。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
