@@ -13,7 +13,8 @@ ARG COMMIT=dev
 ARG BUILD_TIME=unknown
 RUN go build -trimpath \
     -ldflags "-s -w -X github.com/vvangz/JikeLog/server/internal/version.Commit=${COMMIT} -X github.com/vvangz/JikeLog/server/internal/version.BuildTime=${BUILD_TIME}" \
-    -o /out/api ./cmd/api
+    -o /out/api ./cmd/api \
+    && go build -trimpath -ldflags "-s -w" -o /out/migrate ./cmd/migrate
 
 FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata \
