@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -132,4 +133,14 @@ func CORS(origins []string) gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// RequestContext 返回请求本身的 context。生成的处理器以 *gin.Context 作为 context 传入，
+// 而 gin.Context 会在处理器返回后被复用；凡是可能派生出后台协程的调用（如对外 HTTP 请求），
+// 都必须改用请求的 context，否则会与下一个请求产生数据竞争。
+func RequestContext(ctx context.Context) context.Context {
+	if c, ok := ctx.(*gin.Context); ok && c.Request != nil {
+		return c.Request.Context()
+	}
+	return ctx
 }

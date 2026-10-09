@@ -381,6 +381,205 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sync/e2e/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 建立传输加密会话
+         * @description 客户端生成临时 X25519 密钥对并上传公钥，双方各自派生会话密钥（ADR-006）。
+         *     之后的推送、拉取、修订和附件接口用请求头 `X-JikeLog-E2E` 携带返回的会话 ID，敏感字段以该会话加密。
+         *     会话绑定当前设备，24 小时后失效；失效时接口返回 409 `E2E_SESSION_INVALID`，重新握手即可。
+         *     `serverKeyId` 不再受支持时返回 409 `E2E_KEY_UNKNOWN`，需要升级 App。
+         */
+        post: operations["createE2ESession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 推送本地变更
+         * @description 每条变更只带改过的字段及其 HLC，`baseClocks` 为修改前最后一次从服务端拿到的字段时钟。
+         *     单条变更校验失败只拒绝这一条（`rejected`），不影响同批其他变更。结果为 `merged` 或 `conflict` 时返回服务端最终记录，客户端用它覆盖本地。
+         *     实时通知：`GET /api/v1/sync/ws`（需登录，升级为 WebSocket），服务端推送 `{"type":"hello"|"changed","seq":…,"origin":…}`，
+         *     设备下线后以关闭码 4401 断开。
+         */
+        post: operations["pushChanges"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/pull": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 增量拉取
+         * @description 按 `serverSeq` 升序返回大于 `since` 的记录（含墓碑，墓碑不含字段）。`hasMore` 为 true 时以 `nextSince` 继续拉取。
+         */
+        get: operations["pullChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sync/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 确认已处理的同步序号 */
+        post: operations["ackSync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/records/{recordId}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 修订历史
+         * @description 新的在前，不含内容。原因：edit（编辑前的状态）、conflict（冲突中落败的一方）、delete（删除前的状态）。
+         */
+        get: operations["listRevisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/revisions/{revisionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 修订内容
+         * @description 恢复某个版本即以修订内容做一次普通编辑并推送。
+         */
+        get: operations["getRevision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 申请上传附件
+         * @description 返回对象存储的预签名直传地址：客户端用 `PUT` 上传，并原样带上 `headers`（大小与类型已纳入签名）。
+         *     上传完成后调用 complete，服务端核对大小并生成 attachment 同步记录。
+         *     单个附件与每个账号的总量有上限（见 usage），超出时返回 413 `ATTACHMENT_TOO_LARGE` / `QUOTA_EXCEEDED`。
+         */
+        post: operations["createAttachmentUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attachments/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 附件用量 */
+        get: operations["getAttachmentUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attachments/{attachmentId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 确认上传完成
+         * @description 对象尚未上传或大小不符时返回 409 `UPLOAD_INCOMPLETE`。重复调用是幂等的。
+         */
+        post: operations["completeAttachmentUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attachments/{attachmentId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取下载地址 */
+        get: operations["getAttachmentDownload"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -664,6 +863,206 @@ export interface components {
         SettingsEnvelope: components["schemas"]["EnvelopeBase"] & {
             data: components["schemas"]["Settings"];
         };
+        E2ESessionRequest: {
+            /** @description 客户端临时 X25519 公钥（标准 base64，32 字节） */
+            clientPublicKey: string;
+            /** @description App 内置服务端公钥的标识（SHA-256 前 8 字节的十六进制） */
+            serverKeyId: string;
+        };
+        E2ESession: {
+            sessionId: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        E2ESessionEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["E2ESession"];
+        };
+        SyncChange: {
+            /** @description 实体类型，如 worklog */
+            entity: string;
+            /**
+             * Format: uuid
+             * @description 客户端生成的 UUIDv7
+             */
+            id: string;
+            /** @description 为 true 时删除记录（墓碑） */
+            deleted?: boolean;
+            /** @description 改过的字段：字符串、整数或 null；敏感字段为传输密文（AAD 以 `|v` 结尾） */
+            fields?: {
+                [key: string]: unknown;
+            };
+            /** @description 改过字段的混合逻辑时钟（HLC）`<13 位毫秒>-<4 位十六进制计数>-<16 位十六进制节点>` */
+            clocks?: {
+                [key: string]: string;
+            };
+            /** @description 修改前最后一次从服务端拿到的字段时钟 */
+            baseClocks?: {
+                [key: string]: string;
+            };
+            /** @description 长文本字段相对基准文本的补丁（JSON 字符串）；敏感字段为传输密文（AAD 以 `|p` 结尾） */
+            patches?: {
+                [key: string]: string;
+            };
+        };
+        PushRequest: {
+            changes: components["schemas"]["SyncChange"][];
+        };
+        SyncRecord: {
+            entity: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            version: number;
+            /** Format: int64 */
+            serverSeq: number;
+            deleted: boolean;
+            /** @description 字段值；敏感字段为传输密文。墓碑为空对象 */
+            fields: {
+                [key: string]: unknown;
+            };
+            clocks: {
+                [key: string]: string;
+            };
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ChangeError: {
+            /** @description VALIDATION_FAILED / UNKNOWN_ENTITY / CLOCK_SKEW / ID_CONFLICT / E2E_DECRYPT_FAILED */
+            code: string;
+            message: string;
+            fields?: {
+                [key: string]: string;
+            };
+        };
+        PushResult: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "applied" | "merged" | "conflict" | "rejected";
+            /** Format: int64 */
+            version?: number;
+            /** Format: int64 */
+            serverSeq?: number;
+            record?: components["schemas"]["SyncRecord"];
+            error?: components["schemas"]["ChangeError"];
+        };
+        PushResponse: {
+            results: components["schemas"]["PushResult"][];
+            /**
+             * Format: int64
+             * @description 处理后账号的同步序号
+             */
+            cursor: number;
+        };
+        PushEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["PushResponse"];
+        };
+        PullResponse: {
+            records: components["schemas"]["SyncRecord"][];
+            /** Format: int64 */
+            nextSince: number;
+            hasMore: boolean;
+        };
+        PullEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["PullResponse"];
+        };
+        AckRequest: {
+            /** Format: int64 */
+            seq: number;
+        };
+        RevisionInfo: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            version: number;
+            /** @enum {string} */
+            reason: "edit" | "conflict" | "delete";
+            /** Format: date-time */
+            createdAt: string;
+            /** @description 产生该修订的设备型号，设备已删除时为空 */
+            deviceModel: string;
+        };
+        RevisionListEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["RevisionInfo"][];
+        };
+        Revision: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            recordId: string;
+            entity: string;
+            /** Format: int64 */
+            version: number;
+            /** @enum {string} */
+            reason: "edit" | "conflict" | "delete";
+            /** Format: date-time */
+            createdAt: string;
+            /** @description 字段值；敏感字段为传输密文 */
+            fields: {
+                [key: string]: unknown;
+            };
+        };
+        RevisionEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["Revision"];
+        };
+        AttachmentUploadRequest: {
+            /**
+             * Format: uuid
+             * @description 客户端生成的 UUIDv7，同时作为 attachment 同步记录的 ID
+             */
+            id: string;
+            /** @description 所属记录的实体类型，如 worklog */
+            ownerEntity: string;
+            /** Format: uuid */
+            ownerId: string;
+            /** @description 文件名的传输密文（AAD 为 `jikelog-e2e-v1|attachment|<id>|fileName|v`） */
+            fileName: string;
+            /** @example image/jpeg */
+            mime: string;
+            /** Format: int64 */
+            size: number;
+            /** @description 文件内容的 SHA-256（小写十六进制），下载后客户端据此校验 */
+            sha256: string;
+        };
+        AttachmentUpload: {
+            uploadUrl: string;
+            /** @enum {string} */
+            method: "PUT";
+            headers: {
+                [key: string]: string;
+            };
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        AttachmentUploadEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["AttachmentUpload"];
+        };
+        AttachmentComplete: {
+            /** Format: int64 */
+            serverSeq: number;
+        };
+        AttachmentCompleteEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["AttachmentComplete"];
+        };
+        AttachmentDownload: {
+            url: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        AttachmentDownloadEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["AttachmentDownload"];
+        };
+        AttachmentUsage: {
+            /** Format: int64 */
+            used: number;
+            /** Format: int64 */
+            quota: number;
+            /** Format: int64 */
+            maxSize: number;
+        };
+        AttachmentUsageEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["AttachmentUsage"];
+        };
     };
     responses: {
         /** @description 错误（4xx/5xx），统一使用错误信封 */
@@ -676,7 +1075,10 @@ export interface components {
             };
         };
     };
-    parameters: never;
+    parameters: {
+        /** @description 传输加密会话 ID（见 createE2ESession）；请求或响应含敏感字段时必须携带 */
+        E2ESessionHeader: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -1182,6 +1584,255 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    createE2ESession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["E2ESessionRequest"];
+            };
+        };
+        responses: {
+            /** @description 已建立 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["E2ESessionEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    pushChanges: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 传输加密会话 ID（见 createE2ESession）；请求或响应含敏感字段时必须携带 */
+                "X-JikeLog-E2E"?: components["parameters"]["E2ESessionHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushRequest"];
+            };
+        };
+        responses: {
+            /** @description 逐条处理结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    pullChanges: {
+        parameters: {
+            query: {
+                since: number;
+                limit?: number;
+            };
+            header?: {
+                /** @description 传输加密会话 ID（见 createE2ESession）；请求或响应含敏感字段时必须携带 */
+                "X-JikeLog-E2E"?: components["parameters"]["E2ESessionHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 一页记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PullEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    ackSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AckRequest"];
+            };
+        };
+        responses: {
+            /** @description 已记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AckEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    listRevisions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recordId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 修订列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionListEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getRevision: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 传输加密会话 ID（见 createE2ESession）；请求或响应含敏感字段时必须携带 */
+                "X-JikeLog-E2E"?: components["parameters"]["E2ESessionHeader"];
+            };
+            path: {
+                revisionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 修订详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    createAttachmentUpload: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 传输加密会话 ID（见 createE2ESession）；请求或响应含敏感字段时必须携带 */
+                "X-JikeLog-E2E"?: components["parameters"]["E2ESessionHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachmentUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description 上传地址 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentUploadEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getAttachmentUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 用量与上限 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentUsageEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    completeAttachmentUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已生成同步记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentCompleteEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getAttachmentDownload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 预签名下载地址（10 分钟内有效） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentDownloadEnvelope"];
                 };
             };
             default: components["responses"]["Error"];

@@ -24,6 +24,7 @@ var errEmptyBody = httpx.Validation(map[string]string{"body": "请求体不能�
 
 // CreateAttachmentUpload 实现 POST /api/v1/attachments。
 func (h *Handler) CreateAttachmentUpload(ctx context.Context, req apigen.CreateAttachmentUploadRequestObject) (apigen.CreateAttachmentUploadResponseObject, error) {
+	ctx = httpx.RequestContext(ctx)
 	p, err := auth.MustPrincipal(ctx)
 	if err != nil {
 		return nil, err
@@ -58,6 +59,7 @@ func (h *Handler) CreateAttachmentUpload(ctx context.Context, req apigen.CreateA
 
 // CompleteAttachmentUpload 实现 POST /api/v1/attachments/{attachmentId}/complete。
 func (h *Handler) CompleteAttachmentUpload(ctx context.Context, req apigen.CompleteAttachmentUploadRequestObject) (apigen.CompleteAttachmentUploadResponseObject, error) {
+	ctx = httpx.RequestContext(ctx)
 	p, err := auth.MustPrincipal(ctx)
 	if err != nil {
 		return nil, err
@@ -73,6 +75,7 @@ func (h *Handler) CompleteAttachmentUpload(ctx context.Context, req apigen.Compl
 
 // GetAttachmentDownload 实现 GET /api/v1/attachments/{attachmentId}/download。
 func (h *Handler) GetAttachmentDownload(ctx context.Context, req apigen.GetAttachmentDownloadRequestObject) (apigen.GetAttachmentDownloadResponseObject, error) {
+	ctx = httpx.RequestContext(ctx)
 	p, err := auth.MustPrincipal(ctx)
 	if err != nil {
 		return nil, err
@@ -88,6 +91,7 @@ func (h *Handler) GetAttachmentDownload(ctx context.Context, req apigen.GetAttac
 
 // GetAttachmentUsage 实现 GET /api/v1/attachments/usage。
 func (h *Handler) GetAttachmentUsage(ctx context.Context, _ apigen.GetAttachmentUsageRequestObject) (apigen.GetAttachmentUsageResponseObject, error) {
+	ctx = httpx.RequestContext(ctx)
 	p, err := auth.MustPrincipal(ctx)
 	if err != nil {
 		return nil, err

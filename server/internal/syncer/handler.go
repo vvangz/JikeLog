@@ -35,6 +35,7 @@ func (h *Handler) transport(ctx context.Context, p auth.Principal, header *apige
 
 // CreateE2ESession 实现 POST /api/v1/sync/e2e/session。
 func (h *Handler) CreateE2ESession(ctx context.Context, req apigen.CreateE2ESessionRequestObject) (apigen.CreateE2ESessionResponseObject, error) {
+	ctx = httpx.RequestContext(ctx)
 	p, err := auth.MustPrincipal(ctx)
 	if err != nil {
 		return nil, err
@@ -55,6 +56,7 @@ func (h *Handler) CreateE2ESession(ctx context.Context, req apigen.CreateE2ESess
 
 // PushChanges 实现 POST /api/v1/sync/push。
 func (h *Handler) PushChanges(ctx context.Context, req apigen.PushChangesRequestObject) (apigen.PushChangesResponseObject, error) {
+	ctx = httpx.RequestContext(ctx)
 	p, err := auth.MustPrincipal(ctx)
 	if err != nil {
 		return nil, err
@@ -87,6 +89,7 @@ func (h *Handler) PushChanges(ctx context.Context, req apigen.PushChangesRequest
 
 // PullChanges 实现 GET /api/v1/sync/pull。
 func (h *Handler) PullChanges(ctx context.Context, req apigen.PullChangesRequestObject) (apigen.PullChangesResponseObject, error) {
+	ctx = httpx.RequestContext(ctx)
 	p, err := auth.MustPrincipal(ctx)
 	if err != nil {
 		return nil, err
@@ -116,6 +119,7 @@ func (h *Handler) PullChanges(ctx context.Context, req apigen.PullChangesRequest
 
 // AckSync 实现 POST /api/v1/sync/ack。
 func (h *Handler) AckSync(ctx context.Context, req apigen.AckSyncRequestObject) (apigen.AckSyncResponseObject, error) {
+	ctx = httpx.RequestContext(ctx)
 	p, err := auth.MustPrincipal(ctx)
 	if err != nil {
 		return nil, err
@@ -132,6 +136,7 @@ func (h *Handler) AckSync(ctx context.Context, req apigen.AckSyncRequestObject) 
 
 // ListRevisions 实现 GET /api/v1/records/{recordId}/revisions。
 func (h *Handler) ListRevisions(ctx context.Context, req apigen.ListRevisionsRequestObject) (apigen.ListRevisionsResponseObject, error) {
+	ctx = httpx.RequestContext(ctx)
 	p, err := auth.MustPrincipal(ctx)
 	if err != nil {
 		return nil, err
@@ -153,6 +158,7 @@ func (h *Handler) ListRevisions(ctx context.Context, req apigen.ListRevisionsReq
 
 // GetRevision 实现 GET /api/v1/revisions/{revisionId}。
 func (h *Handler) GetRevision(ctx context.Context, req apigen.GetRevisionRequestObject) (apigen.GetRevisionResponseObject, error) {
+	ctx = httpx.RequestContext(ctx)
 	p, err := auth.MustPrincipal(ctx)
 	if err != nil {
 		return nil, err

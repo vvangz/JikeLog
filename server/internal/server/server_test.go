@@ -10,6 +10,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -22,16 +24,28 @@ import (
 )
 
 // testConfig 返回通过校验的测试配置，extra 覆盖默认值。
-const testE2EPrivateKey = "KkHzna3xWcbE+LW+N65r2IjVwu5vjKBpGkjIIHxJaO4="
+// testE2EPrivateKey 为共享测试向量中的服务端私钥（运行时读取，避免在代码中出现密钥字面量）。
+var testE2EPrivateKey = func() string {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "crypto", "e2e.json"))
+	if err != nil {
+		panic(err)
+	}
+	var v struct {
+		ServerPrivateKey string `json:"serverPrivateKey"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		panic(err)
+	}
+	return v.ServerPrivateKey
+}()
 
 func testConfig(t *testing.T, extra map[string]string) config.Config {
 	t.Helper()
 	env := map[string]string{
-		"JIKELOG_ENV":             "test",
-		"JIKELOG_DB_URL":          "postgres://u:p@127.0.0.1:5432/db",
-		"JIKELOG_REDIS_URL":       "redis://127.0.0.1:6379/0",
-		"JIKELOG_AUTH_JWT_SECRET": "test-secret-test-secret-test-secret",
-		// 与 testdata/crypto/e2e.json 中的服务端私钥相同
+		"JIKELOG_ENV":                  "test",
+		"JIKELOG_DB_URL":               "postgres://u:p@127.0.0.1:5432/db",
+		"JIKELOG_REDIS_URL":            "redis://127.0.0.1:6379/0",
+		"JIKELOG_AUTH_JWT_SECRET":      "test-secret-test-secret-test-secret",
 		"JIKELOG_E2E_PRIVATE_KEY":      testE2EPrivateKey,
 		"JIKELOG_KMS_LOCAL_MASTER_KEY": config.DevKMSMasterKey,
 		"JIKELOG_STORAGE_ENDPOINT":     "http://127.0.0.1:9000",
