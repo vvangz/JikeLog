@@ -62,7 +62,10 @@
       "extra-files": [
         "server/internal/version/version.go",
         "apps/mobile/lib/app/version.dart",
-        "apps/mobile/pubspec.yaml",
+        {
+          "type": "generic",
+          "path": "apps/mobile/pubspec.yaml"
+        },
         "server/api/openapi.yaml",
         {
           "type": "json",
