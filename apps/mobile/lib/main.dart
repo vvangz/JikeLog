@@ -16,6 +16,11 @@ Future<void> main() async {
       '正式构建必须通过 --dart-define=JIKELOG_API_BASE=https://… 指定 API 地址',
     );
   }
+  if (kReleaseMode && AppConfig.e2ePublicKey == AppConfig.devE2EPublicKey) {
+    throw StateError(
+      '正式构建必须通过 --dart-define=JIKELOG_E2E_PUBLIC_KEY=… 指定生产环境的传输加密公钥',
+    );
+  }
   final store = await PrefsStore.open();
   final device = await DeviceIdentity.load(store);
   runApp(

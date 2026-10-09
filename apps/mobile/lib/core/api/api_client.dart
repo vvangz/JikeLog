@@ -69,21 +69,39 @@ class ApiClient {
     await _tokenStore.clear();
   }
 
-  Future<dynamic> get(String path) => _send('GET', path);
-  Future<dynamic> post(String path, [Object? body]) =>
-      _send('POST', path, body);
+  Future<dynamic> get(String path, {Map<String, String>? headers}) =>
+      _send('GET', path, null, headers);
+  Future<dynamic> post(
+    String path, [
+    Object? body,
+    Map<String, String>? headers,
+  ]) => _send('POST', path, body, headers);
   Future<dynamic> put(String path, Object? body) => _send('PUT', path, body);
   Future<dynamic> patch(String path, Object? body) =>
       _send('PATCH', path, body);
   Future<dynamic> delete(String path) => _send('DELETE', path);
 
+  /// 当前 Access Token（WebSocket 握手时使用）；未登录时为 null。
+  String? get accessToken => _tokens?.accessToken;
+
+  /// 立即刷新令牌（WebSocket 因令牌过期被拒绝后调用），返回是否成功。
+  Future<bool> refreshNow() async => await _refreshOnce() != null;
+
+  /// API 地址（用于拼接 WebSocket 地址）。
+  String get baseUrl => _dio.options.baseUrl;
+
   /// 发送请求并返回信封中的 data；失败时抛出 [ApiException]。
-  Future<dynamic> _send(String method, String path, [Object? body]) async {
+  Future<dynamic> _send(
+    String method,
+    String path, [
+    Object? body,
+    Map<String, String>? headers,
+  ]) async {
     try {
       final res = await _dio.request<dynamic>(
         path,
         data: body,
-        options: Options(method: method),
+        options: Options(method: method, headers: headers),
       );
       final data = res.data;
       if (data is Map<String, dynamic> && data['success'] == true) {

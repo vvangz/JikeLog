@@ -14,6 +14,14 @@ abstract final class ApiErrorCode {
   static const refreshInvalid = 'REFRESH_INVALID';
   static const ticketInvalid = 'REGISTRATION_TICKET_INVALID';
 
+  // 同步与附件（M2）
+  static const e2eSessionInvalid = 'E2E_SESSION_INVALID';
+  static const e2eKeyUnknown = 'E2E_KEY_UNKNOWN';
+  static const recordNotFound = 'RECORD_NOT_FOUND';
+  static const uploadIncomplete = 'UPLOAD_INCOMPLETE';
+  static const quotaExceeded = 'QUOTA_EXCEEDED';
+  static const attachmentTooLarge = 'ATTACHMENT_TOO_LARGE';
+
   /// 客户端自定义：网络不可达或超时。
   static const network = 'NETWORK_ERROR';
 

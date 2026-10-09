@@ -5,8 +5,9 @@
 useDefault = true
 
 [[allowlists]]
-description = "Go 与 Dart 共用的加密测试向量"
+description = "Go 与 Dart 共用的加密测试向量（含早期提交中直接引用该测试私钥的测试代码）"
 paths = ['''^testdata/crypto/''']
+regexes = ['''KkHzna3xWcbE\+LW\+N65r2IjVwu5vjKBpGkjIIHxJaO4=''']
 
 [[allowlists]]
 description = "本地开发示例密钥（deploy/.env.example、App 默认公钥、配置校验中的黑名单）"

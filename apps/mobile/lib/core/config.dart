@@ -7,6 +7,17 @@ abstract final class AppConfig {
     defaultValue: 'http://10.0.2.2:8080',
   );
 
+  /// 服务端传输加密公钥（X25519，base64），用于工作日志的应用层加密（ADR-006）。
+  /// 默认值为公开的开发示例公钥，正式构建必须用
+  /// `--dart-define=JIKELOG_E2E_PUBLIC_KEY=…` 换成生产公钥（启动时校验）。
+  static const e2ePublicKey = String.fromEnvironment(
+    'JIKELOG_E2E_PUBLIC_KEY',
+    defaultValue: devE2EPublicKey,
+  );
+
+  /// 开发示例公钥，对应 deploy/.env.example 中的 JIKELOG_E2E_PRIVATE_KEY。
+  static const devE2EPublicKey = 'hzHoYda9NBwh0f7KEN0UVflj0FcozpvvPh4esvLPnhM=';
+
   /// 隐私政策版本：政策更新后递增，用户需重新同意。
   static const privacyPolicyVersion = 1;
 }
