@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # 即刻日志 API 服务镜像（多阶段构建，运行时为非 root 用户）
 
-FROM golang:1.27.1-alpine3.24 AS build
+FROM golang:1.27.2-alpine3.24 AS build
 WORKDIR /src
 # 国内构建可传入 --build-arg GOPROXY=https://goproxy.cn,direct（完整性仍由 go.sum 与 sumdb 保证）
 ARG GOPROXY=https://proxy.golang.org,direct
