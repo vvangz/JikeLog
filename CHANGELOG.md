@@ -7,7 +7,6 @@
 
 ### 新功能
 
-* M1 账号体系与 App 外壳（v0.2.0） ([f739b44](https://github.com/vvangz/JikeLog/commit/f739b44d144b41022243f8b19da014c72382c051))
 * M1 账号体系与 App 外壳（v0.2.0）([#1](https://github.com/vvangz/JikeLog/issues/1)) ([f739b44](https://github.com/vvangz/JikeLog/commit/f739b44d144b41022243f8b19da014c72382c051))
 * **mobile:** 导航外壳、账号与设置（M1 移动端） ([2dc67a6](https://github.com/vvangz/JikeLog/commit/2dc67a6d787f6efb5c091ef857f2da149f02ec35))
 * **server:** 账号认证与当前账号接口（M1 服务端） ([631907e](https://github.com/vvangz/JikeLog/commit/631907e2c7986a7637be8195e67e6cc7fa94a0cb))
@@ -18,7 +17,6 @@
 * **server:** 升级 Go 1.27.2 与 golang.org/x/net v0.60.0 修复漏洞 ([a9c4d37](https://github.com/vvangz/JikeLog/commit/a9c4d37bfe647c08ce95dfe1fa7478962c91d379))
 * **server:** 处理 M1 代码审查与安全审查意见 ([9241a9d](https://github.com/vvangz/JikeLog/commit/9241a9d970617f28887555649d1860140e99c0c2))
 * **server:** 镜像中构建 jikelog-migrate ([f19ba57](https://github.com/vvangz/JikeLog/commit/f19ba57ea6a4c048a03ac6f5ed91d5fc4e7d6a96))
-* 升级 Go 1.27.2 修复漏洞；Release Please 按标记更新 pubspec ([#3](https://github.com/vvangz/JikeLog/issues/3)) ([6ae957c](https://github.com/vvangz/JikeLog/commit/6ae957cff3ef08b86b60d2576f7239dc856c0a8a))
 
 
 ### 文档
