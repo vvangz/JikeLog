@@ -74,7 +74,7 @@
 
 - Flutter 的 `pubspec.lock` 记录的是国内镜像地址 `https://pub.flutter-io.cn`，CI 也使用同一镜像，并以 `--enforce-lockfile` 校验每个包的 sha256。**本地请设置 `PUB_HOSTED_URL=https://pub.flutter-io.cn`**，否则 `flutter pub get` 会改写锁文件
 - Go 依赖完整性由 `go.sum` 与 sumdb 保证，代理可以自由选择（goproxy.cn 或 proxy.golang.org）
-- 漏洞扫描：CI 会运行 govulncheck 和 `pnpm audit`。即使代码没变，新公布的漏洞也可能让 CI 变红，这时请升级依赖。本地运行 govulncheck 需要用 Go 1.27.1 构建：`GOTOOLCHAIN=go1.27.1 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...`
+- 漏洞扫描：CI 会运行 govulncheck 和 `pnpm audit`。即使代码没变，新公布的漏洞也可能让 CI 变红，这时请升级依赖。本地运行 govulncheck 需要用 Go 1.27.2 构建：`GOTOOLCHAIN=go1.27.2 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...`
 
 ## 本机注意事项
 
