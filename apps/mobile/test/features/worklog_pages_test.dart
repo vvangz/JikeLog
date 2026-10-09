@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,12 +31,14 @@ Future<void> _autosave(WidgetTester tester) async {
 Future<void> _run(WidgetTester tester, Future<void> Function() body) async {
   var done = false;
   Object? error;
-  body().then(
-    (_) => done = true,
-    onError: (Object e) {
-      error = e;
-      done = true;
-    },
+  unawaited(
+    body().then(
+      (_) => done = true,
+      onError: (Object e) {
+        error = e;
+        done = true;
+      },
+    ),
   );
   for (var i = 0; i < 100 && !done; i++) {
     await tester.pump(const Duration(milliseconds: 50));

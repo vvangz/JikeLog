@@ -3,6 +3,7 @@
 # flutter 的 lcov 只包含被测试引用到的文件，因此先生成一个引用 lib 下全部文件的辅助测试，
 # 让没有任何测试的文件以 0% 计入，而不是被忽略。
 # 用法：bash scripts/flutter-coverage.sh [最低覆盖率，默认 80]
+# 额外参数通过 FLUTTER_TEST_ARGS 传入；Windows 上并行启动测试进程偶尔会失败，可设为 --concurrency=1
 set -euo pipefail
 
 MIN="${1:-80}"
@@ -20,7 +21,8 @@ trap 'rm -f "$HELPER"' EXIT
   echo "void main() {}"
 } > "$HELPER"
 
-flutter test --coverage
+# shellcheck disable=SC2086 # 允许传入多个参数
+flutter test --coverage ${FLUTTER_TEST_ARGS:-}
 
 awk -F: -v min="$MIN" '
   /^SF:/ { skip = ($2 ~ /\.g\.dart$/) }
