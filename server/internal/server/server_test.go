@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,24 +15,57 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/platform/config"
 	"github.com/vvangz/JikeLog/server/internal/platform/httpx"
 	"github.com/vvangz/JikeLog/server/internal/system"
 )
 
-func testRouter(t *testing.T) http.Handler {
+// testConfig 返回通过校验的测试配置，extra 覆盖默认值。
+func testConfig(t *testing.T, extra map[string]string) config.Config {
 	t.Helper()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	cfg, err := config.LoadFrom(map[string]string{"JIKELOG_ENV": "test"})
+	env := map[string]string{
+		"JIKELOG_ENV":             "test",
+		"JIKELOG_DB_URL":          "postgres://u:p@127.0.0.1:5432/db",
+		"JIKELOG_REDIS_URL":       "redis://127.0.0.1:6379/0",
+		"JIKELOG_AUTH_JWT_SECRET": "test-secret-test-secret-test-secret",
+	}
+	maps.Copy(env, extra)
+	cfg, err := config.LoadFrom(env)
 	if err != nil {
 		t.Fatal(err)
 	}
-	api := NewAPI(system.NewHandler(system.Config{Name: "jikelog-api", Logger: logger}))
-	r, err := NewRouter(cfg, logger, api)
+	return cfg
+}
+
+// testAuthService 返回只用于认证中间件的 auth.Service；裸路由只访问公开接口，不会查询数据库。
+func testAuthService(t *testing.T, cfg config.Config) *auth.Service {
+	t.Helper()
+	svc, err := auth.NewService(context.Background(), auth.Deps{
+		Hasher: auth.NewHasher(auth.Argon2Params{MemoryKiB: 64, Time: 1, Threads: 1}),
+		Tokens: auth.NewTokenManager(cfg.Auth.JWTSecret, "", cfg.Auth.AccessTTL, nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return svc
+}
+
+// newBareRouter 只挂载系统接口，用于不依赖数据库的路由层测试。
+func newBareRouter(t *testing.T, cfg config.Config) *gin.Engine {
+	t.Helper()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	api := NewAPI(Handlers{System: system.NewHandler(system.Config{Name: "jikelog-api", Logger: logger})})
+	r, err := NewRouter(cfg, logger, api, testAuthService(t, cfg))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return r
+}
+
+func testRouter(t *testing.T) http.Handler {
+	t.Helper()
+	return newBareRouter(t, testConfig(t, nil))
 }
 
 func TestRoutes(t *testing.T) {
@@ -83,7 +117,7 @@ func TestServeShutsDownGracefully(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, _ := config.LoadFrom(map[string]string{"JIKELOG_ENV": "test"})
+	cfg := testConfig(t, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
@@ -114,14 +148,14 @@ func TestNewRouterRejectsInvalidTrustedProxy(t *testing.T) {
 	// 绕过配置校验直接构造，验证路由层的兜底检查
 	cfg := config.Config{HTTP: config.HTTP{TrustedProxies: []string{"not-an-ip"}}}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	if _, err := NewRouter(cfg, logger, NewAPI(system.NewHandler(system.Config{}))); err == nil {
+	if _, err := NewRouter(cfg, logger, NewAPI(Handlers{System: system.NewHandler(system.Config{})}), nil); err == nil {
 		t.Fatal("非法代理地址应返回错误")
 	}
 }
 
 func TestListenAndServe(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	cfg, _ := config.LoadFrom(map[string]string{"JIKELOG_HTTP_ADDR": "127.0.0.1:0"})
+	cfg := testConfig(t, map[string]string{"JIKELOG_HTTP_ADDR": "127.0.0.1:0"})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -142,7 +176,7 @@ func TestServeReturnsErrorWhenListenerFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = ln.Close()
-	cfg, _ := config.LoadFrom(map[string]string{})
+	cfg := testConfig(t, nil)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	if err := Serve(context.Background(), ln, http.NotFoundHandler(), cfg.HTTP, logger); err == nil {
 		t.Fatal("监听器已关闭时 Serve 应返回错误")
@@ -150,7 +184,7 @@ func TestServeReturnsErrorWhenListenerFails(t *testing.T) {
 }
 
 func TestNewHTTPServerLimitsHeaderSize(t *testing.T) {
-	cfg, _ := config.LoadFrom(map[string]string{})
+	cfg := testConfig(t, nil)
 	srv := newHTTPServer(http.NotFoundHandler(), cfg.HTTP, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if srv.MaxHeaderBytes != maxHeaderBytes || maxHeaderBytes > 64<<10 {
 		t.Errorf("MaxHeaderBytes = %d, want %d (≤64KB)", srv.MaxHeaderBytes, maxHeaderBytes)
@@ -172,12 +206,9 @@ func TestHealthProbesSupportHEAD(t *testing.T) {
 }
 
 func TestRequestCancellationReachesHandlers(t *testing.T) {
-	cfg, _ := config.LoadFrom(map[string]string{})
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	r, err := NewRouter(cfg, logger, NewAPI(system.NewHandler(system.Config{})))
-	if err != nil {
-		t.Fatal(err)
-	}
+	r := newBareRouter(t, testConfig(t, nil))
+	publicRoutes["GET /probe-ctx"] = struct{}{} // 测试专用路由，跳过认证
+	t.Cleanup(func() { delete(publicRoutes, "GET /probe-ctx") })
 	var handlerErr error
 	r.GET("/probe-ctx", func(c *gin.Context) {
 		var ctx context.Context = c

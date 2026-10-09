@@ -11,6 +11,7 @@
     "fonts": "bash scripts/fetch-fonts.sh",
     "tokens": "pnpm --filter @jikelog/design-tokens build",
     "gen:api": "bash scripts/gen-api.sh",
+    "gen:db": "bash scripts/gen-db.sh",
     "test": "pnpm -r test"
   },
   "devDependencies": {

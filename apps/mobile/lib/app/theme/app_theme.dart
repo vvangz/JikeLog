@@ -47,7 +47,16 @@ abstract final class AppTheme {
       fontFamilyFallback: const [JkTokens.fontFamilyCjk],
       extensions: [JkColors(c)],
     );
-    return base.copyWith(textTheme: _textTheme(base.textTheme));
+    return base.copyWith(
+      textTheme: _textTheme(base.textTheme),
+      // 顶栏与页面同色（奶油白 / 深咖黑），滚动时不叠加主色色调
+      appBarTheme: AppBarTheme(
+        backgroundColor: c.background,
+        foregroundColor: c.textPrimary,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
+      ),
+    );
   }
 
   static ColorScheme _scheme(JkColorTokens c, Brightness brightness) =>

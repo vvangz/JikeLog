@@ -22,6 +22,7 @@ const (
 	MsgNotFound         = "请求的资源不存在"
 	MsgMethodNotAllowed = "不支持该请求方法"
 	MsgInternal         = "服务器内部错误，请稍后重试"
+	MsgPayloadTooLarge  = "请求内容过大"
 )
 
 // ErrorBody 构造错误体。

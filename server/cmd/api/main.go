@@ -10,10 +10,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/vvangz/JikeLog/server/internal/platform/cache"
 	"github.com/vvangz/JikeLog/server/internal/platform/config"
+	"github.com/vvangz/JikeLog/server/internal/platform/db"
 	"github.com/vvangz/JikeLog/server/internal/platform/logging"
 	"github.com/vvangz/JikeLog/server/internal/server"
-	"github.com/vvangz/JikeLog/server/internal/system"
 	"github.com/vvangz/JikeLog/server/internal/version"
 )
 
@@ -48,10 +49,20 @@ func run() error {
 		stop() // 恢复默认信号处理：优雅关闭期间再次 Ctrl+C 可立即退出
 	}()
 
-	api := server.NewAPI(system.NewHandler(system.Config{Name: serviceName, Logger: logger}))
-	router, err := server.NewRouter(cfg, logger, api)
+	pool, err := db.Open(ctx, cfg.DB)
 	if err != nil {
 		return err
 	}
-	return server.ListenAndServe(ctx, router, cfg.HTTP, logger)
+	defer pool.Close()
+	rdb, err := cache.Open(ctx, cfg.Redis)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rdb.Close() }()
+
+	app, err := server.NewApp(ctx, server.Options{Name: serviceName, Config: cfg, Logger: logger, Pool: pool, Redis: rdb})
+	if err != nil {
+		return err
+	}
+	return server.ListenAndServe(ctx, app.Handler, cfg.HTTP, logger)
 }

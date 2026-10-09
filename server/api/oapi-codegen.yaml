@@ -9,3 +9,6 @@ generate:
   embedded-spec: false
 output-options:
   skip-prune: true
+compatibility:
+  # 枚举常量统一加类型名前缀（如 DeviceInfoPlatformAndroid），避免不同枚举的同名取值冲突
+  always-prefix-enum-values: true

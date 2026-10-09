@@ -13,13 +13,16 @@ ARG COMMIT=dev
 ARG BUILD_TIME=unknown
 RUN go build -trimpath \
     -ldflags "-s -w -X github.com/vvangz/JikeLog/server/internal/version.Commit=${COMMIT} -X github.com/vvangz/JikeLog/server/internal/version.BuildTime=${BUILD_TIME}" \
-    -o /out/api ./cmd/api
+    -o /out/api ./cmd/api \
+    && go build -trimpath -ldflags "-s -w" -o /out/migrate ./cmd/migrate
 
 FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -S -g 10001 app && adduser -S -u 10001 -G app -H -s /sbin/nologin app
 ENV TZ=Asia/Shanghai JIKELOG_ENV=production JIKELOG_HTTP_ADDR=:8080
 COPY --from=build /out/api /usr/local/bin/jikelog-api
+# 数据库迁移：部署新版本前执行 docker run --rm --env-file … <镜像> jikelog-migrate
+COPY --from=build /out/migrate /usr/local/bin/jikelog-migrate
 # 使用数字 UID，便于 Kubernetes runAsNonRoot 校验
 USER 10001:10001
 EXPOSE 8080

@@ -11,29 +11,47 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/vvangz/JikeLog/server/internal/account"
 	"github.com/vvangz/JikeLog/server/internal/apigen"
+	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/platform/config"
 	"github.com/vvangz/JikeLog/server/internal/platform/httpx"
 	"github.com/vvangz/JikeLog/server/internal/system"
 )
 
 // 各模块处理器类型名都叫 Handler，用别名嵌入以避免字段名冲突。
-type systemHandler = system.Handler
+type (
+	systemHandler  = system.Handler
+	authHandler    = auth.Handler
+	accountHandler = account.Handler
+)
 
 // API 聚合所有模块处理器，实现生成的 StrictServerInterface。
 type API struct {
 	*systemHandler
+	*authHandler
+	*accountHandler
 }
 
 var _ apigen.StrictServerInterface = API{}
 
-// NewAPI 创建 API。
-func NewAPI(sys *system.Handler) API {
-	return API{systemHandler: sys}
+// Handlers 为各模块处理器。
+type Handlers struct {
+	System  *system.Handler
+	Auth    *auth.Handler
+	Account *account.Handler
 }
 
-// NewRouter 创建 Gin 引擎并注册全部路由。
-func NewRouter(cfg config.Config, logger *slog.Logger, api API) (*gin.Engine, error) {
+// NewAPI 创建 API。
+func NewAPI(h Handlers) API {
+	return API{systemHandler: h.System, authHandler: h.Auth, accountHandler: h.Account}
+}
+
+// maxBodyBytes 为 JSON 请求体上限；附件走对象存储直传，不经过 API。
+const maxBodyBytes = 1 << 20
+
+// NewRouter 创建 Gin 引擎并注册全部路由。authn 用于默认拒绝的认证中间件：除公开路由外都必须登录。
+func NewRouter(cfg config.Config, logger *slog.Logger, api API, authn *auth.Service) (*gin.Engine, error) {
 	r := gin.New()
 	// 让 *gin.Context 作为 context.Context 时继承请求的取消与截止时间（客户端断开即取消下游调用）
 	r.ContextWithFallback = true
@@ -41,7 +59,11 @@ func NewRouter(cfg config.Config, logger *slog.Logger, api API) (*gin.Engine, er
 		return nil, fmt.Errorf("设置可信代理失败: %w", err)
 	}
 	r.HandleMethodNotAllowed = true
-	r.Use(httpx.RequestID(), httpx.SecurityHeaders(), httpx.AccessLog(logger), httpx.Recovery(logger))
+	r.Use(
+		httpx.RequestID(), httpx.SecurityHeaders(), httpx.AccessLog(logger), httpx.Recovery(logger),
+		httpx.CORS(cfg.HTTP.CORSOrigins), httpx.ClientIP(), httpx.BodyLimit(maxBodyBytes),
+		auth.Middleware(authn, isPublicRoute),
+	)
 	r.NoRoute(func(c *gin.Context) {
 		httpx.Fail(c, http.StatusNotFound, httpx.CodeNotFound, httpx.MsgNotFound)
 	})
