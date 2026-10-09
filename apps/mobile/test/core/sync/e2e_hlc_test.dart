@@ -97,7 +97,7 @@ void main() {
     });
 
     test('收到更晚的远端时钟后，新时钟排在其后；过于超前的忽略', () {
-      var now = 1000000;
+      const now = 1000000;
       final c = HybridClock(installationId: 'x', nowMs: () => now);
       final remote = HybridClock.format(now + 60 * 1000, 5, 'aaaaaaaaaaaaaaaa');
       c.receive(remote);

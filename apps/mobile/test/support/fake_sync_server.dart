@@ -94,8 +94,9 @@ class FakeTransport implements SyncTransport {
     }
     final cur = server.records[id];
     if (c['deleted'] == true) {
-      if (cur == null || cur.deleted)
+      if (cur == null || cur.deleted) {
         return PushResult(id: id, status: 'applied');
+      }
       cur.deleted = true;
       _bump(cur);
       return PushResult(
