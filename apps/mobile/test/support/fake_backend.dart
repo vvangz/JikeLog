@@ -9,7 +9,15 @@ import 'package:jikelog/app/providers.dart';
 import 'package:jikelog/core/api/api_client.dart';
 import 'package:jikelog/core/api/models.dart';
 import 'package:jikelog/core/device/device_identity.dart';
+import 'package:jikelog/core/db/database.dart';
 import 'package:jikelog/core/storage/stores.dart';
+import 'package:jikelog/core/sync/hlc.dart';
+import 'package:jikelog/core/sync/realtime.dart';
+import 'package:jikelog/core/sync/sync_providers.dart';
+import 'package:drift/drift.dart' show DatabaseConnection;
+import 'package:drift/native.dart';
+
+import 'fake_sync_server.dart';
 
 /// 一次被记录的请求。
 class RecordedRequest {
@@ -154,6 +162,8 @@ List<Override> testOverrides({
   required FakeBackend backend,
   KeyValueStore? store,
   TokenStore? tokens,
+  AppDatabase? db,
+  FakeSyncServer? syncServer,
 }) => [
   keyValueStoreProvider.overrideWithValue(store ?? MemoryStore()),
   deviceIdentityProvider.overrideWithValue(testDevice),
@@ -165,7 +175,31 @@ List<Override> testOverrides({
       adapter: backend,
     ),
   ),
+  appDatabaseProvider.overrideWithValue(db ?? testDatabase()),
+  hybridClockProvider.overrideWithValue(
+    HybridClock(installationId: testDevice.installationId),
+  ),
+  syncTransportProvider.overrideWithValue(
+    FakeTransport(syncServer ?? FakeSyncServer()),
+  ),
+  realtimeClientProvider.overrideWithValue(FakeRealtime()),
 ];
+
+/// 组件测试用的内存数据库：同步关闭流查询，避免组件树销毁后残留清理定时器。
+AppDatabase testDatabase() => AppDatabase(
+  DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true),
+);
+
+/// 不联网的实时连接，只记录启停。
+class FakeRealtime implements RealtimeLink {
+  bool running = false;
+
+  @override
+  void start() => running = true;
+
+  @override
+  Future<void> stop() async => running = false;
+}
 
 /// 轮询直到条件成立（最多 2 秒），用于等待异步状态变化（如启动时的登录态恢复）。
 Future<void> eventually(bool Function() condition, {String reason = ''}) async {

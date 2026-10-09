@@ -8,6 +8,7 @@ import 'package:jikelog/core/api/models.dart';
 import 'package:jikelog/core/storage/stores.dart';
 
 import 'fake_backend.dart';
+import 'fake_sync_server.dart';
 
 /// 常用的假后端：登录、设置、账号信息均可用。
 FakeBackend standardBackend({Map<String, dynamic>? user}) => FakeBackend()
@@ -45,6 +46,7 @@ Future<FakeBackend> pumpApp(
   double height = 900,
   double textScale = 1,
   Map<String, dynamic>? user,
+  FakeSyncServer? syncServer,
 }) async {
   final b = backend ?? standardBackend(user: user);
   tester.view.physicalSize = Size(width, height);
@@ -62,6 +64,7 @@ Future<FakeBackend> pumpApp(
         backend: b,
         store: store,
         tokens: MemoryTokenStore(signedIn ? testTokens : null),
+        syncServer: syncServer,
       ),
       child: const JikeLogApp(),
     ),

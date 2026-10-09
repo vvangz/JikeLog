@@ -37,6 +37,9 @@ final authControllerProvider = NotifierProvider<AuthController, AuthState>(
   AuthController.new,
 );
 
+/// 本设备在服务端的设备 ID（登录时保存；实时通知据此忽略本设备产生的修改）。
+const deviceIdKey = 'auth.deviceId';
+
 /// 管理登录态：恢复会话、登录、注册、退出，以及会话失效时回到登录页。
 ///
 /// 离线优先：有令牌但网络不可用时使用本地缓存的账号信息进入应用，而不是退回登录页。
@@ -108,6 +111,10 @@ class AuthController extends Notifier<AuthState> {
   /// 保存会话并进入应用。
   Future<void> acceptSession(AuthSession session) async {
     await ref.read(apiClientProvider).saveTokens(session.tokens);
+    // 实时通知据此忽略本设备产生的修改
+    await ref
+        .read(keyValueStoreProvider)
+        .setString(deviceIdKey, session.deviceId);
     await _setUser(session.user);
   }
 
@@ -178,6 +185,7 @@ class AuthController extends Notifier<AuthState> {
     await ref.read(apiClientProvider).clearTokens();
     final store = ref.read(keyValueStoreProvider);
     await store.remove(_userCacheKey);
+    await store.remove(deviceIdKey);
     // 未同步的设置属于上一个账号，不能在下一个账号登录时被上传
     await store.remove(settingsDirtyKey);
     state = SignedOut(reason: reason);

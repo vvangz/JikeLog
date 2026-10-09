@@ -6,6 +6,7 @@ import '../../shared/ui/jk_page.dart';
 import '../theme/app_theme.dart';
 import '../theme/jk_tokens.g.dart';
 import 'destinations.dart';
+import 'sync_status.dart';
 
 /// 侧栏宽度。
 const sidebarExpandedWidth = 264.0;
@@ -188,18 +189,24 @@ class _Footer extends StatelessWidget {
         JkTokens.spacingLg,
         0,
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(Icons.circle, size: 8, color: c.success),
-          const SizedBox(width: JkTokens.spacingSm),
-          Expanded(
-            child: Text(
-              '$userName · 已登录',
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: c.textSecondary),
-            ),
+          Row(
+            children: [
+              Icon(Icons.circle, size: 8, color: c.success),
+              const SizedBox(width: JkTokens.spacingSm),
+              Expanded(
+                child: Text(
+                  '$userName · 已登录',
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: c.textSecondary),
+                ),
+              ),
+            ],
           ),
+          const SyncStatusLine(),
         ],
       ),
     );

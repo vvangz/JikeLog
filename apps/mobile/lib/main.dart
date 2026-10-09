@@ -6,7 +6,10 @@ import 'app/app.dart';
 import 'app/providers.dart';
 import 'core/config.dart';
 import 'core/device/device_identity.dart';
+import 'core/db/database.dart';
 import 'core/storage/stores.dart';
+import 'core/sync/record_store.dart';
+import 'core/sync/sync_providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,11 +26,15 @@ Future<void> main() async {
   }
   final store = await PrefsStore.open();
   final device = await DeviceIdentity.load(store);
+  final db = AppDatabase();
+  final clock = await RecordStore.loadClock(db, device.installationId);
   runApp(
     ProviderScope(
       overrides: [
         keyValueStoreProvider.overrideWithValue(store),
         deviceIdentityProvider.overrideWithValue(device),
+        appDatabaseProvider.overrideWithValue(db),
+        hybridClockProvider.overrideWithValue(clock),
       ],
       child: const JikeLogApp(),
     ),

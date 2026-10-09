@@ -1,6 +1,7 @@
 import 'package:cryptography/cryptography.dart';
 import 'package:jikelog/core/api/api_exception.dart';
 import 'package:jikelog/core/sync/e2e.dart';
+import 'package:jikelog/core/sync/record_store.dart';
 import 'package:jikelog/core/sync/schema.dart';
 import 'package:jikelog/core/sync/sync_api.dart';
 import 'package:jikelog/core/sync/sync_engine.dart';
@@ -240,3 +241,14 @@ class FakeTransport implements SyncTransport {
     return j;
   }
 }
+
+/// 把服务端记录转为客户端的 [RemoteRecord]（明文）。
+RemoteRecord remoteOf(ServerRecord r, String entity) => RemoteRecord(
+  entity: entity,
+  id: r.id,
+  version: r.version,
+  serverSeq: r.serverSeq,
+  deleted: r.deleted,
+  fields: {...r.fields},
+  clocks: {...r.clocks},
+);

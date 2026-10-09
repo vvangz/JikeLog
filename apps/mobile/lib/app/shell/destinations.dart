@@ -23,7 +23,7 @@ const moduleDestinations = [
     path: '/worklog',
     label: '工作日志',
     icon: JkIcons.worklog,
-    description: '记录每天的工作地点、内容与附件，支持随时修改，内容加密传输。将在 v0.3.0 开放。',
+    description: '记录每天的工作地点、内容与附件，支持随时修改，内容加密传输。',
   ),
   Destination(
     path: '/notes',
