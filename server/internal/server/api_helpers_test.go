@@ -14,9 +14,11 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/vvangz/JikeLog/server/internal/auth"
+	"github.com/vvangz/JikeLog/server/internal/platform/storage"
 	"github.com/vvangz/JikeLog/server/internal/testinfra"
 )
 
@@ -40,10 +42,13 @@ func (c *testClock) Advance(d time.Duration) {
 	c.mr.FastForward(d)
 }
 
-// testApp 为连接真实 PostgreSQL 与 miniredis 的完整服务。
+// testApp 为连接真实 PostgreSQL、对象存储与 miniredis 的完整服务。
 type testApp struct {
 	t     *testing.T
 	h     http.Handler
+	app   *App
+	pool  *pgxpool.Pool
+	store *storage.Store
 	sms   *auth.MockSender
 	mr    *miniredis.Miniredis
 	clock *testClock
@@ -58,15 +63,29 @@ func newTestApp(t *testing.T) *testApp {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 	clk := &testClock{now: time.Now(), mr: mr}
-	cfg := testConfig(t, map[string]string{"JIKELOG_HTTP_CORS_ORIGINS": "http://localhost:5173"})
+	cfg := testConfig(t, map[string]string{
+		"JIKELOG_HTTP_CORS_ORIGINS": "http://localhost:5173",
+		// 便于测试配额：单个附件 64KB，总量 100KB
+		"JIKELOG_ATTACHMENT_MAX_SIZE": "65536", "JIKELOG_ATTACHMENT_QUOTA": "102400",
+	})
+	store, err := storage.New(testinfra.ObjectStore(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.EnsureBucket(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	app, err := NewApp(context.Background(), Options{
 		Name: "jikelog-api", Config: cfg, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Pool: pool, Redis: rdb, Argon2: &auth.Argon2Params{MemoryKiB: 64, Time: 1, Threads: 1}, Now: clk.Now,
+		Pool: pool, Redis: rdb, Store: store, Argon2: &auth.Argon2Params{MemoryKiB: 64, Time: 1, Threads: 1}, Now: clk.Now,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &testApp{t: t, h: app.Handler, sms: app.SMS.(*auth.MockSender), mr: mr, clock: clk, ip: "198.51.100.1"}
+	return &testApp{
+		t: t, h: app.Handler, app: app, pool: pool, store: store,
+		sms: app.SMS.(*auth.MockSender), mr: mr, clock: clk, ip: "198.51.100.1",
+	}
 }
 
 type apiResp struct {
@@ -98,6 +117,12 @@ func (r apiResp) str(path ...string) string {
 
 func (a *testApp) call(method, path string, body any, token string) apiResp {
 	a.t.Helper()
+	return a.callWith(method, path, body, token, nil)
+}
+
+// callWith 与 call 相同，并附加请求头。
+func (a *testApp) callWith(method, path string, body any, token string, headers map[string]string) apiResp {
+	a.t.Helper()
 	var rd io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -113,6 +138,9 @@ func (a *testApp) call(method, path string, body any, token string) apiResp {
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 	rec := httptest.NewRecorder()
 	a.h.ServeHTTP(rec, req)

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/netip"
@@ -21,6 +22,7 @@ var (
 	validLogFormats   = []string{"json", "text"}
 	validSMSProviders = []string{SMSProviderMock, SMSProviderAliyun}
 	validCaptchas     = []string{CaptchaProviderNone, CaptchaProviderAliyun}
+	validKMS          = []string{KMSProviderLocal, KMSProviderAliyun}
 )
 
 // Validate 校验配置取值，返回所有错误的合并结果。错误信息不包含密钥、密码等敏感值。
@@ -38,6 +40,8 @@ func (c Config) Validate() error {
 	}
 	errs = append(errs, c.validateStores()...)
 	errs = append(errs, c.validateAuth()...)
+	errs = append(errs, c.validateCrypto()...)
+	errs = append(errs, c.validateStorage()...)
 	return errors.Join(errs...)
 }
 
@@ -153,6 +157,66 @@ func (c Config) validateAuth() []error {
 		errs = append(errs, errors.New("staging / production 环境必须启用人机验证（JIKELOG_CAPTCHA_PROVIDER）"))
 	}
 	return errs
+}
+
+func (c Config) validateCrypto() []error {
+	var errs []error
+	switch {
+	case c.E2E.PrivateKey == "":
+		errs = append(errs, errors.New("JIKELOG_E2E_PRIVATE_KEY 不能为空（工作日志传输加密私钥）"))
+	case !isKey32(c.E2E.PrivateKey):
+		errs = append(errs, errors.New("JIKELOG_E2E_PRIVATE_KEY 必须是 base64 编码的 32 字节"))
+	case c.IsDeployed() && c.E2E.PrivateKey == DevE2EPrivateKey:
+		errs = append(errs, errors.New("staging / production 环境不能使用示例中的 JIKELOG_E2E_PRIVATE_KEY"))
+	}
+	if c.E2E.PreviousPrivateKey != "" && !isKey32(c.E2E.PreviousPrivateKey) {
+		errs = append(errs, errors.New("JIKELOG_E2E_PREVIOUS_PRIVATE_KEY 必须是 base64 编码的 32 字节"))
+	}
+	if !slices.Contains(validKMS, c.KMS.Provider) {
+		errs = append(errs, fmt.Errorf("JIKELOG_KMS_PROVIDER=%q 不合法，可选 %v", c.KMS.Provider, validKMS))
+	}
+	if c.KMS.Provider == KMSProviderLocal {
+		switch {
+		case !isKey32(c.KMS.LocalMasterKey):
+			errs = append(errs, errors.New("JIKELOG_KMS_LOCAL_MASTER_KEY 必须是 base64 编码的 32 字节"))
+		case c.IsDeployed() && c.KMS.LocalMasterKey == DevKMSMasterKey:
+			errs = append(errs, errors.New("staging / production 环境不能使用示例中的 JIKELOG_KMS_LOCAL_MASTER_KEY"))
+		}
+	}
+	return errs
+}
+
+func (c Config) validateStorage() []error {
+	var errs []error
+	s := c.Storage
+	if !isOrigin(s.Endpoint) {
+		errs = append(errs, errors.New("JIKELOG_STORAGE_ENDPOINT 必须是 http(s)://host[:port] 形式"))
+	}
+	if s.PublicEndpoint != "" && !isOrigin(s.PublicEndpoint) {
+		errs = append(errs, errors.New("JIKELOG_STORAGE_PUBLIC_ENDPOINT 必须是 http(s)://host[:port] 形式"))
+	}
+	if c.IsProduction() && !strings.HasPrefix(s.PresignEndpoint(), "https://") {
+		errs = append(errs, errors.New("生产环境对象存储的公开地址必须使用 https"))
+	}
+	if strings.TrimSpace(s.Bucket) == "" {
+		errs = append(errs, errors.New("JIKELOG_STORAGE_BUCKET 不能为空"))
+	}
+	if s.AccessKey == "" || s.SecretKey == "" {
+		errs = append(errs, errors.New("JIKELOG_STORAGE_ACCESS_KEY 与 JIKELOG_STORAGE_SECRET_KEY 不能为空"))
+	}
+	if c.Attachment.MaxSize <= 0 {
+		errs = append(errs, errors.New("JIKELOG_ATTACHMENT_MAX_SIZE 必须大于 0"))
+	}
+	if c.Attachment.Quota < c.Attachment.MaxSize {
+		errs = append(errs, errors.New("JIKELOG_ATTACHMENT_QUOTA 不能小于单个附件上限"))
+	}
+	return errs
+}
+
+// isKey32 报告 s 是否为 base64 编码的 32 字节密钥；不回显内容。
+func isKey32(s string) bool {
+	raw, err := base64.StdEncoding.DecodeString(s)
+	return err == nil && len(raw) == 32
 }
 
 // hasScheme 只检查协议与主机，错误信息中不回显整串 URL（可能含密码）。

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"maps"
 	"strings"
 	"testing"
@@ -10,11 +11,19 @@ import (
 // required 为通过校验所需的最少变量。
 func required() map[string]string {
 	return map[string]string{
-		"JIKELOG_DB_URL":          "postgres://u:p@127.0.0.1:5432/jikelog",
-		"JIKELOG_REDIS_URL":       "redis://:p@127.0.0.1:6379/0",
-		"JIKELOG_AUTH_JWT_SECRET": strings.Repeat("s", 32),
+		"JIKELOG_DB_URL":               "postgres://u:p@127.0.0.1:5432/jikelog",
+		"JIKELOG_REDIS_URL":            "redis://:p@127.0.0.1:6379/0",
+		"JIKELOG_AUTH_JWT_SECRET":      strings.Repeat("s", 32),
+		"JIKELOG_E2E_PRIVATE_KEY":      DevE2EPrivateKey,
+		"JIKELOG_KMS_LOCAL_MASTER_KEY": DevKMSMasterKey,
+		"JIKELOG_STORAGE_ENDPOINT":     "http://127.0.0.1:9000",
+		"JIKELOG_STORAGE_ACCESS_KEY":   "jikelog-local",
+		"JIKELOG_STORAGE_SECRET_KEY":   "change-me-local-only",
 	}
 }
+
+// otherKey 为非示例的 32 字节密钥（base64）。
+var otherKey = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))
 
 func with(extra map[string]string) map[string]string {
 	env := required()
@@ -54,6 +63,25 @@ func TestLoadFromDefaults(t *testing.T) {
 	if len(cfg.HTTP.CORSOrigins) != 0 {
 		t.Errorf("CORSOrigins = %v, want empty（默认不允许跨域）", cfg.HTTP.CORSOrigins)
 	}
+	if cfg.KMS.Provider != KMSProviderLocal || cfg.Storage.Bucket != "jikelog" || cfg.Storage.Region != "us-east-1" {
+		t.Errorf("KMS/Storage 默认值错误：%+v %+v", cfg.KMS, cfg.Storage)
+	}
+	if cfg.Storage.PresignEndpoint() != "http://127.0.0.1:9000" {
+		t.Errorf("未设置公开地址时预签名应使用内部地址，得到 %q", cfg.Storage.PresignEndpoint())
+	}
+	if cfg.Attachment.MaxSize != 100<<20 || cfg.Attachment.Quota != 2<<30 {
+		t.Errorf("Attachment = %+v, want 100MB / 2GB", cfg.Attachment)
+	}
+}
+
+func TestStoragePublicEndpoint(t *testing.T) {
+	cfg, err := LoadFrom(with(map[string]string{"JIKELOG_STORAGE_PUBLIC_ENDPOINT": "http://10.0.2.2:9000"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Storage.PresignEndpoint() != "http://10.0.2.2:9000" {
+		t.Errorf("PresignEndpoint = %q", cfg.Storage.PresignEndpoint())
+	}
 }
 
 func TestLoadFromOverrides(t *testing.T) {
@@ -68,6 +96,8 @@ func TestLoadFromOverrides(t *testing.T) {
 		"JIKELOG_LOG_FORMAT":            "text",
 		"JIKELOG_HTTP_CORS_ORIGINS":     "https://admin.example.com, http://localhost:5173",
 		"JIKELOG_DB_MAX_CONNS":          "5",
+		"JIKELOG_E2E_PRIVATE_KEY":       otherKey,
+		"JIKELOG_KMS_LOCAL_MASTER_KEY":  otherKey,
 	}))
 	if err != nil {
 		t.Fatalf("LoadFrom() error = %v", err)
@@ -127,6 +157,25 @@ func TestLoadFromRejectsInvalidValues(t *testing.T) {
 		{"未知短信通道", map[string]string{"JIKELOG_SMS_PROVIDER": "twilio"}},
 		{"生产环境使用模拟短信", prod(map[string]string{"JIKELOG_SMS_PROVIDER": "mock"})},
 		{"生产环境使用占位密钥", prod(map[string]string{"JIKELOG_AUTH_JWT_SECRET": "change-me-local-only-change-me-local-only"})},
+		{"缺少传输加密私钥", map[string]string{"JIKELOG_E2E_PRIVATE_KEY": ""}},
+		{"传输加密私钥格式错误", map[string]string{"JIKELOG_E2E_PRIVATE_KEY": "not-base64!"}},
+		{"传输加密私钥长度错误", map[string]string{"JIKELOG_E2E_PRIVATE_KEY": base64.StdEncoding.EncodeToString([]byte("short"))}},
+		{"旧传输加密私钥格式错误", map[string]string{"JIKELOG_E2E_PREVIOUS_PRIVATE_KEY": "short"}},
+		{"未知 KMS 通道", map[string]string{"JIKELOG_KMS_PROVIDER": "vault"}},
+		{"缺少本地主密钥", map[string]string{"JIKELOG_KMS_LOCAL_MASTER_KEY": ""}},
+		{"本地主密钥格式错误", map[string]string{"JIKELOG_KMS_LOCAL_MASTER_KEY": "short"}},
+		{"生产环境使用示例传输私钥", prod(map[string]string{"JIKELOG_E2E_PRIVATE_KEY": DevE2EPrivateKey})},
+		{"生产环境使用示例主密钥", prod(map[string]string{"JIKELOG_KMS_LOCAL_MASTER_KEY": DevKMSMasterKey})},
+		{"缺少对象存储地址", map[string]string{"JIKELOG_STORAGE_ENDPOINT": ""}},
+		{"对象存储地址协议错误", map[string]string{"JIKELOG_STORAGE_ENDPOINT": "ftp://h:9000"}},
+		{"对象存储地址带路径", map[string]string{"JIKELOG_STORAGE_ENDPOINT": "http://h:9000/bucket"}},
+		{"对象存储公开地址非法", map[string]string{"JIKELOG_STORAGE_PUBLIC_ENDPOINT": "h:9000"}},
+		{"存储桶为空白", map[string]string{"JIKELOG_STORAGE_BUCKET": " "}},
+		{"缺少对象存储访问密钥", map[string]string{"JIKELOG_STORAGE_ACCESS_KEY": ""}},
+		{"缺少对象存储私有密钥", map[string]string{"JIKELOG_STORAGE_SECRET_KEY": ""}},
+		{"生产环境对象存储公开地址不是 https", prod(map[string]string{"JIKELOG_STORAGE_PUBLIC_ENDPOINT": "http://oss.example.com"})},
+		{"附件大小上限为零", map[string]string{"JIKELOG_ATTACHMENT_MAX_SIZE": "0"}},
+		{"配额小于单个附件上限", map[string]string{"JIKELOG_ATTACHMENT_QUOTA": "1024"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -140,11 +189,15 @@ func TestLoadFromRejectsInvalidValues(t *testing.T) {
 // prod 返回其余项都合规的生产环境变量，extra 覆盖其中的值。
 func prod(extra map[string]string) map[string]string {
 	env := map[string]string{
-		"JIKELOG_ENV":                  "production",
-		"JIKELOG_SMS_PROVIDER":         "aliyun",
-		"JIKELOG_CAPTCHA_PROVIDER":     "aliyun",
-		"JIKELOG_HTTP_TRUSTED_PROXIES": "127.0.0.1",
-		"JIKELOG_HTTP_CORS_ORIGINS":    "https://admin.example.com",
+		"JIKELOG_ENV":                     "production",
+		"JIKELOG_SMS_PROVIDER":            "aliyun",
+		"JIKELOG_CAPTCHA_PROVIDER":        "aliyun",
+		"JIKELOG_HTTP_TRUSTED_PROXIES":    "127.0.0.1",
+		"JIKELOG_HTTP_CORS_ORIGINS":       "https://admin.example.com",
+		"JIKELOG_E2E_PRIVATE_KEY":         otherKey,
+		"JIKELOG_KMS_LOCAL_MASTER_KEY":    otherKey,
+		"JIKELOG_STORAGE_ENDPOINT":        "https://oss-cn-beijing-internal.aliyuncs.com",
+		"JIKELOG_STORAGE_PUBLIC_ENDPOINT": "https://oss-cn-beijing.aliyuncs.com",
 	}
 	maps.Copy(env, extra)
 	return env
@@ -175,14 +228,16 @@ func TestValidateReportsAllErrors(t *testing.T) {
 func TestErrorsDoNotLeakSecrets(t *testing.T) {
 	secret := "short-secret-value"
 	_, err := LoadFrom(with(map[string]string{
-		"JIKELOG_AUTH_JWT_SECRET": secret,
-		"JIKELOG_DB_URL":          "mysql://user:db-password@h/db",
-		"JIKELOG_REDIS_URL":       "http://:redis-password@h",
+		"JIKELOG_AUTH_JWT_SECRET":      secret,
+		"JIKELOG_E2E_PRIVATE_KEY":      "e2e-secret-value",
+		"JIKELOG_KMS_LOCAL_MASTER_KEY": "kms-secret-value",
+		"JIKELOG_DB_URL":               "mysql://user:db-password@h/db",
+		"JIKELOG_REDIS_URL":            "http://:redis-password@h",
 	}))
 	if err == nil {
 		t.Fatal("want error")
 	}
-	for _, s := range []string{secret, "db-password", "redis-password"} {
+	for _, s := range []string{secret, "db-password", "redis-password", "e2e-secret-value", "kms-secret-value"} {
 		if strings.Contains(err.Error(), s) {
 			t.Errorf("错误信息泄露了敏感值 %q：%v", s, err)
 		}

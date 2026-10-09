@@ -14,6 +14,7 @@ import (
 	"github.com/vvangz/JikeLog/server/internal/platform/config"
 	"github.com/vvangz/JikeLog/server/internal/platform/db"
 	"github.com/vvangz/JikeLog/server/internal/platform/logging"
+	"github.com/vvangz/JikeLog/server/internal/platform/storage"
 	"github.com/vvangz/JikeLog/server/internal/server"
 	"github.com/vvangz/JikeLog/server/internal/version"
 )
@@ -60,9 +61,28 @@ func run() error {
 	}
 	defer func() { _ = rdb.Close() }()
 
-	app, err := server.NewApp(ctx, server.Options{Name: serviceName, Config: cfg, Logger: logger, Pool: pool, Redis: rdb})
+	store, err := storage.New(cfg.Storage)
 	if err != nil {
 		return err
 	}
-	return server.ListenAndServe(ctx, app.Handler, cfg.HTTP, logger)
+	if cfg.Env == config.EnvDevelopment {
+		// 本地开发自动创建存储桶；生产环境的桶与访问策略由运维预先配置
+		if err := store.EnsureBucket(ctx); err != nil {
+			return err
+		}
+	}
+
+	app, err := server.NewApp(ctx, server.Options{Name: serviceName, Config: cfg, Logger: logger, Pool: pool, Redis: rdb, Store: store})
+	if err != nil {
+		return err
+	}
+	bgDone := make(chan struct{})
+	go func() {
+		defer close(bgDone)
+		app.RunBackground(ctx)
+	}()
+	err = server.ListenAndServe(ctx, app.Handler, cfg.HTTP, logger)
+	stop()
+	<-bgDone
+	return err
 }

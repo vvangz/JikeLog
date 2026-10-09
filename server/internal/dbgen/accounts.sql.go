@@ -72,7 +72,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) (int64, error) {
 }
 
 const getDeviceByID = `-- name: GetDeviceByID :one
-SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at FROM devices WHERE id = $1
+SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at, last_ack_seq FROM devices WHERE id = $1
 `
 
 func (q *Queries) GetDeviceByID(ctx context.Context, id uuid.UUID) (Device, error) {
@@ -95,12 +95,13 @@ func (q *Queries) GetDeviceByID(ctx context.Context, id uuid.UUID) (Device, erro
 		&i.CreatedAt,
 		&i.TokensValidAfter,
 		&i.RevokedAt,
+		&i.LastAckSeq,
 	)
 	return i, err
 }
 
 const getDeviceByRefreshHashForUpdate = `-- name: GetDeviceByRefreshHashForUpdate :one
-SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at FROM devices
+SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at, last_ack_seq FROM devices
 WHERE (refresh_hash = $1 OR refresh_prev_hash = $1) AND revoked_at IS NULL
 LIMIT 1
 FOR UPDATE
@@ -127,6 +128,7 @@ func (q *Queries) GetDeviceByRefreshHashForUpdate(ctx context.Context, hash []by
 		&i.CreatedAt,
 		&i.TokensValidAfter,
 		&i.RevokedAt,
+		&i.LastAckSeq,
 	)
 	return i, err
 }
@@ -227,7 +229,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 }
 
 const listActiveDevices = `-- name: ListActiveDevices :many
-SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at FROM devices
+SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at, last_ack_seq FROM devices
 WHERE user_id = $1 AND revoked_at IS NULL
 ORDER BY last_active_at DESC
 `
@@ -258,6 +260,7 @@ func (q *Queries) ListActiveDevices(ctx context.Context, userID uuid.UUID) ([]De
 			&i.CreatedAt,
 			&i.TokensValidAfter,
 			&i.RevokedAt,
+			&i.LastAckSeq,
 		); err != nil {
 			return nil, err
 		}
@@ -532,7 +535,7 @@ ON CONFLICT (user_id, installation_id) DO UPDATE SET
     -- 新会话：此前签发给该设备的令牌全部作废
     tokens_valid_after = EXCLUDED.tokens_valid_after,
     revoked_at         = NULL
-RETURNING id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at
+RETURNING id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at, last_ack_seq
 `
 
 type UpsertDeviceParams struct {
@@ -582,6 +585,7 @@ func (q *Queries) UpsertDevice(ctx context.Context, arg UpsertDeviceParams) (Dev
 		&i.CreatedAt,
 		&i.TokensValidAfter,
 		&i.RevokedAt,
+		&i.LastAckSeq,
 	)
 	return i, err
 }

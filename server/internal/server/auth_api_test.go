@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -105,6 +106,9 @@ func TestLoginRateLimitedPerIP(t *testing.T) {
 	a.expect(a.login("someone", "secret123", "install-001"), http.StatusUnauthorized, "INVALID_CREDENTIALS")
 }
 
+// pathParam 匹配 Gin 路由中的路径参数（如 :deviceId）。
+var pathParam = regexp.MustCompile(`:[A-Za-z]+`)
+
 func TestDefaultDenyRequiresToken(t *testing.T) {
 	a := newTestApp(t)
 	engine := a.h.(*gin.Engine)
@@ -112,7 +116,7 @@ func TestDefaultDenyRequiresToken(t *testing.T) {
 		if isPublicRoute(rt.Method, rt.Path) {
 			continue
 		}
-		path := strings.ReplaceAll(rt.Path, ":deviceId", "0192a000-0000-7000-8000-000000000000")
+		path := pathParam.ReplaceAllString(rt.Path, "0192a000-0000-7000-8000-000000000000")
 		r := a.call(rt.Method, path, map[string]any{}, "")
 		if r.Status != http.StatusUnauthorized || r.code() != "UNAUTHORIZED" {
 			t.Errorf("%s %s 未登录时 = %d %s，want 401", rt.Method, rt.Path, r.Status, r.code())

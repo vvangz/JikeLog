@@ -49,7 +49,9 @@ type Outcome struct {
 	Status Status
 	// Changed 为 true 时需要写入新版本。
 	Changed bool
-	Next    State
+	// Edited 表示字段值或时钟有变化（只吸收了客户端时钟时为 false），用于决定是否保存编辑前修订。
+	Edited bool
+	Next   State
 	// Losers 为冲突中落败一方的完整快照，写入修订历史供用户查看和恢复。
 	Losers []map[string]Value
 	// DeletedNow 表示本次把记录删除（需保存删除前的快照）。
@@ -78,7 +80,7 @@ func Merge(e Entity, cur *State, ch Change) (Outcome, error) {
 		// 离线创建后又删除，从未同步过：无需保存
 		return Outcome{Status: StatusApplied}, nil
 	case cur == nil:
-		return Outcome{Status: StatusApplied, Changed: true, Next: State{
+		return Outcome{Status: StatusApplied, Changed: true, Edited: true, Next: State{
 			Fields: maps.Clone(ch.Fields), Clocks: maps.Clone(ch.Clocks), Absorbed: map[string][]Clock{},
 		}}, nil
 	case cur.Deleted && ch.Deleted:
@@ -113,7 +115,7 @@ func editAfterDelete(cur *State, ch Change) Outcome {
 func mergeFields(e Entity, cur *State, ch Change) Outcome {
 	next := clone(*cur)
 	status := StatusApplied
-	changed := false
+	changed, edited := false, false
 	clientLost := map[string]Value{}
 	serverLost := false
 	for _, f := range slices.Sorted(maps.Keys(ch.Fields)) {
@@ -126,13 +128,16 @@ func mergeFields(e Entity, cur *State, ch Change) Outcome {
 			// 服务端在此期间没改过这个字段：快进
 			next.Fields[f], next.Clocks[f] = cv, cc
 			delete(next.Absorbed, f)
+			edited = true
 		case e.Fields[f].Kind == KindText && len(ch.Patches[f]) > 0 && tryPatch(&next, e.Fields[f], f, cur, ch):
 			status = maxStatus(status, StatusMerged)
+			edited = true
 		case cc > sc:
 			// 最后修改覆盖：客户端胜出，服务端原值进入冲突快照
 			next.Fields[f], next.Clocks[f] = cv, cc
 			delete(next.Absorbed, f)
 			serverLost = true
+			edited = true
 			status = StatusConflict
 		default:
 			// 服务端胜出：记住客户端时钟，客户端的值进入冲突快照
@@ -142,7 +147,7 @@ func mergeFields(e Entity, cur *State, ch Change) Outcome {
 		}
 		changed = true
 	}
-	out := Outcome{Status: status, Changed: changed, Next: next}
+	out := Outcome{Status: status, Changed: changed, Edited: edited, Next: next}
 	if serverLost {
 		out.Losers = append(out.Losers, maps.Clone(cur.Fields))
 	}

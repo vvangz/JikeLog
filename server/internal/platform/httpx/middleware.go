@@ -91,8 +91,13 @@ func StrictOptions(logger *slog.Logger) apigen.StrictGinServerOptions {
 }
 
 // BodyLimit 限制请求体大小，超出时解析请求体会失败并返回 413。
-func BodyLimit(maxBytes int64) gin.HandlerFunc {
+// overrides 为个别路由（Gin 路由模式）的单独上限，如批量推送接口。
+func BodyLimit(defaultMax int64, overrides map[string]int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		maxBytes := defaultMax
+		if v, ok := overrides[c.FullPath()]; ok {
+			maxBytes = v
+		}
 		if c.Request.ContentLength > maxBytes {
 			Fail(c, http.StatusRequestEntityTooLarge, CodePayloadTooLarge, MsgPayloadTooLarge)
 			return

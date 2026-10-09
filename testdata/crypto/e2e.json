@@ -1,0 +1,12 @@
+{
+  "aad": "jikelog-e2e-v1|worklog|01a120ee-dabc-74d8-9de1-efc4e24cfd4e|content|v",
+  "clientPrivateKey": "YUVJbkaHo34AfbMFgTgazlAyWnqLYrEk/u9LPajO/Bw=",
+  "clientPublicKey": "2SwjRRD8nG+kYSx+HwF50MHrdlKA9AcRQed/TZzm4go=",
+  "description": "传输加密共享测试向量（ADR-006）：仅供测试，切勿用于任何环境。Go 与 Dart 必须派生出相同的 sessionKey 并能解开 sealed。",
+  "plaintext": "今天：完成同步引擎 ✅",
+  "sealed": "hsSY0m4/V71MYRM9iKkUxOXcKmx6Y8bhaQ1l5ph6BWVwGGQ3Z0xiC4iegE+MpcOSS8lEIzB4kTaRRFw=",
+  "serverKeyId": "872e6eb947daefbb",
+  "serverPrivateKey": "KkHzna3xWcbE+LW+N65r2IjVwu5vjKBpGkjIIHxJaO4=",
+  "serverPublicKey": "wkdN8m1XRLoCD9ngXW1HM/+CRXvREeyZNA7x6EVVowE=",
+  "sessionKey": "0QS3vDdP5D2RKnwRfgt7r2MTTqme6WW6fqWQNbWYdlY="
+}

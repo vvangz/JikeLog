@@ -31,7 +31,7 @@ func TestClockOrderAndPhysical(t *testing.T) {
 	a := Clock("1791553544038-0000-a1b2c3d4e5f60718")
 	b := Clock("1791553544038-0001-0000000000000000")
 	c := Clock("1791553544039-0000-0000000000000000")
-	if !(a < b && b < c) {
+	if a >= b || b >= c {
 		t.Fatal("字符串顺序应与时间顺序一致")
 	}
 	if got := c.Physical(); !got.Equal(time.UnixMilli(1791553544039)) {
