@@ -168,11 +168,14 @@ func tryPatch(next *State, spec Field, f string, cur *State, ch Change) bool {
 	if !ok || (spec.MaxLen > 0 && utf8.RuneCountInString(merged) > spec.MaxLen) {
 		return false
 	}
+	// 合并结果与双方的值都不同，必须用新的时钟：否则同一个时钟对应两份不同的文本，
+	// 客户端以自己推送的时钟为基准继续编辑时，会被当成快进而抹掉合并进来的修改
 	cc, sc := ch.Clocks[f], cur.Clocks[f]
 	next.Fields[f] = merged
-	next.Clocks[f] = MaxClock(sc, cc)
-	if next.Clocks[f] != cc {
-		absorb(next, f, cc)
+	next.Clocks[f] = clockAfter(MaxClock(sc, cc))
+	absorb(next, f, cc)
+	if sc != "" {
+		absorb(next, f, sc)
 	}
 	return true
 }

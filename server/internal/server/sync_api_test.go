@@ -105,7 +105,8 @@ func TestSyncMergesConcurrentTextEdits(t *testing.T) {
 		clocks: map[string]string{"content": k2}, baseClocks: map[string]string{"content": base},
 		patches: map[string]string{"content": patchJSON(map[string]any{"p": 5, "b": "上午：周会", "d": "", "i": "，定排期", "a": "。\n下午"})},
 	}))
-	if res := again.results()[0]; res["status"] != "applied" || num(res, "version") != num(rec, "version") {
+	// 已被合并的修改重试时不再改动记录，返回 merged 和服务端记录，让客户端以服务端为准
+	if res := again.results()[0]; res["status"] != "merged" || num(res, "version") != num(rec, "version") || res["record"] == nil {
 		t.Fatalf("重试应为空操作：%v", res)
 	}
 }

@@ -104,8 +104,13 @@ func TestMergeTextPatchWhenBothChanged(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "上午：周会，定排期。\n下午：写代码和评审。"
-	if out.Status != StatusMerged || out.Next.Fields["content"] != want || out.Next.Clocks["content"] != c3 {
+	// 合并结果是新的文本，使用新的时钟（大于双方），双方的时钟都记为已吸收
+	merged := Clock("1791553544003-0001-" + serverNode)
+	if out.Status != StatusMerged || out.Next.Fields["content"] != want || out.Next.Clocks["content"] != merged {
 		t.Fatalf("out=%+v", out)
+	}
+	if !reflect.DeepEqual(out.Next.Absorbed["content"], []Clock{c2, c3}) {
+		t.Fatalf("absorbed=%v", out.Next.Absorbed["content"])
 	}
 	if len(out.Losers) != 0 {
 		t.Fatal("合并成功不应产生冲突快照")
@@ -131,7 +136,7 @@ func TestMergeRetryAfterMergeWithNewerServerClock(t *testing.T) {
 		}},
 	}
 	out, err := Merge(worklog, cur, ch)
-	if err != nil || out.Status != StatusMerged || out.Next.Clocks["content"] != c4 {
+	if err != nil || out.Status != StatusMerged || out.Next.Clocks["content"] != Clock("1791553544004-0001-"+serverNode) {
 		t.Fatalf("out=%+v err=%v", out, err)
 	}
 	again, err := Merge(worklog, &out.Next, ch)
@@ -347,5 +352,43 @@ func TestRejectsUnknownClockKeys(t *testing.T) {
 	var fe FieldErrors
 	if !errors.As(err, &fe) || fe["x1"] == "" || fe["x2"] == "" {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+// 推送被合并后，客户端在推送的值上继续编辑：以推送的时钟为基准再次推送时必须走补丁合并，
+// 不能因为"服务端时钟 = 基准时钟"而快进，抹掉合并进来的对方修改。
+func TestEditAfterMergedPushIsMergedAgain(t *testing.T) {
+	cur := serverState()
+	cur.Fields["content"], cur.Clocks["content"] = "上午：周会。\n下午：写代码和评审。", c2
+	first := Change{
+		Fields:     map[string]Value{"content": "上午：周会，定排期。\n下午：写代码。"},
+		Clocks:     map[string]Clock{"content": c3},
+		BaseClocks: map[string]Clock{"content": c1},
+		Patches: map[string][]textpatch.Hunk{"content": {
+			{Pos: 5, Before: "上午：周会", Ins: "，定排期", After: "。\n下午"},
+		}},
+	}
+	out, _ := Merge(worklog, cur, first)
+	second := Change{
+		Fields:     map[string]Value{"content": "早上：打卡。\n上午：周会，定排期。\n下午：写代码。"},
+		Clocks:     map[string]Clock{"content": c4},
+		BaseClocks: map[string]Clock{"content": c3},
+		Patches: map[string][]textpatch.Hunk{"content": {
+			{Pos: 0, Ins: "早上：打卡。\n", After: "上午：周会，定"},
+		}},
+	}
+	out2, err := Merge(worklog, &out.Next, second)
+	want := "早上：打卡。\n上午：周会，定排期。\n下午：写代码和评审。"
+	if err != nil || out2.Status != StatusMerged || out2.Next.Fields["content"] != want {
+		t.Fatalf("out=%+v err=%v", out2, err)
+	}
+}
+
+func TestClockAfter(t *testing.T) {
+	if got := clockAfter(c3); got != Clock("1791553544003-0001-"+serverNode) {
+		t.Fatalf("got %s", got)
+	}
+	if got := clockAfter(Clock("1791553544003-ffff-aaaaaaaaaaaaaaaa")); got != Clock("1791553544004-0000-"+serverNode) {
+		t.Fatalf("计数溢出时进位到下一毫秒：%s", got)
 	}
 }

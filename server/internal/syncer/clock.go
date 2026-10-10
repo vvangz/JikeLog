@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"strconv"
 	"time"
@@ -33,6 +34,18 @@ func (c Clock) Physical() time.Time {
 // TooFarAhead 报告时钟是否比 now 领先超过允许范围。
 func (c Clock) TooFarAhead(now time.Time) bool {
 	return c.Physical().Sub(now) > maxClockSkew
+}
+
+// clockAfter 返回紧随 c 之后的服务端时钟：计数加一（溢出时进到下一毫秒），节点为服务端。
+func clockAfter(c Clock) Clock {
+	ms, _ := strconv.ParseInt(string(c)[:13], 10, 64) // 格式已校验
+	n, _ := strconv.ParseUint(string(c)[14:18], 16, 16)
+	if n == 0xffff {
+		ms, n = ms+1, 0
+	} else {
+		n++
+	}
+	return Clock(fmt.Sprintf("%013d-%04x-%s", ms, n, serverNode))
 }
 
 // MaxClock 返回较晚的时钟。
