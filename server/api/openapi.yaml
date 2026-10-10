@@ -1379,7 +1379,7 @@ components:
       properties:
         entity:
           type: string
-          description: 实体类型：worklog（工作日志）、note（笔记）、note_folder（笔记文件夹）、attachment（附件，只能删除）。字段定义见 ADR-005、ADR-007
+          description: 实体类型：worklog（工作日志）、note（笔记）、note_folder（笔记文件夹）、memo（备忘录）、ledger_account（账户）、ledger_category（收支分类）、ledger_loan（借贷）、ledger_entry（流水）、attachment（附件，只能删除）。字段定义见 ADR-005、ADR-007、ADR-008、ADR-009
           maxLength: 32
         id:
           type: string

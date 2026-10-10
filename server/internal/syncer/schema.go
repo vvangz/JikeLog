@@ -32,6 +32,9 @@ const (
 	KindTime
 	// KindOffsets 为提前提醒的分钟数列表：升序、不重复、逗号分隔，如 "0,15,1440"；空串表示不提醒。
 	KindOffsets
+	// KindMoney 为金额：以"分"为单位的十进制整数字符串（规范写法，无前导零），绝对值小于 10^15。
+	// 用字符串而不是整数，才能作为敏感字段加密（ADR-009）。
+	KindMoney
 )
 
 // Field 为字段定义。
@@ -46,6 +49,8 @@ type Field struct {
 	ServerOnly bool
 	// Choices 非空时，字符串字段只能取其中之一。
 	Choices []string
+	// MinMoney 为 KindMoney 字段的下限（含）；nil 表示不限（可以为负，如信用卡欠款）。
+	MinMoney *int64
 }
 
 // Entity 为同步实体定义。
@@ -65,6 +70,11 @@ const (
 	EntityNote       = "note"
 	EntityNoteFolder = "note_folder"
 	EntityMemo       = "memo"
+
+	EntityLedgerAccount  = "ledger_account"
+	EntityLedgerCategory = "ledger_category"
+	EntityLedgerLoan     = "ledger_loan"
+	EntityLedgerEntry    = "ledger_entry"
 )
 
 // 字段长度上限。
@@ -80,6 +90,29 @@ const (
 	maxWorklogsLen = 8_000
 
 	maxMemoLen = 5_000
+)
+
+// 记账字段长度上限。
+const (
+	maxAccountNameLen  = 30
+	maxCategoryNameLen = 20
+	maxIconLen         = 32
+	maxCounterpartyLen = 50
+	maxLedgerNoteLen   = 1_000
+	// 金额（分）的绝对值上限：10^15 分即 10 万亿元。
+	maxMoneyDigits = 15
+)
+
+// 记账的取值（ADR-009）。
+var (
+	accountTypes   = []string{"cash", "debit", "credit", "alipay", "wechat", "other"}
+	categoryKinds  = []string{"expense", "income"}
+	loanDirections = []string{"lend", "borrow"}
+	// 流水类型：收入、支出、转账、借出、借入、还款（还借入的钱）、收款（收回借出的钱）。
+	entryTypes = []string{"income", "expense", "transfer", "lend", "borrow", "repay", "collect"}
+
+	zeroMoney = int64(0)
+	oneCent   = int64(1)
 )
 
 // 备忘录提醒：最多 MaxReminders 个，每个最多提前 MaxReminderOffset 分钟（与用户设置中的默认提醒一致）。
@@ -150,6 +183,52 @@ var Registry = map[string]Entity{
 			"allDay":    {Kind: KindFlag},
 			"reminders": {Kind: KindOffsets},
 			"done":      {Kind: KindFlag},
+		},
+	},
+	// 记账（ADR-009）：金额、名称、对方与备注加密；类型与关联 ID 为明文。
+	EntityLedgerAccount: {
+		Name: EntityLedgerAccount,
+		Fields: map[string]Field{
+			"name":           {Kind: KindString, MaxLen: maxAccountNameLen, Required: true, Sensitive: true},
+			"type":           {Kind: KindString, Required: true, Choices: accountTypes},
+			"initialBalance": {Kind: KindMoney, Sensitive: true},
+			"archived":       {Kind: KindFlag},
+			"sortOrder":      {Kind: KindInt},
+		},
+	},
+	EntityLedgerCategory: {
+		Name: EntityLedgerCategory,
+		Fields: map[string]Field{
+			"name":      {Kind: KindString, MaxLen: maxCategoryNameLen, Required: true, Sensitive: true},
+			"kind":      {Kind: KindString, Required: true, Choices: categoryKinds},
+			"parentId":  {Kind: KindUUID},
+			"icon":      {Kind: KindString, MaxLen: maxIconLen},
+			"archived":  {Kind: KindFlag},
+			"sortOrder": {Kind: KindInt},
+		},
+	},
+	EntityLedgerLoan: {
+		Name: EntityLedgerLoan,
+		Fields: map[string]Field{
+			"direction":    {Kind: KindString, Required: true, Choices: loanDirections},
+			"counterparty": {Kind: KindString, MaxLen: maxCounterpartyLen, Required: true, Sensitive: true},
+			"dueDate":      {Kind: KindDate},
+			"note":         {Kind: KindText, MaxLen: maxLedgerNoteLen, Sensitive: true},
+			"settled":      {Kind: KindFlag},
+		},
+	},
+	EntityLedgerEntry: {
+		Name: EntityLedgerEntry,
+		Fields: map[string]Field{
+			"type":        {Kind: KindString, Required: true, Choices: entryTypes},
+			"amount":      {Kind: KindMoney, Required: true, Sensitive: true, MinMoney: &oneCent},
+			"fee":         {Kind: KindMoney, Sensitive: true, MinMoney: &zeroMoney},
+			"date":        {Kind: KindDate, Required: true},
+			"accountId":   {Kind: KindUUID, Required: true},
+			"toAccountId": {Kind: KindUUID},
+			"categoryId":  {Kind: KindUUID},
+			"loanId":      {Kind: KindUUID},
+			"note":        {Kind: KindText, MaxLen: maxLedgerNoteLen, Sensitive: true},
 		},
 	},
 }
@@ -231,6 +310,10 @@ func (f Field) checkString(s string) (Value, error) {
 		if err := checkOffsets(s); err != nil {
 			return nil, err
 		}
+	case KindMoney:
+		if err := f.checkMoney(s); err != nil {
+			return nil, err
+		}
 	default:
 		if f.MaxLen > 0 && utf8.RuneCountInString(s) > f.MaxLen {
 			return nil, fmt.Errorf("不能超过 %d 个字符", f.MaxLen)
@@ -284,4 +367,31 @@ func ParseOffsets(s string) []int {
 		}
 	}
 	return out
+}
+
+// checkMoney 校验金额为规范写法的整数（分），并不低于下限。
+func (f Field) checkMoney(s string) error {
+	digits := strings.TrimPrefix(s, "-")
+	if digits == "" || len(digits) > maxMoneyDigits || (len(digits) > 1 && digits[0] == '0') {
+		return fmt.Errorf("金额格式不正确")
+	}
+	for _, c := range digits {
+		if c < '0' || c > '9' {
+			return fmt.Errorf("金额格式不正确")
+		}
+	}
+	if s == "-0" {
+		return fmt.Errorf("金额格式不正确")
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return fmt.Errorf("金额格式不正确")
+	}
+	if f.MinMoney != nil && n < *f.MinMoney {
+		if *f.MinMoney > 0 {
+			return fmt.Errorf("金额必须大于 0")
+		}
+		return fmt.Errorf("金额不能为负")
+	}
+	return nil
 }
