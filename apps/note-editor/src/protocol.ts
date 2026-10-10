@@ -35,7 +35,11 @@ export type Command = (typeof COMMANDS)[number];
 /** Flutter 发给编辑器的消息。 */
 export type Inbound =
   | { type: 'init'; markdown: string; placeholder: string; theme: Theme }
-  | { type: 'setMarkdown'; markdown: string }
+  /**
+   * 用其他设备的修改（或合并结果）替换内容。expectRev 为 Flutter 已收到的最后一次修改的序号：
+   * 编辑器中有 Flutter 尚未收到的修改时拒绝替换（回复 setRejected），由 Flutter 合并后重试。
+   */
+  | { type: 'setMarkdown'; markdown: string; expectRev: number }
   | { type: 'theme'; theme: Theme }
   | { type: 'command'; name: Command }
   | { type: 'setLink'; href: string }
@@ -70,7 +74,11 @@ export interface FormatState {
 /** 编辑器发给 Flutter 的消息。 */
 export type Outbound =
   | { type: 'ready' }
-  | { type: 'change'; markdown: string }
+  /** rev：本次修改的序号，每次初始化后从 1 开始递增。 */
+  | { type: 'change'; markdown: string; rev: number }
+  /** setMarkdown 已应用：之后的修改基于替换后的内容。 */
+  | { type: 'setApplied' }
+  | { type: 'setRejected' }
   | { type: 'state'; state: FormatState }
   | { type: 'requestImage'; id: string }
   | { type: 'error'; message: string };
@@ -137,7 +145,10 @@ export function parseInbound(raw: string): Inbound | null {
     }
     case 'setMarkdown': {
       const markdown = str(v.markdown, MAX_MARKDOWN);
-      return markdown === null ? null : { type: 'setMarkdown', markdown };
+      const expectRev = v.expectRev;
+      return markdown !== null && Number.isSafeInteger(expectRev) && (expectRev as number) >= 0
+        ? { type: 'setMarkdown', markdown, expectRev: expectRev as number }
+        : null;
     }
     case 'theme': {
       const theme = parseTheme(v.theme);

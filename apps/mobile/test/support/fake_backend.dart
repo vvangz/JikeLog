@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jikelog/app/providers.dart';
@@ -15,10 +16,16 @@ import 'package:jikelog/core/storage/stores.dart';
 import 'package:jikelog/core/sync/hlc.dart';
 import 'package:jikelog/core/sync/realtime.dart';
 import 'package:jikelog/core/sync/sync_providers.dart';
+import 'package:flutter/widgets.dart' show Text;
 import 'package:jikelog/features/attachments/attachment_providers.dart';
+import 'package:jikelog/features/attachments/attachment_viewers.dart';
+import 'package:jikelog/features/attachments/media.dart';
+import 'package:jikelog/features/notes/editor/rich_editor_view.dart';
+import 'package:jikelog/features/notes/note_editor_page.dart';
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 
+import 'fake_media.dart';
 import 'fake_sync_server.dart';
 
 /// 一次被记录的请求。
@@ -187,7 +194,53 @@ List<Override> testOverrides({
   ),
   realtimeClientProvider.overrideWithValue(FakeRealtime()),
   attachmentDirProvider.overrideWithValue(filesDir ?? testFilesDir),
+  richEditorViewProvider.overrideWithValue(
+    (context, controller) => FakeRichEditorView(controller: controller),
+  ),
+  playerFactoryProvider.overrideWithValue(FakePlayer.new),
+  pdfViewBuilderProvider.overrideWithValue(
+    (file) => Text('PDF:${file.path.split(Platform.pathSeparator).last}'),
+  ),
+  openExternalProvider.overrideWithValue(
+    (file, mime) async => TestHooks.openExternal(file, mime),
+  ),
+  launchLinkProvider.overrideWithValue((uri) async => TestHooks.launch(uri)),
+  imagePickerProvider.overrideWithValue(() => TestHooks.pickImage()),
+  recordingDirProvider.overrideWithValue(testFilesDir),
+  recorderFactoryProvider.overrideWithValue(
+    () => FakeRecorder(permitted: TestHooks.micPermitted),
+  ),
 ];
+
+/// 组件测试中可替换的平台行为（每个测试结束后由 [TestHooks.reset] 恢复）。
+abstract final class TestHooks {
+  static Future<List<PlatformFile>> Function() pickImage = _none;
+  static bool Function(Uri) launch = _yes;
+  static bool Function(File, String) openExternal = _yes2;
+  static bool micPermitted = true;
+  static final launched = <Uri>[];
+  static final opened = <String>[];
+
+  static Future<List<PlatformFile>> _none() async => const [];
+  static bool _yes(Uri u) {
+    launched.add(u);
+    return true;
+  }
+
+  static bool _yes2(File f, String mime) {
+    opened.add(mime);
+    return true;
+  }
+
+  static void reset() {
+    pickImage = _none;
+    launch = _yes;
+    openExternal = _yes2;
+    micPermitted = true;
+    launched.clear();
+    opened.clear();
+  }
+}
 
 /// 组件测试的本机文件目录（附件副本与下载缓存）。
 Future<Directory> testFilesDir() async {

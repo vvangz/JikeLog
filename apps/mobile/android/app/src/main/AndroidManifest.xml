@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- 正式包同样需要网络权限（Flutter 模板只在 debug/profile 清单中声明） -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 笔记中录音（首次录音时请求授权） -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application
         android:label="即刻日志"
         android:name="${applicationName}"
@@ -46,6 +48,23 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- 笔记中的链接用系统浏览器、邮件、电话应用打开（url_launcher） -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="http"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="mailto"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
         </intent>
     </queries>
 </manifest>

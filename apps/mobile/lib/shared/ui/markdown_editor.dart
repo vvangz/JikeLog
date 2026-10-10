@@ -11,11 +11,25 @@ class MarkdownEditor extends StatefulWidget {
     required this.controller,
     this.focusNode,
     this.hint = '记录今天的工作内容，支持 Markdown',
+    this.fieldKey = const Key('worklog-content'),
+    this.imageBuilder,
+    this.extraTools = const [],
+    this.expand = false,
   });
 
   final TextEditingController controller;
   final FocusNode? focusNode;
   final String hint;
+  final Key fieldKey;
+
+  /// 预览中图片的显示方式（例如把 attachment: 引用显示为附件图片）。
+  final MarkdownImageBuilder? imageBuilder;
+
+  /// 追加在工具栏末尾的按钮（预览时禁用）。
+  final List<Widget> extraTools;
+
+  /// 占满父组件的高度（放在 Expanded 中使用），否则随内容增高。
+  final bool expand;
 
   @override
   State<MarkdownEditor> createState() => _MarkdownEditorState();
@@ -119,6 +133,7 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
                   () => _insertBlock(_table, _table.lastIndexOf('|  |') + 2),
                   edit: true,
                 ),
+                if (!_preview) ...widget.extraTools,
                 const SizedBox(width: JkTokens.spacingSm),
                 _tool(
                   _preview ? Icons.edit_outlined : Icons.visibility_outlined,
@@ -131,35 +146,47 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
           ),
         ),
         const SizedBox(height: JkTokens.spacingSm),
-        if (_preview)
-          Container(
-            key: const Key('markdown-preview'),
-            constraints: const BoxConstraints(minHeight: 200),
-            padding: const EdgeInsets.all(JkTokens.spacingMd),
-            decoration: BoxDecoration(
-              border: Border.all(color: c.border),
-              borderRadius: BorderRadius.circular(JkTokens.radiusMd),
-            ),
-            child: _c.text.trim().isEmpty
-                ? Text('（暂无内容）', style: TextStyle(color: c.textDisabled))
-                : MarkdownBody(data: _c.text, selectable: true),
-          )
-        else
-          TextField(
-            key: const Key('worklog-content'),
-            controller: _c,
-            focusNode: widget.focusNode,
-            minLines: 10,
-            maxLines: null,
-            maxLength: 100000,
-            keyboardType: TextInputType.multiline,
-            decoration: InputDecoration(
-              hintText: widget.hint,
-              counterText: '',
-              alignLabelWithHint: true,
-            ),
-          ),
+        if (widget.expand) Expanded(child: _body(c)) else _body(c),
       ],
+    );
+  }
+
+  Widget _body(JkColorTokens c) {
+    if (_preview) {
+      final preview = Container(
+        key: const Key('markdown-preview'),
+        constraints: const BoxConstraints(minHeight: 200),
+        width: double.infinity,
+        padding: const EdgeInsets.all(JkTokens.spacingMd),
+        decoration: BoxDecoration(
+          border: Border.all(color: c.border),
+          borderRadius: BorderRadius.circular(JkTokens.radiusMd),
+        ),
+        child: _c.text.trim().isEmpty
+            ? Text('（暂无内容）', style: TextStyle(color: c.textDisabled))
+            : MarkdownBody(
+                data: _c.text,
+                selectable: true,
+                imageBuilder: widget.imageBuilder,
+              ),
+      );
+      return widget.expand ? SingleChildScrollView(child: preview) : preview;
+    }
+    return TextField(
+      key: widget.fieldKey,
+      controller: _c,
+      focusNode: widget.focusNode,
+      minLines: widget.expand ? null : 10,
+      maxLines: null,
+      expands: widget.expand,
+      textAlignVertical: TextAlignVertical.top,
+      maxLength: 100000,
+      keyboardType: TextInputType.multiline,
+      decoration: InputDecoration(
+        hintText: widget.hint,
+        counterText: '',
+        alignLabelWithHint: true,
+      ),
     );
   }
 

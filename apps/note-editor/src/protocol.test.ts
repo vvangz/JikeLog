@@ -8,7 +8,7 @@ const theme = { dark: false, colors: { text: '#2b211b', 'surface-variant': '#f1e
 describe('parseInbound', () => {
   it.each([
     [{ type: 'init', markdown: '# 你好', placeholder: '写点什么', theme }],
-    [{ type: 'setMarkdown', markdown: '' }],
+    [{ type: 'setMarkdown', markdown: '', expectRev: 0 }],
     [{ type: 'theme', theme: { dark: true, colors: {} } }],
     [{ type: 'command', name: 'bold' }],
     [{ type: 'command', name: 'insertTable' }],
@@ -32,7 +32,10 @@ describe('parseInbound', () => {
     ['不是对象', '[]'],
     ['未知类型', JSON.stringify({ type: 'eval', code: 'alert(1)' })],
     ['未知命令', JSON.stringify({ type: 'command', name: 'deleteEverything' })],
-    ['正文不是字符串', JSON.stringify({ type: 'setMarkdown', markdown: 1 })],
+    ['正文不是字符串', JSON.stringify({ type: 'setMarkdown', markdown: 1, expectRev: 0 })],
+    ['缺少修改序号', JSON.stringify({ type: 'setMarkdown', markdown: '' })],
+    ['修改序号为负数', JSON.stringify({ type: 'setMarkdown', markdown: '', expectRev: -1 })],
+    ['修改序号不是整数', JSON.stringify({ type: 'setMarkdown', markdown: '', expectRev: 1.5 })],
     ['正文超长', JSON.stringify({ type: 'setMarkdown', markdown: 'a'.repeat(MAX_MARKDOWN + 1) })],
     ['主题颜色不是十六进制', JSON.stringify({ type: 'theme', theme: { dark: false, colors: { text: 'red;}' } } })],
     ['主题变量名非法', JSON.stringify({ type: 'theme', theme: { dark: false, colors: { 'a;b': '#000000' } } })],

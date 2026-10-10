@@ -9,10 +9,12 @@ import '../../app/theme/jk_tokens.g.dart';
 import '../../core/sync/sync_engine.dart';
 import '../../core/sync/sync_providers.dart';
 import '../../core/sync/text_patch.dart';
+import '../../shared/ui/conflict_banner.dart';
 import '../../shared/ui/jk_feedback.dart';
 import '../../shared/ui/jk_states.dart';
 import '../attachments/attachment_section.dart';
-import 'markdown_editor.dart';
+import '../notes/linked_notes_section.dart';
+import '../../shared/ui/markdown_editor.dart';
 import 'worklog_repository.dart';
 
 /// 工作日志编辑页：修改即自动保存到本机（1 秒防抖），由同步引擎在后台推送。
@@ -227,12 +229,18 @@ class _WorklogEditorPageState extends ConsumerState<WorklogEditorPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (w.hasConflict) _ConflictBanner(id: w.id),
+              if (w.hasConflict)
+                ConflictBanner(
+                  key: const Key('worklog-conflict'),
+                  onTap: () => context.push('/worklog/${w.id}/revisions'),
+                ),
               _LocationField(controller: _location, repo: _repo),
               const SizedBox(height: JkTokens.spacingLg),
               MarkdownEditor(controller: _content),
               const SizedBox(height: JkTokens.spacingLg),
               AttachmentSection(ownerEntity: 'worklog', ownerId: w.id),
+              const SizedBox(height: JkTokens.spacingLg),
+              LinkedNotesSection(worklogId: w.id),
             ],
           ),
         ),
@@ -275,37 +283,6 @@ class _Title extends ConsumerWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ConflictBanner extends StatelessWidget {
-  const _ConflictBanner({required this.id});
-
-  final String id;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.jkColors;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: JkTokens.spacingLg),
-      child: Material(
-        color: c.warningContainer,
-        borderRadius: BorderRadius.circular(JkTokens.radiusMd),
-        child: ListTile(
-          key: const Key('worklog-conflict'),
-          leading: Icon(Icons.call_split, color: c.onWarningContainer),
-          title: Text(
-            '与其他设备的修改冲突，已保留最后修改的版本',
-            style: TextStyle(color: c.onWarningContainer),
-          ),
-          subtitle: Text(
-            '点击查看另一版本，可以随时恢复',
-            style: TextStyle(color: c.onWarningContainer),
-          ),
-          onTap: () => context.push('/worklog/$id/revisions'),
-        ),
       ),
     );
   }

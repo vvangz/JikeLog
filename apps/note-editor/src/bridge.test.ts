@@ -52,25 +52,62 @@ describe('bridge', () => {
     send({ type: 'command', name: 'bold' });
     expect(last('change')).toBeUndefined();
     vi.advanceTimersByTime(CHANGE_DEBOUNCE_MS);
-    expect(sent.filter((m) => m.type === 'change')).toEqual([{ type: 'change', markdown: '## 内容' }]);
+    expect(sent.filter((m) => m.type === 'change')).toEqual([{ type: 'change', markdown: '## 内容', rev: 1 }]);
   });
 
-  it('flush 立即返回尚未发送的修改；没有修改时返回 null', () => {
+  it('flush 立即返回尚未发送的修改并计入序号；没有修改时返回 null', () => {
     send({ type: 'init', markdown: '内容', placeholder: '', theme });
     expect(bridge.flush()).toBeNull();
     send({ type: 'command', name: 'blockquote' });
-    expect(bridge.flush()).toBe('> 内容');
+    expect(bridge.flush()).toEqual({ md: '> 内容', rev: 1 });
     vi.advanceTimersByTime(CHANGE_DEBOUNCE_MS);
     expect(last('change')).toBeUndefined();
   });
 
-  it('远端内容到达前先发出本地尚未发送的修改', () => {
+  it('没有 Flutter 尚未收到的修改时，按序号替换为远端内容', () => {
+    send({ type: 'init', markdown: '内容', placeholder: '', theme });
+    send({ type: 'setMarkdown', markdown: '其他设备的内容', expectRev: 0 });
+    expect(last('setRejected')).toBeUndefined();
+    expect(sent.at(-1)).toEqual({ type: 'setApplied' });
+    send({ type: 'command', name: 'heading1' });
+    vi.advanceTimersByTime(CHANGE_DEBOUNCE_MS);
+    expect(last('change')).toEqual({ type: 'change', markdown: '# 其他设备的内容', rev: 1 });
+    send({ type: 'setMarkdown', markdown: '合并后', expectRev: 1 });
+    expect(bridge.flush()).toBeNull();
+    send({ type: 'command', name: 'heading2' });
+    expect(bridge.flush()).toEqual({ md: '## 合并后', rev: 2 });
+  });
+
+  it('有尚未发出的修改时拒绝替换：先发出修改，再回复 setRejected', () => {
     send({ type: 'init', markdown: '内容', placeholder: '', theme });
     send({ type: 'command', name: 'bulletList' });
-    send({ type: 'setMarkdown', markdown: '其他设备的内容' });
-    expect(last('change')).toEqual({ type: 'change', markdown: '- 内容' });
+    send({ type: 'setMarkdown', markdown: '其他设备的内容', expectRev: 0 });
+    const tail = sent.slice(-2);
+    expect(tail).toEqual([{ type: 'change', markdown: '- 内容', rev: 1 }, { type: 'setRejected' }]);
+    expect(bridge.flush()).toBeNull();
+    // Flutter 收到修改后带上新的序号重试
+    send({ type: 'setMarkdown', markdown: '- 内容\n\n其他设备的内容', expectRev: 1 });
+    expect(sent.filter((m) => m.type === 'setRejected')).toHaveLength(1);
+    send({ type: 'command', name: 'paragraph' });
+    expect(bridge.flush()?.md).toBe('内容\n\n其他设备的内容');
+  });
+
+  it('Flutter 的序号落后（修改已发出但尚未被处理）时同样拒绝', () => {
+    send({ type: 'init', markdown: '内容', placeholder: '', theme });
+    send({ type: 'command', name: 'blockquote' });
     vi.advanceTimersByTime(CHANGE_DEBOUNCE_MS);
-    expect(sent.filter((m) => m.type === 'change')).toHaveLength(1);
+    send({ type: 'setMarkdown', markdown: '远端', expectRev: 0 });
+    expect(last('setRejected')).toEqual({ type: 'setRejected' });
+  });
+
+  it('重新初始化后序号归零', () => {
+    send({ type: 'init', markdown: '内容', placeholder: '', theme });
+    send({ type: 'command', name: 'blockquote' });
+    vi.advanceTimersByTime(CHANGE_DEBOUNCE_MS);
+    send({ type: 'init', markdown: '新的', placeholder: '', theme });
+    send({ type: 'command', name: 'blockquote' });
+    vi.advanceTimersByTime(CHANGE_DEBOUNCE_MS);
+    expect(last('change')).toEqual({ type: 'change', markdown: '> 新的', rev: 1 });
   });
 
   it('插入图片，并显示 Flutter 返回的图片', () => {
@@ -80,7 +117,7 @@ describe('bridge', () => {
     send({ type: 'image', id: ID, dataUrl: 'data:image/png;base64,AAAA' });
     expect(document.querySelector('.jk-image img')?.getAttribute('src')).toBe('data:image/png;base64,AAAA');
     vi.advanceTimersByTime(CHANGE_DEBOUNCE_MS);
-    expect(last('change')).toEqual({ type: 'change', markdown: `![图](attachment:${ID})` });
+    expect(last('change')).toEqual({ type: 'change', markdown: `![图](attachment:${ID})`, rev: 1 });
   });
 
   it('聚焦后在光标处插入链接', () => {
@@ -88,7 +125,7 @@ describe('bridge', () => {
     send({ type: 'focus' });
     send({ type: 'setLink', href: 'https://example.com' });
     vi.advanceTimersByTime(CHANGE_DEBOUNCE_MS);
-    expect(last('change')).toEqual({ type: 'change', markdown: '见[https://example.com](https://example.com)' });
+    expect(last('change')).toEqual({ type: 'change', markdown: '见[https://example.com](https://example.com)', rev: 1 });
   });
 
   it('非法消息与未初始化时的命令回报错误，不执行', () => {
@@ -104,7 +141,7 @@ describe('bridge', () => {
     send({ type: 'init', markdown: '第二篇', placeholder: '', theme });
     expect(document.querySelectorAll('.ProseMirror')).toHaveLength(1);
     send({ type: 'command', name: 'heading1' });
-    expect(bridge.flush()).toBe('# 第二篇');
+    expect(bridge.flush()).toEqual({ md: '# 第二篇', rev: 1 });
   });
 });
 

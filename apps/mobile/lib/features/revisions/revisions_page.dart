@@ -12,17 +12,24 @@ import '../../core/sync/sync_providers.dart';
 import '../../shared/ui/jk_button.dart';
 import '../../shared/ui/jk_feedback.dart';
 import '../../shared/ui/jk_states.dart';
-import 'worklog_repository.dart';
+import '../attachments/attachment_viewers.dart';
+import '../notes/note_repository.dart';
+import '../worklog/worklog_repository.dart';
 
 final _revisionsProvider = FutureProvider.autoDispose
     .family<List<RevisionInfo>, String>(
       (ref, id) => ref.watch(syncApiProvider).revisions(id),
     );
 
+/// 实体在提示语中的称呼。
+String _noun(String entity) => entity == Entities.note ? '笔记' : '日志';
+
 /// 修订历史：查看并恢复编辑前、冲突中落败、删除前的版本（需要联网）。
 class RevisionsPage extends ConsumerStatefulWidget {
-  const RevisionsPage({super.key, required this.id});
+  const RevisionsPage({super.key, required this.entity, required this.id});
 
+  /// 实体类型：worklog 或 note。
+  final String entity;
   final String id;
 
   @override
@@ -51,7 +58,7 @@ class _RevisionsPageState extends ConsumerState<RevisionsPage> {
         ),
         error: (e, _) => JkErrorState(
           message: e is ApiException && e.code == ApiErrorCode.recordNotFound
-              ? '这篇日志还没有同步到服务器，暂无修订历史'
+              ? '这篇${_noun(widget.entity)}还没有同步到服务器，暂无修订历史'
               : '读取修订历史失败，请检查网络后重试',
           onRetry: () => ref.invalidate(_revisionsProvider(widget.id)),
         ),
@@ -78,7 +85,8 @@ class _RevisionsPageState extends ConsumerState<RevisionsPage> {
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => _RevisionDetail(
-                            worklogId: widget.id,
+                            entity: widget.entity,
+                            recordId: widget.id,
                             revision: r,
                           ),
                         ),
@@ -109,9 +117,14 @@ String _time(DateTime t) =>
 
 /// 修订内容与恢复。
 class _RevisionDetail extends ConsumerStatefulWidget {
-  const _RevisionDetail({required this.worklogId, required this.revision});
+  const _RevisionDetail({
+    required this.entity,
+    required this.recordId,
+    required this.revision,
+  });
 
-  final String worklogId;
+  final String entity;
+  final String recordId;
   final RevisionInfo revision;
 
   @override
@@ -130,8 +143,8 @@ class _RevisionDetailState extends ConsumerState<_RevisionDetail> {
       for (final e in (data['fields'] as Map<String, dynamic>).entries) {
         final v = e.value;
         out[e.key] =
-            v is String && Entities.field(Entities.worklog, e.key).sensitive
-            ? await s.openValue(Entities.worklog, widget.worklogId, e.key, v)
+            v is String && Entities.field(widget.entity, e.key).sensitive
+            ? await s.openValue(widget.entity, widget.recordId, e.key, v)
             : v;
       }
       return out;
@@ -141,14 +154,24 @@ class _RevisionDetailState extends ConsumerState<_RevisionDetail> {
   Future<void> _restore(Map<String, Object?> f) async {
     setState(() => _restoring = true);
     try {
-      await ref
-          .read(worklogRepositoryProvider)
-          .update(
-            widget.worklogId,
-            date: DateTime.tryParse(f['date'] as String? ?? ''),
-            location: f['location'] as String? ?? '',
-            content: f['content'] as String? ?? '',
-          );
+      if (widget.entity == Entities.note) {
+        await ref
+            .read(noteRepositoryProvider)
+            .update(
+              widget.recordId,
+              title: f['title'] as String? ?? '',
+              body: f['body'] as String? ?? '',
+            );
+      } else {
+        await ref
+            .read(worklogRepositoryProvider)
+            .update(
+              widget.recordId,
+              date: DateTime.tryParse(f['date'] as String? ?? ''),
+              location: f['location'] as String? ?? '',
+              content: f['content'] as String? ?? '',
+            );
+      }
     } on Object catch (e) {
       debugPrint('恢复修订失败: $e');
       if (!mounted) return;
@@ -185,15 +208,18 @@ class _RevisionDetailState extends ConsumerState<_RevisionDetail> {
               child: JkSkeleton(lines: 6),
             );
           }
+          final isNote = widget.entity == Entities.note;
           final location = f['location'] as String? ?? '';
-          final content = f['content'] as String? ?? '';
+          final content = (isNote ? f['body'] : f['content']) as String? ?? '';
+          final heading = isNote
+              ? ((f['title'] as String?)?.trim().isNotEmpty ?? false
+                    ? f['title']! as String
+                    : '无标题笔记')
+              : '${f['date'] ?? ''}${location.isEmpty ? '' : ' · $location'}';
           return ListView(
             padding: const EdgeInsets.all(JkTokens.spacingLg),
             children: [
-              Text(
-                '${f['date'] ?? ''}${location.isEmpty ? '' : ' · $location'}',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              Text(heading, style: Theme.of(context).textTheme.titleMedium),
               Text(
                 _time(widget.revision.createdAt),
                 style: TextStyle(color: c.textSecondary),
@@ -202,7 +228,11 @@ class _RevisionDetailState extends ConsumerState<_RevisionDetail> {
               if (content.trim().isEmpty)
                 Text('（无内容）', style: TextStyle(color: c.textDisabled))
               else
-                MarkdownBody(data: content, selectable: true),
+                MarkdownBody(
+                  data: content,
+                  selectable: true,
+                  imageBuilder: markdownImage,
+                ),
               const SizedBox(height: JkTokens.spacingXl),
               JkButton(
                 key: const Key('revision-restore'),

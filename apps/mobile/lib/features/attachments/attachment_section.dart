@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:open_filex/open_filex.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
@@ -11,6 +10,7 @@ import '../../core/api/api_exception.dart';
 import '../../shared/ui/jk_feedback.dart';
 import 'attachment_providers.dart';
 import 'attachment_service.dart';
+import 'attachment_viewers.dart';
 
 /// 选择文件（测试中替换）。用户取消时返回空列表。
 final filePickerProvider = Provider<Future<List<PlatformFile>> Function()>(
@@ -27,6 +27,25 @@ class AttachmentSection extends ConsumerWidget {
 
   final String ownerEntity;
   final String ownerId;
+
+  Future<void> _record(BuildContext context, WidgetRef ref) async {
+    final file = await showModalBottomSheet<File>(
+      context: context,
+      showDragHandle: true,
+      isDismissible: false,
+      builder: (_) => const RecorderSheet(),
+    );
+    if (file == null) return;
+    await ref
+        .read(attachmentServiceProvider)
+        .add(
+          ownerEntity: ownerEntity,
+          ownerId: ownerId,
+          source: file,
+          fileName: file.uri.pathSegments.last,
+        );
+    await file.delete();
+  }
 
   Future<void> _add(BuildContext context, WidgetRef ref) async {
     final picked = await ref.read(filePickerProvider)();
@@ -53,6 +72,12 @@ class AttachmentSection extends ConsumerWidget {
           children: [
             Text('附件', style: Theme.of(context).textTheme.titleSmall),
             const Spacer(),
+            TextButton.icon(
+              key: const Key('attachment-record'),
+              onPressed: () => _record(context, ref),
+              icon: const Icon(Icons.mic_none, size: 18),
+              label: const Text('录音'),
+            ),
             TextButton.icon(
               key: const Key('attachment-add'),
               onPressed: () => _add(context, ref),
@@ -94,10 +119,7 @@ class _AttachmentTileState extends ConsumerState<_AttachmentTile> {
       final file = await ref
           .read(attachmentServiceProvider)
           .open(widget.item.id);
-      final res = await OpenFilex.open(file.path, type: widget.item.mime);
-      if (res.type != ResultType.done && mounted) {
-        showJkToast(context, '没有可以打开该文件的应用');
-      }
+      if (mounted) await showAttachment(context, ref, widget.item, file);
     } on ApiException catch (e) {
       if (mounted) showJkToast(context, e.message, kind: JkToastKind.error);
     } on Object {

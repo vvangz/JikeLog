@@ -413,6 +413,9 @@ String mimeOf(String fileName) {
         'mp3': 'audio/mpeg',
         'm4a': 'audio/mp4',
         'wav': 'audio/wav',
+        'aac': 'audio/aac',
+        'ogg': 'audio/ogg',
+        'amr': 'audio/amr',
         'mp4': 'video/mp4',
       }[ext] ??
       'application/octet-stream';

@@ -16,8 +16,11 @@ export interface BridgeOptions {
 export interface Bridge {
   /** 处理 Flutter 发来的一条消息（JSON 字符串）。 */
   receive(json: string): void;
-  /** 立即返回当前 Markdown，并取消尚未发出的变化通知（离开页面前调用）。 */
-  flush(): string | null;
+  /**
+   * 立即返回尚未发出的修改（离开页面、切换格式前调用），同时计入修改序号。
+   * 没有尚未发出的修改时返回 null。
+   */
+  flush(): { md: string; rev: number } | null;
 }
 
 export function applyTheme(root: HTMLElement, theme: Theme): void {
@@ -30,18 +33,32 @@ export function applyTheme(root: HTMLElement, theme: Theme): void {
 export function createBridge({ element, post, root = document.documentElement }: BridgeOptions): Bridge {
   let editor: NoteEditor | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** 已发给 Flutter 的修改次数。 */
+  let rev = 0;
   const send = (m: Outbound) => post(JSON.stringify(m));
   const images = createImageResolver((id) => send({ type: 'requestImage', id }));
 
-  const emitChange = () => {
+  /** 取出尚未发出的修改并计入序号。 */
+  const takeChange = (): { md: string; rev: number } | null => {
+    if (!editor || timer === undefined) return null;
+    clearTimeout(timer);
     timer = undefined;
-    if (editor) send({ type: 'change', markdown: editor.markdown() });
+    rev += 1;
+    return { md: editor.markdown(), rev };
+  };
+
+  const emitChange = () => {
+    const c = takeChange();
+    if (c) send({ type: 'change', markdown: c.md, rev: c.rev });
   };
 
   const handlers = {
     init(markdown: string, placeholder: string, theme: Theme) {
       applyTheme(root, theme);
       editor?.destroy();
+      clearTimeout(timer);
+      timer = undefined;
+      rev = 0;
       editor = new NoteEditor({
         element,
         markdown,
@@ -84,12 +101,15 @@ export function createBridge({ element, post, root = document.documentElement }:
       }
       switch (m.type) {
         case 'setMarkdown':
-          // 远端内容覆盖前先发出本地尚未通知的修改，由 Flutter 一侧合并
-          if (timer !== undefined) {
-            clearTimeout(timer);
-            emitChange();
+          // 有 Flutter 尚未收到的修改：先发出这些修改并拒绝替换，Flutter 合并后重试，
+          // 否则替换会抹掉这些修改
+          emitChange();
+          if (rev !== m.expectRev) {
+            send({ type: 'setRejected' });
+            break;
           }
           editor.setMarkdown(m.markdown);
+          send({ type: 'setApplied' });
           break;
         case 'command':
           editor.run(m.name);
@@ -105,11 +125,6 @@ export function createBridge({ element, post, root = document.documentElement }:
           break;
       }
     },
-    flush() {
-      if (!editor || timer === undefined) return null;
-      clearTimeout(timer);
-      timer = undefined;
-      return editor.markdown();
-    },
+    flush: takeChange,
   };
 }

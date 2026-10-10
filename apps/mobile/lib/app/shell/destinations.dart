@@ -29,7 +29,7 @@ const moduleDestinations = [
     path: '/notes',
     label: '笔记',
     icon: JkIcons.notes,
-    description: '支持 Markdown 与富文本、代码块、表格、待办清单，可关联到工作日志。将在 v0.4.0 开放。',
+    description: '支持 Markdown 与富文本、代码块、表格、待办清单，可关联到工作日志。',
   ),
   Destination(
     path: '/memos',
