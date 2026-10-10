@@ -107,3 +107,46 @@ SELECT id, object_key FROM attachments WHERE status = 'deleted' ORDER BY created
 
 -- name: PurgeAttachment :exec
 DELETE FROM attachments WHERE id = @id AND status = 'deleted';
+
+-- name: ListMemoReminders :many
+SELECT offset_min, fire_at FROM memo_reminders WHERE memo_id = @memo_id;
+
+-- name: DeleteMemoReminder :exec
+DELETE FROM memo_reminders WHERE memo_id = @memo_id AND offset_min = @offset_min;
+
+-- name: UpsertMemoReminder :exec
+-- 时刻变化的提醒重新开始计数；时刻未变的保持原样（可能正在发送）。
+INSERT INTO memo_reminders (memo_id, user_id, offset_min, fire_at)
+VALUES (@memo_id, @user_id, @offset_min, @fire_at)
+ON CONFLICT (memo_id, offset_min) DO UPDATE
+SET fire_at = EXCLUDED.fire_at, attempts = 0, lease_until = NULL
+WHERE memo_reminders.fire_at <> EXCLUDED.fire_at;
+
+-- name: ClaimDueReminders :many
+-- 领取到期且未被其他实例领取的提醒，并把领取期限写回（调用方在事务内执行）。
+UPDATE memo_reminders AS m
+SET lease_until = @lease_until::timestamptz, attempts = m.attempts + 1
+FROM (
+    SELECT r.memo_id, r.offset_min FROM memo_reminders AS r
+    WHERE r.fire_at <= @now::timestamptz AND (r.lease_until IS NULL OR r.lease_until <= @now::timestamptz)
+    ORDER BY r.fire_at
+    LIMIT @max_rows
+    FOR UPDATE SKIP LOCKED
+) AS due
+WHERE m.memo_id = due.memo_id AND m.offset_min = due.offset_min
+RETURNING m.memo_id, m.user_id, m.offset_min, m.fire_at, m.attempts;
+
+-- name: FinishReminder :exec
+-- 只删除本次领取的那一条：期间备忘录被修改时，提醒已被替换（fire_at 不同），保留新的。
+DELETE FROM memo_reminders
+WHERE memo_id = @memo_id AND offset_min = @offset_min AND fire_at = @fire_at;
+
+-- name: ListReminderTargets :many
+-- 需要服务端推送的设备：有推送标识，且不能确定它已在本地按时提醒
+-- （没有本地提醒能力、尚未同步到这一版备忘录，或提醒时刻超出了本地闹钟覆盖的范围）。
+SELECT id, push_provider, push_token, time_zone FROM devices
+WHERE user_id = @user_id AND revoked_at IS NULL AND push_token IS NOT NULL
+  AND NOT (
+    local_reminders AND last_ack_seq >= @memo_seq::bigint
+    AND (local_until IS NULL OR local_until >= @fire_at::timestamptz)
+  );

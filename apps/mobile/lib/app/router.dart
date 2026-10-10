@@ -11,6 +11,8 @@ import '../features/auth/login_page.dart';
 import '../features/auth/register_pages.dart';
 import '../features/consent/consent_controller.dart';
 import '../features/consent/consent_page.dart';
+import '../features/memos/memo_editor_page.dart';
+import '../features/memos/memos_page.dart';
 import '../features/modules/module_page.dart';
 import '../features/settings/about_page.dart';
 import '../features/settings/settings_page.dart';
@@ -107,6 +109,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 child: switch (d.path) {
                   '/worklog' => const WorklogListPage(),
                   '/notes' => const NotesListPage(),
+                  '/memos' => const MemosPage(),
                   _ => ModulePage(destination: d),
                 },
               ),
@@ -141,6 +144,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/notes/:id/revisions',
         builder: (_, state) =>
             RevisionsPage(entity: 'note', id: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/memos/:id',
+        builder: (_, state) => MemoEditorPage(
+          id: state.pathParameters['id']!,
+          day: DateTime.tryParse(state.uri.queryParameters['day'] ?? ''),
+        ),
+      ),
+      GoRoute(
+        path: '/memos/:id/revisions',
+        builder: (_, state) =>
+            RevisionsPage(entity: 'memo', id: state.pathParameters['id']!),
       ),
       GoRoute(path: '/settings/about', builder: (_, _) => const AboutPage()),
       GoRoute(path: '/account/phone', builder: (_, _) => const PhonePage()),

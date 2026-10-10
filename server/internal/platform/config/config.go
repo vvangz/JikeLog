@@ -38,6 +38,17 @@ const (
 	KMSProviderAliyun = "aliyun"
 )
 
+// 推送通道（ADR-008）。
+const (
+	// PushProviderLog 只在日志中记录推送（不含内容），用于开发、测试与尚未开通推送服务的环境；
+	// 此时提醒只靠 App 的本地闹钟。
+	PushProviderLog   = "log"
+	PushProviderJPush = "jpush"
+)
+
+// DefaultJPushEndpoint 为极光推送 REST API v3 的推送地址。
+const DefaultJPushEndpoint = "https://api.jpush.cn/v3/push"
+
 // 开发示例密钥：由固定字符串派生、随仓库公开（deploy/.env.example），staging / production 禁止使用。
 const (
 	DevE2EPrivateKey = "n8u4Sv4wcSFZAL1k17mtV7bg+ZhRoPOKQn/w5YPLLlM="
@@ -59,6 +70,7 @@ type Config struct {
 	E2E     E2E     `envPrefix:"E2E_"`
 	KMS     KMS     `envPrefix:"KMS_"`
 	Storage Storage `envPrefix:"STORAGE_"`
+	Push    Push    `envPrefix:"PUSH_"`
 	// Attachment 为附件限制。
 	Attachment Attachment `envPrefix:"ATTACHMENT_"`
 }
@@ -160,6 +172,15 @@ type Attachment struct {
 	MaxSize int64 `env:"MAX_SIZE" envDefault:"104857600"`
 	// Quota 为每个账号的附件总量上限，默认 2GB。
 	Quota int64 `env:"QUOTA" envDefault:"2147483648"`
+}
+
+// Push 为推送配置。
+type Push struct {
+	Provider string `env:"PROVIDER" envDefault:"log"`
+	// JPushAppKey 与 JPushMasterSecret 来自极光控制台，Provider=jpush 时必填。
+	JPushAppKey       string `env:"JPUSH_APP_KEY"`
+	JPushMasterSecret string `env:"JPUSH_MASTER_SECRET"`
+	JPushEndpoint     string `env:"JPUSH_ENDPOINT" envDefault:"https://api.jpush.cn/v3/push"`
 }
 
 // Load 从进程环境变量加载配置。

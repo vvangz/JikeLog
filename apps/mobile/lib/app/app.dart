@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/sync/sync_providers.dart';
+import '../features/reminders/reminder_coordinator.dart';
 import '../features/settings/settings_controller.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
@@ -15,6 +16,8 @@ class JikeLogApp extends ConsumerWidget {
     final settings = ref.watch(settingsControllerProvider);
     // 按登录状态启停同步
     ref.watch(syncCoordinatorProvider);
+    // 按登录与隐私同意状态启停提醒、推送登记与系统日历
+    ref.watch(reminderCoordinatorProvider);
     return MaterialApp.router(
       title: '即刻日志',
       debugShowCheckedModeBanner: false,

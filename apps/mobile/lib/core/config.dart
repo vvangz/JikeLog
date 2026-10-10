@@ -38,5 +38,5 @@ abstract final class AppConfig {
   }
 
   /// 隐私政策版本：政策更新后递增，用户需重新同意。
-  static const privacyPolicyVersion = 1;
+  static const privacyPolicyVersion = 2;
 }

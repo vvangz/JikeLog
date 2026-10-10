@@ -17,6 +17,7 @@ abstract final class Entities {
   static const attachment = 'attachment';
   static const note = 'note';
   static const noteFolder = 'note_folder';
+  static const memo = 'memo';
 
   static const specs = <String, Map<String, FieldSpec>>{
     worklog: {
@@ -44,6 +45,14 @@ abstract final class Entities {
       'worklogs': FieldSpec(text: true),
     },
     noteFolder: {'name': FieldSpec(sensitive: true), 'parentId': FieldSpec()},
+    // 备忘录（ADR-008）：只有内容加密，时间与提醒供服务端按时推送
+    memo: {
+      'content': FieldSpec(sensitive: true, text: true),
+      'at': FieldSpec(),
+      'allDay': FieldSpec(),
+      'reminders': FieldSpec(),
+      'done': FieldSpec(),
+    },
   };
 
   static FieldSpec field(String entity, String name) =>

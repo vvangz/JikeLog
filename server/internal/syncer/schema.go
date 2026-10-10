@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -27,6 +28,10 @@ const (
 	KindUUID
 	// KindFlag 为开关，只能是 0 或 1。
 	KindFlag
+	// KindTime 为时刻：Unix 毫秒（UTC），范围为 2000–2199 年。
+	KindTime
+	// KindOffsets 为提前提醒的分钟数列表：升序、不重复、逗号分隔，如 "0,15,1440"；空串表示不提醒。
+	KindOffsets
 )
 
 // Field 为字段定义。
@@ -59,6 +64,7 @@ const (
 	EntityAttachment = "attachment"
 	EntityNote       = "note"
 	EntityNoteFolder = "note_folder"
+	EntityMemo       = "memo"
 )
 
 // 字段长度上限。
@@ -72,6 +78,20 @@ const (
 	// 标签与关联的工作日志为多行文本，每行一个（ADR-007）。
 	maxTagsLen     = 2_000
 	maxWorklogsLen = 8_000
+
+	maxMemoLen = 5_000
+)
+
+// 备忘录提醒：最多 MaxReminders 个，每个最多提前 MaxReminderOffset 分钟（与用户设置中的默认提醒一致）。
+const (
+	MaxReminders      = 5
+	MaxReminderOffset = 30 * 24 * 60
+)
+
+// KindTime 的取值范围：2000-01-01 至 2200-01-01（UTC，不含）。
+const (
+	minTimeMillis = 946_684_800_000
+	maxTimeMillis = 7_258_118_400_000
 )
 
 // 笔记格式：两种格式的正文都是 Markdown，只决定默认用哪种编辑方式打开（ADR-007）。
@@ -119,6 +139,17 @@ var Registry = map[string]Entity{
 			"pinned":   {Kind: KindFlag},
 			"tags":     {Kind: KindText, MaxLen: maxTagsLen, Sensitive: true},
 			"worklogs": {Kind: KindText, MaxLen: maxWorklogsLen},
+		},
+	},
+	// 备忘录（ADR-008）：时间与提醒不加密，服务端据此按时推送。
+	EntityMemo: {
+		Name: EntityMemo,
+		Fields: map[string]Field{
+			"content":   {Kind: KindText, MaxLen: maxMemoLen, Required: true, Sensitive: true},
+			"at":        {Kind: KindTime, Required: true},
+			"allDay":    {Kind: KindFlag},
+			"reminders": {Kind: KindOffsets},
+			"done":      {Kind: KindFlag},
 		},
 	},
 }
@@ -171,11 +202,14 @@ func (f Field) CheckValue(v Value) (Value, error) {
 	}
 }
 
-func (f Field) isInt() bool { return f.Kind == KindInt || f.Kind == KindFlag }
+func (f Field) isInt() bool { return f.Kind == KindInt || f.Kind == KindFlag || f.Kind == KindTime }
 
 func (f Field) checkInt(n int64) (Value, error) {
 	if f.Kind == KindFlag && n != 0 && n != 1 {
 		return nil, fmt.Errorf("只能是 0 或 1")
+	}
+	if f.Kind == KindTime && (n < minTimeMillis || n >= maxTimeMillis) {
+		return nil, fmt.Errorf("时间超出范围")
 	}
 	return n, nil
 }
@@ -193,6 +227,10 @@ func (f Field) checkString(s string) (Value, error) {
 		if _, err := uuid.Parse(s); err != nil || len(s) != 36 {
 			return nil, fmt.Errorf("必须是 UUID")
 		}
+	case KindOffsets:
+		if err := checkOffsets(s); err != nil {
+			return nil, err
+		}
 	default:
 		if f.MaxLen > 0 && utf8.RuneCountInString(s) > f.MaxLen {
 			return nil, fmt.Errorf("不能超过 %d 个字符", f.MaxLen)
@@ -205,4 +243,45 @@ func (f Field) checkString(s string) (Value, error) {
 		}
 	}
 	return s, nil
+}
+
+// checkOffsets 校验提醒列表为规范形式（升序、不重复、无前导零），使各端写出的值逐字相同。
+func checkOffsets(s string) error {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	if len(parts) > MaxReminders {
+		return fmt.Errorf("最多设置 %d 个提醒", MaxReminders)
+	}
+	prev := -1
+	for _, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || strconv.Itoa(n) != p {
+			return fmt.Errorf("提醒必须是分钟数")
+		}
+		if n < 0 || n > MaxReminderOffset {
+			return fmt.Errorf("提前提醒范围为 0 分钟到 30 天")
+		}
+		if n <= prev {
+			return fmt.Errorf("提醒必须升序且不重复")
+		}
+		prev = n
+	}
+	return nil
+}
+
+// ParseOffsets 解析已校验的提醒列表。
+func ParseOffsets(s string) []int {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]int, 0, len(parts))
+	for _, p := range parts {
+		if n, err := strconv.Atoi(p); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
 }

@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jikelog/core/config.dart';
 import 'package:jikelog/app/app.dart';
 import 'package:jikelog/core/storage/stores.dart';
 import 'package:jikelog/core/sync/sync_providers.dart';
@@ -178,7 +179,7 @@ void main() {
           ...testOverrides(
             backend: b,
             store: MemoryStore({
-              'consent.version': '1',
+              'consent.version': '${AppConfig.privacyPolicyVersion}',
               'auth.user': '{"id":"0192a000-0000-7000-8000-000000000001","username":"zhangsan","nickname":"张三","hasPhone":false,"createdAt":"2026-10-09T08:00:00Z"}',
             }),
             tokens: MemoryTokenStore(testTokens),

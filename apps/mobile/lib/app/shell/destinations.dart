@@ -35,7 +35,7 @@ const moduleDestinations = [
     path: '/memos',
     label: '备忘录',
     icon: JkIcons.memos,
-    description: '设定日期时间与提前提醒，与日历关联，到点推送提醒。将在 v0.5.0 开放。',
+    description: '设定日期时间与提前提醒，与日历关联，到点推送提醒。',
   ),
   Destination(
     path: '/ledger',

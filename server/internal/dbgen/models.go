@@ -43,6 +43,20 @@ type Device struct {
 	TokensValidAfter time.Time
 	RevokedAt        *time.Time
 	LastAckSeq       int64
+	PushProvider     *string
+	PushToken        *string
+	TimeZone         string
+	LocalReminders   bool
+	LocalUntil       *time.Time
+}
+
+type MemoReminder struct {
+	MemoID     uuid.UUID
+	UserID     uuid.UUID
+	OffsetMin  int32
+	FireAt     time.Time
+	LeaseUntil *time.Time
+	Attempts   int32
 }
 
 type Record struct {

@@ -89,19 +89,22 @@ ORDER BY last_active_at DESC;
 
 -- name: RevokeDevice :many
 UPDATE devices
-SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
+SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL,
+    push_provider = NULL, push_token = NULL
 WHERE id = @id AND user_id = @user_id AND revoked_at IS NULL
 RETURNING id;
 
 -- name: RevokeOtherDevices :many
 UPDATE devices
-SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
+SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL,
+    push_provider = NULL, push_token = NULL
 WHERE user_id = @user_id AND id <> @keep_id AND revoked_at IS NULL
 RETURNING id;
 
 -- name: RevokeAllDevices :many
 UPDATE devices
-SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
+SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL,
+    push_provider = NULL, push_token = NULL
 WHERE user_id = @user_id AND revoked_at IS NULL
 RETURNING id;
 
@@ -120,3 +123,24 @@ UPDATE user_settings SET
     updated_at        = now()
 WHERE user_id = @user_id
 RETURNING *;
+
+-- name: ReleasePushToken :exec
+-- 推送标识换到同一账号的另一台设备（重装 App），或原设备已下线、会话已过期（同一部手机换了账号）时，
+-- 从原设备上摘除。仍在使用中的其他账号的设备不摘除，由调用方报告冲突，防止抢占他人的推送。
+UPDATE devices SET push_provider = NULL, push_token = NULL
+WHERE push_provider = @push_provider AND push_token = @push_token AND id <> @id
+  AND (user_id = @user_id OR revoked_at IS NOT NULL OR refresh_expires_at < now());
+
+-- name: SetDevicePush :execrows
+UPDATE devices SET
+    push_provider   = sqlc.narg(push_provider),
+    push_token      = sqlc.narg(push_token),
+    time_zone       = @time_zone,
+    local_reminders = @local_reminders,
+    local_until     = sqlc.narg(local_until)
+WHERE id = @id AND user_id = @user_id AND revoked_at IS NULL;
+
+-- name: ClearPushByToken :exec
+-- 推送通道报告标识已失效（App 被卸载等）。
+UPDATE devices SET push_provider = NULL, push_token = NULL
+WHERE push_provider = @push_provider AND push_token = @push_token;

@@ -440,6 +440,31 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  /api/v1/me/push:
+    put:
+      tags: [account]
+      operationId: updatePush
+      summary: 登记当前设备的推送
+      description: |
+        App 同意隐私政策并取得推送标识后调用，退出登录时设备上的登记随之清除（ADR-008）。
+        服务端在备忘录提醒时刻，对尚未同步到该备忘录、或不能在本地按时提醒的设备发送推送。
+        推送标识正被其他账号仍在使用的设备占用时返回 409（PUSH_TOKEN_IN_USE）；每台设备每小时最多调用 30 次。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushRegistration'
+      responses:
+        '200':
+          description: 已保存
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AckEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
   /api/v1/me/settings:
     get:
       tags: [account]
@@ -1241,6 +1266,34 @@ components:
     ThemeMode:
       type: string
       enum: [system, light, dark]
+
+    PushRegistration:
+      type: object
+      required: [timeZone, localReminders]
+      properties:
+        provider:
+          type: string
+          enum: [jpush]
+          nullable: true
+          description: 推送通道；为空表示该设备不接收服务端推送
+        token:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 128
+          description: 推送通道分配的设备标识（极光 Registration ID），与 provider 同时为空或同时非空
+        timeZone:
+          type: string
+          maxLength: 64
+          description: 设备时区（IANA 名称，如 Asia/Shanghai），推送文案中的时间按它显示
+        localReminders:
+          type: boolean
+          description: 设备能否自己按时弹出提醒（已授予通知与精确闹钟权限）
+        localUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: 本地闹钟覆盖到的时刻（设备只排定最近若干条提醒），晚于此刻的提醒仍由服务端推送；为空表示全部覆盖
 
     SettingsInput:
       type: object

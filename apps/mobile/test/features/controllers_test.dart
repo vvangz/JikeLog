@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jikelog/core/config.dart';
 import 'package:jikelog/app/router.dart';
 import 'package:jikelog/core/api/api_exception.dart';
 import 'package:jikelog/core/api/models.dart';
@@ -31,7 +32,11 @@ ProviderContainer _container(
   bool consented = true,
 }) {
   final kv = store ?? MemoryStore();
-  if (consented) unawaited(kv.setString('consent.version', '1'));
+  if (consented) {
+    unawaited(
+      kv.setString('consent.version', '${AppConfig.privacyPolicyVersion}'),
+    );
+  }
   final c = ProviderContainer(
     overrides: testOverrides(backend: b, store: kv, tokens: tokens),
   );

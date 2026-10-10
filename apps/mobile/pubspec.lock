@@ -213,7 +213,39 @@ packages:
     dependency: transitive
     description:
       name: dbus
-      sha256: f7db8504e715b835f5ebe5fe74604ccd961d504c73389a5d8e81bafc2e2f3612
+      sha256: a48d5da28e89bd02196e80d81ed8d7954923d00a0f4a68cc20b575038f023383
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.7.15"
+  device_calendar_plus:
+    dependency: "direct main"
+    description:
+      name: device_calendar_plus
+      sha256: bf639338c557e0b1e2c0a3ce1fdf202cf9b2fdf71467036da61c17784f3dd769
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.10.1"
+  device_calendar_plus_android:
+    dependency: transitive
+    description:
+      name: device_calendar_plus_android
+      sha256: "98c15947e20819a18fe31e1104a9a13f466afd65c52a5d6c43cb5c8c017c3fc4"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.9.1"
+  device_calendar_plus_ios:
+    dependency: transitive
+    description:
+      name: device_calendar_plus_ios
+      sha256: "69f2635c4d147515a0894fd9926a2f6d43d16734a136560d1c2a7f5ce60c7a75"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.9.1"
+  device_calendar_plus_platform_interface:
+    dependency: transitive
+    description:
+      name: device_calendar_plus_platform_interface
+      sha256: "2fed23f4ee9cf517e1a21585828d452d4c76aa8e346be8eea3ec1536fe90fa15"
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.8.0"
@@ -341,10 +373,10 @@ packages:
     dependency: transitive
     description:
       name: file_picker_linux
-      sha256: c6562fc7d426db2fb85ea66fe2627953d2709932df5584ceaacf0aa5e39cf4da
+      sha256: e7db600f50672ce5ebbe422ac0906e0f3d2a476188cc93e7126afee12bf08063
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "2.0.2"
+    version: "2.0.0"
   file_picker_platform_interface:
     dependency: transitive
     description:
@@ -382,6 +414,46 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "6.0.0"
+  flutter_local_notifications:
+    dependency: "direct main"
+    description:
+      name: flutter_local_notifications
+      sha256: "357be7ff996dc272e2037c69c1bdd5d1bd21172219d55f8bd2e11aeea602e6d3"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "22.3.1"
+  flutter_local_notifications_linux:
+    dependency: transitive
+    description:
+      name: flutter_local_notifications_linux
+      sha256: "9ca97e63776f29ab1b955725c09999fc2c150523269db150c39274f2a43c5a8b"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "8.0.1"
+  flutter_local_notifications_platform_interface:
+    dependency: transitive
+    description:
+      name: flutter_local_notifications_platform_interface
+      sha256: "43c3761d916c9bd3d5c7ebbc44d82f4990329840c0c5d62ad5260cc1b5d399bd"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "12.2.0"
+  flutter_local_notifications_web:
+    dependency: transitive
+    description:
+      name: flutter_local_notifications_web
+      sha256: "516afaf97a2d1e67a036c6617321b00d205d72f7a67b6eccf936cd565f985878"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "1.0.0"
+  flutter_local_notifications_windows:
+    dependency: transitive
+    description:
+      name: flutter_local_notifications_windows
+      sha256: "6f43bdd03b171b7a90f22647506fea33e2bb12294b7c7c7a3d690e960a382945"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "3.1.1"
   flutter_localizations:
     dependency: transitive
     description: flutter
@@ -557,6 +629,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.0.0"
+  jpush_flutter:
+    dependency: "direct main"
+    description:
+      name: jpush_flutter
+      sha256: ff08d5cb06788756ef1704a4b7f70e740e5bb7097a73c2e67881f34c56c9660c
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "3.5.8"
   json_annotation:
     dependency: transitive
     description:
@@ -1029,6 +1109,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "3.0.0"
+  simple_gesture_detector:
+    dependency: transitive
+    description:
+      name: simple_gesture_detector
+      sha256: ba2cd5af24ff20a0b8d609cec3f40e5b0744d2a71804a2616ae086b9c19d19a3
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.2.1"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -1130,6 +1218,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "3.4.2"
+  table_calendar:
+    dependency: "direct main"
+    description:
+      name: table_calendar
+      sha256: c46a7b6e853154bde099cc6b9d151268a721b16c24e6cacc5c9ee8dfe6a55243
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "3.3.0"
   term_glyph:
     dependency: transitive
     description:
@@ -1146,6 +1242,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.7.12"
+  timezone:
+    dependency: "direct main"
+    description:
+      name: timezone
+      sha256: "981d1020d6ef8fe1e7b3de5054e5b25579ae7c403d7734adc508ffc47668e9cb"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.11.1"
   typed_data:
     dependency: transitive
     description:

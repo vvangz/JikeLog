@@ -11,6 +11,7 @@ environment:
 dependencies:
   crypto: ^3.0.7
   cryptography: ^2.9.0
+  device_calendar_plus: ^0.10.1
   device_info_plus: ^13.3.0
   diff_match_patch: ^0.4.1
   dio: ^5.11.1
@@ -19,10 +20,12 @@ dependencies:
   file_picker: ^13.1.0
   flutter:
     sdk: flutter
+  flutter_local_notifications: ^22.3.1
   flutter_markdown_plus: ^1.0.12
   flutter_riverpod: ^3.4.3
   flutter_secure_storage: ^11.2.0
   go_router: ^18.0.2
+  jpush_flutter: ^3.5.8
   just_audio: ^0.10.6
   open_filex: ^4.7.0
   package_info_plus: ^10.2.2
@@ -31,6 +34,8 @@ dependencies:
   pdfx: ^2.11.0
   record: ^7.1.2
   shared_preferences: ^2.5.6
+  table_calendar: ^3.3.0
+  timezone: ^0.11.1
   url_launcher: ^6.3.3
   uuid: ^4.6.0
   web_socket_channel: ^3.0.3

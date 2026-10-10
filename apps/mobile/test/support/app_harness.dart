@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jikelog/core/config.dart';
 import 'package:jikelog/app/app.dart';
 import 'package:jikelog/core/api/models.dart';
 import 'package:jikelog/core/storage/stores.dart';
@@ -55,7 +56,7 @@ Future<FakeBackend> pumpApp(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final store = MemoryStore({
-    if (consented) 'consent.version': '1',
+    if (consented) 'consent.version': '${AppConfig.privacyPolicyVersion}',
     if (signedIn) 'auth.user': jsonEncode(user ?? userJson()),
   });
   await tester.pumpWidget(

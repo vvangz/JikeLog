@@ -12,6 +12,22 @@ import (
 	"github.com/google/uuid"
 )
 
+const clearPushByToken = `-- name: ClearPushByToken :exec
+UPDATE devices SET push_provider = NULL, push_token = NULL
+WHERE push_provider = $1 AND push_token = $2
+`
+
+type ClearPushByTokenParams struct {
+	PushProvider *string
+	PushToken    *string
+}
+
+// 推送通道报告标识已失效（App 被卸载等）。
+func (q *Queries) ClearPushByToken(ctx context.Context, arg ClearPushByTokenParams) error {
+	_, err := q.db.Exec(ctx, clearPushByToken, arg.PushProvider, arg.PushToken)
+	return err
+}
+
 const createDefaultSettings = `-- name: CreateDefaultSettings :exec
 INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING
 `
@@ -72,7 +88,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) (int64, error) {
 }
 
 const getDeviceByID = `-- name: GetDeviceByID :one
-SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at, last_ack_seq FROM devices WHERE id = $1
+SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at, last_ack_seq, push_provider, push_token, time_zone, local_reminders, local_until FROM devices WHERE id = $1
 `
 
 func (q *Queries) GetDeviceByID(ctx context.Context, id uuid.UUID) (Device, error) {
@@ -96,12 +112,17 @@ func (q *Queries) GetDeviceByID(ctx context.Context, id uuid.UUID) (Device, erro
 		&i.TokensValidAfter,
 		&i.RevokedAt,
 		&i.LastAckSeq,
+		&i.PushProvider,
+		&i.PushToken,
+		&i.TimeZone,
+		&i.LocalReminders,
+		&i.LocalUntil,
 	)
 	return i, err
 }
 
 const getDeviceByRefreshHashForUpdate = `-- name: GetDeviceByRefreshHashForUpdate :one
-SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at, last_ack_seq FROM devices
+SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at, last_ack_seq, push_provider, push_token, time_zone, local_reminders, local_until FROM devices
 WHERE (refresh_hash = $1 OR refresh_prev_hash = $1) AND revoked_at IS NULL
 LIMIT 1
 FOR UPDATE
@@ -129,6 +150,11 @@ func (q *Queries) GetDeviceByRefreshHashForUpdate(ctx context.Context, hash []by
 		&i.TokensValidAfter,
 		&i.RevokedAt,
 		&i.LastAckSeq,
+		&i.PushProvider,
+		&i.PushToken,
+		&i.TimeZone,
+		&i.LocalReminders,
+		&i.LocalUntil,
 	)
 	return i, err
 }
@@ -229,7 +255,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 }
 
 const listActiveDevices = `-- name: ListActiveDevices :many
-SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at, last_ack_seq FROM devices
+SELECT id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at, last_ack_seq, push_provider, push_token, time_zone, local_reminders, local_until FROM devices
 WHERE user_id = $1 AND revoked_at IS NULL
 ORDER BY last_active_at DESC
 `
@@ -261,6 +287,11 @@ func (q *Queries) ListActiveDevices(ctx context.Context, userID uuid.UUID) ([]De
 			&i.TokensValidAfter,
 			&i.RevokedAt,
 			&i.LastAckSeq,
+			&i.PushProvider,
+			&i.PushToken,
+			&i.TimeZone,
+			&i.LocalReminders,
+			&i.LocalUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -272,9 +303,35 @@ func (q *Queries) ListActiveDevices(ctx context.Context, userID uuid.UUID) ([]De
 	return items, nil
 }
 
+const releasePushToken = `-- name: ReleasePushToken :exec
+UPDATE devices SET push_provider = NULL, push_token = NULL
+WHERE push_provider = $1 AND push_token = $2 AND id <> $3
+  AND (user_id = $4 OR revoked_at IS NOT NULL OR refresh_expires_at < now())
+`
+
+type ReleasePushTokenParams struct {
+	PushProvider *string
+	PushToken    *string
+	ID           uuid.UUID
+	UserID       uuid.UUID
+}
+
+// 推送标识换到同一账号的另一台设备（重装 App），或原设备已下线、会话已过期（同一部手机换了账号）时，
+// 从原设备上摘除。仍在使用中的其他账号的设备不摘除，由调用方报告冲突，防止抢占他人的推送。
+func (q *Queries) ReleasePushToken(ctx context.Context, arg ReleasePushTokenParams) error {
+	_, err := q.db.Exec(ctx, releasePushToken,
+		arg.PushProvider,
+		arg.PushToken,
+		arg.ID,
+		arg.UserID,
+	)
+	return err
+}
+
 const revokeAllDevices = `-- name: RevokeAllDevices :many
 UPDATE devices
-SET revoked_at = $1::timestamptz, tokens_valid_after = $1::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
+SET revoked_at = $1::timestamptz, tokens_valid_after = $1::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL,
+    push_provider = NULL, push_token = NULL
 WHERE user_id = $2 AND revoked_at IS NULL
 RETURNING id
 `
@@ -306,7 +363,8 @@ func (q *Queries) RevokeAllDevices(ctx context.Context, arg RevokeAllDevicesPara
 
 const revokeDevice = `-- name: RevokeDevice :many
 UPDATE devices
-SET revoked_at = $1::timestamptz, tokens_valid_after = $1::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
+SET revoked_at = $1::timestamptz, tokens_valid_after = $1::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL,
+    push_provider = NULL, push_token = NULL
 WHERE id = $2 AND user_id = $3 AND revoked_at IS NULL
 RETURNING id
 `
@@ -339,7 +397,8 @@ func (q *Queries) RevokeDevice(ctx context.Context, arg RevokeDeviceParams) ([]u
 
 const revokeOtherDevices = `-- name: RevokeOtherDevices :many
 UPDATE devices
-SET revoked_at = $1::timestamptz, tokens_valid_after = $1::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
+SET revoked_at = $1::timestamptz, tokens_valid_after = $1::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL,
+    push_provider = NULL, push_token = NULL
 WHERE user_id = $2 AND id <> $3 AND revoked_at IS NULL
 RETURNING id
 `
@@ -368,6 +427,42 @@ func (q *Queries) RevokeOtherDevices(ctx context.Context, arg RevokeOtherDevices
 		return nil, err
 	}
 	return items, nil
+}
+
+const setDevicePush = `-- name: SetDevicePush :execrows
+UPDATE devices SET
+    push_provider   = $1,
+    push_token      = $2,
+    time_zone       = $3,
+    local_reminders = $4,
+    local_until     = $5
+WHERE id = $6 AND user_id = $7 AND revoked_at IS NULL
+`
+
+type SetDevicePushParams struct {
+	PushProvider   *string
+	PushToken      *string
+	TimeZone       string
+	LocalReminders bool
+	LocalUntil     *time.Time
+	ID             uuid.UUID
+	UserID         uuid.UUID
+}
+
+func (q *Queries) SetDevicePush(ctx context.Context, arg SetDevicePushParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setDevicePush,
+		arg.PushProvider,
+		arg.PushToken,
+		arg.TimeZone,
+		arg.LocalReminders,
+		arg.LocalUntil,
+		arg.ID,
+		arg.UserID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setDeviceRefresh = `-- name: SetDeviceRefresh :exec
@@ -535,7 +630,7 @@ ON CONFLICT (user_id, installation_id) DO UPDATE SET
     -- 新会话：此前签发给该设备的令牌全部作废
     tokens_valid_after = EXCLUDED.tokens_valid_after,
     revoked_at         = NULL
-RETURNING id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at, last_ack_seq
+RETURNING id, user_id, installation_id, platform, model, os_version, app_version, refresh_hash, refresh_prev_hash, refresh_rotated_at, refresh_expires_at, last_ip, last_active_at, created_at, tokens_valid_after, revoked_at, last_ack_seq, push_provider, push_token, time_zone, local_reminders, local_until
 `
 
 type UpsertDeviceParams struct {
@@ -586,6 +681,11 @@ func (q *Queries) UpsertDevice(ctx context.Context, arg UpsertDeviceParams) (Dev
 		&i.TokensValidAfter,
 		&i.RevokedAt,
 		&i.LastAckSeq,
+		&i.PushProvider,
+		&i.PushToken,
+		&i.TimeZone,
+		&i.LocalReminders,
+		&i.LocalUntil,
 	)
 	return i, err
 }

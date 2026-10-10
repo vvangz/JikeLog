@@ -72,6 +72,20 @@ func TestLoadFromDefaults(t *testing.T) {
 	if cfg.Attachment.MaxSize != 100<<20 || cfg.Attachment.Quota != 2<<30 {
 		t.Errorf("Attachment = %+v, want 100MB / 2GB", cfg.Attachment)
 	}
+	if cfg.Push.Provider != PushProviderLog || cfg.Push.JPushEndpoint != DefaultJPushEndpoint {
+		t.Errorf("Push = %+v, want log / 极光默认地址", cfg.Push)
+	}
+}
+
+func TestJPushConfig(t *testing.T) {
+	cfg, err := LoadFrom(with(map[string]string{
+		"JIKELOG_PUSH_PROVIDER":            "jpush",
+		"JIKELOG_PUSH_JPUSH_APP_KEY":       "app-key",
+		"JIKELOG_PUSH_JPUSH_MASTER_SECRET": "master-secret",
+	}))
+	if err != nil || cfg.Push.JPushAppKey != "app-key" {
+		t.Fatalf("cfg=%+v err=%v", cfg.Push, err)
+	}
 }
 
 func TestStoragePublicEndpoint(t *testing.T) {
@@ -162,6 +176,12 @@ func TestLoadFromRejectsInvalidValues(t *testing.T) {
 		{"传输加密私钥长度错误", map[string]string{"JIKELOG_E2E_PRIVATE_KEY": base64.StdEncoding.EncodeToString([]byte("short"))}},
 		{"旧传输加密私钥格式错误", map[string]string{"JIKELOG_E2E_PREVIOUS_PRIVATE_KEY": "short"}},
 		{"未知 KMS 通道", map[string]string{"JIKELOG_KMS_PROVIDER": "vault"}},
+		{"未知推送通道", map[string]string{"JIKELOG_PUSH_PROVIDER": "fcm"}},
+		{"极光推送缺少密钥", map[string]string{"JIKELOG_PUSH_PROVIDER": "jpush", "JIKELOG_PUSH_JPUSH_APP_KEY": "k"}},
+		{"极光推送地址不是 https", map[string]string{
+			"JIKELOG_PUSH_PROVIDER": "jpush", "JIKELOG_PUSH_JPUSH_APP_KEY": "k", "JIKELOG_PUSH_JPUSH_MASTER_SECRET": "s",
+			"JIKELOG_PUSH_JPUSH_ENDPOINT": "http://api.jpush.cn/v3/push",
+		}},
 		{"缺少本地主密钥", map[string]string{"JIKELOG_KMS_LOCAL_MASTER_KEY": ""}},
 		{"本地主密钥格式错误", map[string]string{"JIKELOG_KMS_LOCAL_MASTER_KEY": "short"}},
 		{"生产环境使用示例传输私钥", prod(map[string]string{"JIKELOG_E2E_PRIVATE_KEY": DevE2EPrivateKey})},
@@ -234,11 +254,13 @@ func TestErrorsDoNotLeakSecrets(t *testing.T) {
 		"JIKELOG_KMS_LOCAL_MASTER_KEY": "kms-secret-value",
 		"JIKELOG_DB_URL":               "mysql://user:db-password@h/db",
 		"JIKELOG_REDIS_URL":            "http://:redis-password@h",
+		"JIKELOG_PUSH_PROVIDER":        "jpush",
+		"JIKELOG_PUSH_JPUSH_APP_KEY":   "jpush-key-value",
 	}))
 	if err == nil {
 		t.Fatal("want error")
 	}
-	for _, s := range []string{secret, "db-password", "redis-password", "e2e-secret-value", "kms-secret-value"} {
+	for _, s := range []string{secret, "db-password", "redis-password", "e2e-secret-value", "kms-secret-value", "jpush-key-value"} {
 		if strings.Contains(err.Error(), s) {
 			t.Errorf("错误信息泄露了敏感值 %q：%v", s, err)
 		}

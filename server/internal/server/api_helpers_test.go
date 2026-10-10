@@ -52,6 +52,8 @@ type testApp struct {
 	sms   *auth.MockSender
 	mr    *miniredis.Miniredis
 	clock *testClock
+	// pushes 记录发出的推送
+	pushes *fakePusher
 	// ip 为请求来源地址，可修改以模拟不同客户端
 	ip string
 }
@@ -75,16 +77,18 @@ func newTestApp(t *testing.T) *testApp {
 	if err := store.EnsureBucket(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	pushes := &fakePusher{}
 	app, err := NewApp(context.Background(), Options{
 		Name: "jikelog-api", Config: cfg, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Pool: pool, Redis: rdb, Store: store, Argon2: &auth.Argon2Params{MemoryKiB: 64, Time: 1, Threads: 1}, Now: clk.Now,
+		Pusher: pushes,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return &testApp{
 		t: t, h: app.Handler, app: app, pool: pool, store: store,
-		sms: app.SMS.(*auth.MockSender), mr: mr, clock: clk, ip: "198.51.100.1",
+		sms: app.SMS.(*auth.MockSender), mr: mr, clock: clk, pushes: pushes, ip: "198.51.100.1",
 	}
 }
 
