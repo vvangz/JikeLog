@@ -75,13 +75,26 @@ class LocalFiles extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [Records, SyncMeta, LocalFiles])
+/// 派生索引：记录引用的标签、工作日志、文件夹（ADR-007），随记录写入而更新。
+@DataClassName('RefRow')
+class RecordRefs extends Table {
+  TextColumn get recordId => text()();
+
+  /// tag / worklog / folder。
+  TextColumn get kind => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column> get primaryKey => {recordId, kind, value};
+}
+
+@DriftDatabase(tables: [Records, SyncMeta, LocalFiles, RecordRefs])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
     : super(executor ?? driftDatabase(name: 'jikelog'));
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -92,14 +105,49 @@ class AppDatabase extends _$AppDatabase {
       );
       await customStatement('CREATE INDEX records_dirty ON records (dirty)');
       await customStatement('CREATE INDEX records_owner ON records (owner_id)');
+      await _createRefsIndex();
+    },
+    onUpgrade: (m, from, to) async {
+      // v1 → v2：笔记的关联索引（v1 中还没有笔记，无需回填）
+      if (from < 2) {
+        await m.createTable(recordRefs);
+        await _createRefsIndex();
+      }
     },
   );
+
+  Future<void> _createRefsIndex() => customStatement(
+    'CREATE INDEX record_refs_value ON record_refs (kind, value)',
+  );
+
+  /// 一条记录的全部引用。
+  Future<List<RefRow>> refsOf(String recordId) =>
+      (select(recordRefs)..where((t) => t.recordId.equals(recordId))).get();
+
+  /// 替换一条记录的引用。
+  Future<void> setRefs(String recordId, List<(String, String)> refs) =>
+      transaction(() async {
+        await (delete(
+          recordRefs,
+        )..where((t) => t.recordId.equals(recordId))).go();
+        await batch(
+          (b) => b.insertAll(recordRefs, [
+            for (final (kind, value) in refs)
+              RecordRefsCompanion.insert(
+                recordId: recordId,
+                kind: kind,
+                value: value,
+              ),
+          ], mode: InsertMode.insertOrIgnore),
+        );
+      });
 
   /// 清空全部本地数据（退出登录或切换账号时）。
   Future<void> wipe() => transaction(() async {
     await delete(records).go();
     await delete(syncMeta).go();
     await delete(localFiles).go();
+    await delete(recordRefs).go();
   });
 
   Future<String?> meta(String key) async => (await (select(

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../db/database.dart';
 import 'hlc.dart';
+import 'refs.dart';
 import 'schema.dart';
 import 'text_patch.dart';
 
@@ -169,6 +170,7 @@ class RecordStore {
   Future<void> remove(String id) => db.transaction(() async {
     final cur = await get(id);
     if (cur == null) return;
+    await db.setRefs(id, const []);
     if (cur.version == 0) {
       await (db.delete(db.records)..where((t) => t.id.equals(id))).go();
       return;
@@ -189,15 +191,39 @@ class RecordStore {
         const RecordsCompanion(hasConflict: Value(false)),
       );
 
+  /// 一次推送的请求体预算：服务端上限为 4MB，留出加密与编码的余量。
+  static const defaultPushBytes = 2500000;
+
   /// 待推送的变更（不含被服务端拒绝且之后未再修改的记录）。
-  Future<List<OutgoingChange>> pending({int limit = 100}) async {
+  /// 一批最多 [limit] 条，并按估算的请求体大小截断；第一条无论多大都会包含在内。
+  Future<List<OutgoingChange>> pending({
+    int limit = 100,
+    int maxBytes = defaultPushBytes,
+  }) async {
     final rows =
         await (db.select(db.records)
               ..where((t) => t.dirty.equals(true) & t.syncError.isNull())
               ..orderBy([(t) => OrderingTerm.asc(t.updatedAt)])
               ..limit(limit))
             .get();
-    return [for (final r in rows) _outgoing(LocalRecord.fromRow(r))];
+    final out = <OutgoingChange>[];
+    var bytes = 0;
+    for (final r in rows) {
+      final c = _outgoing(LocalRecord.fromRow(r));
+      bytes += _estimateBytes(c);
+      if (out.isNotEmpty && bytes > maxBytes) break;
+      out.add(c);
+    }
+    return out;
+  }
+
+  /// 推送时的大致字节数：UTF-8 后再经加密与 Base64（约 4/3），另加字段名与时钟。
+  static int _estimateBytes(OutgoingChange c) {
+    var n = 300;
+    for (final v in [...c.fields.values, ...c.patches.values]) {
+      if (v is String) n += utf8.encode(v).length * 4 ~/ 3 + 64;
+    }
+    return n;
   }
 
   OutgoingChange _outgoing(LocalRecord r) {
@@ -407,15 +433,26 @@ class RecordStore {
           hasConflict: Value(hasConflict),
           syncError: const Value(null),
           updatedAt: _now().millisecondsSinceEpoch,
-          sortKey: Value(_sortKey(entity, fields)),
+          sortKey: Value(_sortKey(entity, fields, clocks)),
           ownerId: Value(
             entity == Entities.attachment ? fields['ownerId'] as String? : null,
           ),
         ),
-      );
+      )
+      .then((_) => db.setRefs(id, deleted ? const [] : refsOf(entity, fields)));
 
-  static String _sortKey(String entity, Map<String, Object?> fields) =>
-      entity == Entities.worklog ? (fields['date'] as String? ?? '') : '';
+  /// 派生的排序键：工作日志按日期；笔记置顶在前，再按最后修改的字段时钟（HLC 可按字典序比较）。
+  static String _sortKey(
+    String entity,
+    Map<String, Object?> fields,
+    Map<String, String> clocks,
+  ) => switch (entity) {
+    Entities.worklog => fields['date'] as String? ?? '',
+    Entities.note =>
+      '${fields['pinned'] == 1 ? 1 : 0}|'
+          '${clocks.values.fold('', (a, b) => b.compareTo(a) > 0 ? b : a)}',
+    _ => '',
+  };
 
   /// 启动时恢复 HLC，保证重启后时钟仍单调。
   static Future<HybridClock> loadClock(

@@ -15,6 +15,8 @@ class FieldSpec {
 abstract final class Entities {
   static const worklog = 'worklog';
   static const attachment = 'attachment';
+  static const note = 'note';
+  static const noteFolder = 'note_folder';
 
   static const specs = <String, Map<String, FieldSpec>>{
     worklog: {
@@ -30,6 +32,18 @@ abstract final class Entities {
       'size': FieldSpec(),
       'sha256': FieldSpec(),
     },
+    // 笔记（ADR-007）：两种格式的正文都是 Markdown；标签与关联的工作日志为多行文本
+    note: {
+      'title': FieldSpec(sensitive: true),
+      'body': FieldSpec(sensitive: true, text: true),
+      'format': FieldSpec(),
+      'folderId': FieldSpec(),
+      'favorite': FieldSpec(),
+      'pinned': FieldSpec(),
+      'tags': FieldSpec(sensitive: true, text: true),
+      'worklogs': FieldSpec(text: true),
+    },
+    noteFolder: {'name': FieldSpec(sensitive: true), 'parentId': FieldSpec()},
   };
 
   static FieldSpec field(String entity, String name) =>

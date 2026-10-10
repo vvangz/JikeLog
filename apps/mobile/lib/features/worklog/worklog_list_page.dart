@@ -6,7 +6,9 @@ import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
 import '../../core/sync/sync_providers.dart';
 import '../../shared/ui/jk_icon.dart';
+import '../../shared/text/markdown_text.dart';
 import '../../shared/ui/jk_states.dart';
+import '../../shared/ui/sync_badges.dart';
 import 'worklog_repository.dart';
 
 const _weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -192,7 +194,11 @@ class _WorklogTile extends StatelessWidget {
                           ),
                         ],
                         const Spacer(),
-                        WorklogBadges(worklog: w),
+                        SyncBadges(
+                          pending: w.pending,
+                          hasConflict: w.hasConflict,
+                          syncError: w.syncError,
+                        ),
                       ],
                     ),
                     const SizedBox(height: JkTokens.spacingXs),
@@ -214,47 +220,3 @@ class _WorklogTile extends StatelessWidget {
     );
   }
 }
-
-/// 同步状态小标记：待同步、冲突、被拒绝。
-class WorklogBadges extends StatelessWidget {
-  const WorklogBadges({super.key, required this.worklog});
-
-  final Worklog worklog;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.jkColors;
-    Widget badge(IconData icon, Color color, String label) => Padding(
-      padding: const EdgeInsets.only(left: JkTokens.spacingXs),
-      child: Tooltip(
-        message: label,
-        child: Icon(icon, size: 16, color: color, semanticLabel: label),
-      ),
-    );
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (worklog.syncError != null)
-          badge(Icons.sync_problem, c.error, '同步失败')
-        else if (worklog.pending)
-          badge(Icons.cloud_upload_outlined, c.textSecondary, '待同步'),
-        if (worklog.hasConflict) badge(Icons.call_split, c.warning, '有冲突版本'),
-      ],
-    );
-  }
-}
-
-/// 把 Markdown 正文转为列表预览用的纯文本。
-String plainPreview(String markdown) => markdown
-    .split('\n')
-    .map(
-      (l) => l
-          .replaceFirst(
-            RegExp(r'^\s*(#{1,6}\s|[-*+]\s(\[[ xX]\]\s)?|\d+\.\s|>\s?)'),
-            '',
-          )
-          .replaceAll(RegExp(r'[*_`~]'), '')
-          .trim(),
-    )
-    .where((l) => l.isNotEmpty && !l.startsWith('|') && !l.startsWith('```'))
-    .join(' ');
