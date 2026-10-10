@@ -390,7 +390,7 @@ type AttachmentUploadRequest struct {
 	// Mime Example: image/jpeg
 	Mime string `json:"mime"`
 
-	// OwnerEntity 所属记录的实体类型，如 worklog
+	// OwnerEntity 所属记录的实体类型，只能是 worklog 或 note
 	OwnerEntity string             `json:"ownerEntity"`
 	OwnerId     openapi_types.UUID `json:"ownerId"`
 
@@ -932,7 +932,7 @@ type SyncChange struct {
 	// Deleted 为 true 时删除记录（墓碑）
 	Deleted *bool `json:"deleted,omitempty"`
 
-	// Entity 实体类型，如 worklog
+	// Entity 实体类型：worklog（工作日志）、note（笔记）、note_folder（笔记文件夹）、attachment（附件，只能删除）。字段定义见 ADR-005、ADR-007
 	Entity string `json:"entity"`
 
 	// Fields 改过的字段：字符串、整数或 null；敏感字段为传输密文（AAD 以 `|v` 结尾）

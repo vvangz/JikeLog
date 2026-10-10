@@ -3,6 +3,8 @@ package syncer
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -23,6 +25,8 @@ const (
 	KindInt
 	// KindUUID 为 UUID 字符串。
 	KindUUID
+	// KindFlag 为开关，只能是 0 或 1。
+	KindFlag
 )
 
 // Field 为字段定义。
@@ -35,6 +39,8 @@ type Field struct {
 	Sensitive bool
 	// ServerOnly 字段只能由服务端写入（如附件大小、校验和），客户端推送时拒绝。
 	ServerOnly bool
+	// Choices 非空时，字符串字段只能取其中之一。
+	Choices []string
 }
 
 // Entity 为同步实体定义。
@@ -43,12 +49,16 @@ type Entity struct {
 	Fields map[string]Field
 	// ServerCreated 为 true 时客户端不能创建或修改该实体，只能删除（如附件，由上传流程创建）。
 	ServerCreated bool
+	// Attachable 为 true 时可以为该实体的记录添加附件。
+	Attachable bool
 }
 
 // 实体名称。
 const (
 	EntityWorklog    = "worklog"
 	EntityAttachment = "attachment"
+	EntityNote       = "note"
+	EntityNoteFolder = "note_folder"
 )
 
 // 字段长度上限。
@@ -56,12 +66,22 @@ const (
 	maxLocationLen = 100
 	maxContentLen  = 100_000
 	maxFileNameLen = 255
+
+	maxTitleLen      = 200
+	maxFolderNameLen = 50
+	// 标签与关联的工作日志为多行文本，每行一个（ADR-007）。
+	maxTagsLen     = 2_000
+	maxWorklogsLen = 8_000
 )
+
+// 笔记格式：两种格式的正文都是 Markdown，只决定默认用哪种编辑方式打开（ADR-007）。
+var noteFormats = []string{"markdown", "rich"}
 
 // Registry 为全部同步实体，新模块在此登记即可接入同步（ADR-005）。
 var Registry = map[string]Entity{
 	EntityWorklog: {
-		Name: EntityWorklog,
+		Name:       EntityWorklog,
+		Attachable: true,
 		Fields: map[string]Field{
 			"date":     {Kind: KindDate, Required: true},
 			"location": {Kind: KindString, MaxLen: maxLocationLen, Sensitive: true},
@@ -80,6 +100,27 @@ var Registry = map[string]Entity{
 			"sha256":      {Kind: KindString, MaxLen: 64, Required: true, ServerOnly: true},
 		},
 	},
+	EntityNoteFolder: {
+		Name: EntityNoteFolder,
+		Fields: map[string]Field{
+			"name":     {Kind: KindString, MaxLen: maxFolderNameLen, Required: true, Sensitive: true},
+			"parentId": {Kind: KindUUID},
+		},
+	},
+	EntityNote: {
+		Name:       EntityNote,
+		Attachable: true,
+		Fields: map[string]Field{
+			"title":    {Kind: KindString, MaxLen: maxTitleLen, Sensitive: true},
+			"body":     {Kind: KindText, MaxLen: maxContentLen, Sensitive: true},
+			"format":   {Kind: KindString, Required: true, Choices: noteFormats},
+			"folderId": {Kind: KindUUID},
+			"favorite": {Kind: KindFlag},
+			"pinned":   {Kind: KindFlag},
+			"tags":     {Kind: KindText, MaxLen: maxTagsLen, Sensitive: true},
+			"worklogs": {Kind: KindText, MaxLen: maxWorklogsLen},
+		},
+	},
 }
 
 // Value 为字段值：string、int64 或 nil（清空）。
@@ -93,12 +134,12 @@ func (f Field) DecodeValue(raw json.RawMessage) (Value, error) {
 		}
 		return nil, nil
 	}
-	if f.Kind == KindInt {
+	if f.isInt() {
 		var n int64
 		if err := json.Unmarshal(raw, &n); err != nil {
 			return nil, fmt.Errorf("必须是整数")
 		}
-		return n, nil
+		return f.checkInt(n)
 	}
 	var s string
 	if err := json.Unmarshal(raw, &s); err != nil {
@@ -116,18 +157,27 @@ func (f Field) CheckValue(v Value) (Value, error) {
 		}
 		return nil, nil
 	case int64:
-		if f.Kind != KindInt {
+		if !f.isInt() {
 			return nil, fmt.Errorf("必须是字符串")
 		}
-		return x, nil
+		return f.checkInt(x)
 	case string:
-		if f.Kind == KindInt {
+		if f.isInt() {
 			return nil, fmt.Errorf("必须是整数")
 		}
 		return f.checkString(x)
 	default:
 		return nil, fmt.Errorf("类型不支持")
 	}
+}
+
+func (f Field) isInt() bool { return f.Kind == KindInt || f.Kind == KindFlag }
+
+func (f Field) checkInt(n int64) (Value, error) {
+	if f.Kind == KindFlag && n != 0 && n != 1 {
+		return nil, fmt.Errorf("只能是 0 或 1")
+	}
+	return n, nil
 }
 
 func (f Field) checkString(s string) (Value, error) {
@@ -149,6 +199,9 @@ func (f Field) checkString(s string) (Value, error) {
 		}
 		if f.Required && s == "" {
 			return nil, fmt.Errorf("不能为空")
+		}
+		if len(f.Choices) > 0 && !slices.Contains(f.Choices, s) {
+			return nil, fmt.Errorf("只能是 %s 之一", strings.Join(f.Choices, "、"))
 		}
 	}
 	return s, nil

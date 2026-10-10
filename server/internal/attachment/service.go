@@ -103,7 +103,7 @@ func UserPrefix(userID uuid.UUID) string { return "u/" + userID.String() + "/" }
 
 func (r UploadRequest) validate(maxSize int64) error {
 	fields := map[string]string{}
-	if e, ok := syncer.Registry[r.OwnerEntity]; !ok || e.ServerCreated {
+	if e, ok := syncer.Registry[r.OwnerEntity]; !ok || !e.Attachable {
 		fields["ownerEntity"] = "不支持为该类型添加附件"
 	}
 	if !mimePattern.MatchString(r.Mime) {
