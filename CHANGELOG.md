@@ -2,6 +2,26 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [0.6.0](https://github.com/vvangz/JikeLog/compare/v0.5.0...v0.6.0) (2026-10-10)
+
+
+### 新功能
+
+* **mobile:** 记账数据层：模型、金额工具、预置分类、仓储与统计计算 ([66848d9](https://github.com/vvangz/JikeLog/commit/66848d9da26cf0a3c7a367de89072fb98c0e6872))
+* **mobile:** 记账界面：流水、统计图表、账户与借贷、分类管理 ([6057285](https://github.com/vvangz/JikeLog/commit/60572857d5907ac899a5162c255050e6272a0738))
+* **server:** 记账同步实体：账户、分类、借贷、流水（M5 服务端） ([87aaa2b](https://github.com/vvangz/JikeLog/commit/87aaa2b5a7c26eca572b1ea75eee41480f103272))
+
+
+### 问题修复
+
+* 处理 M5 审查意见 ([e5a1147](https://github.com/vvangz/JikeLog/commit/e5a114755f97951f8405cc6e239dadb9a15f401f))
+
+
+### 文档
+
+* v0.6.0 开发日志与审查记录；ADR-009 补充审查结论 ([9c14153](https://github.com/vvangz/JikeLog/commit/9c1415314fd417ae0cf4fa995d1839765ab5f49c))
+* 使用说明 07 记账；架构总览补充记账 ([3d1fc4f](https://github.com/vvangz/JikeLog/commit/3d1fc4fcd2cb75be1e9c325c4c3b6131cbbb350a))
+
 ## [0.5.0](https://github.com/vvangz/JikeLog/compare/v0.4.0...v0.5.0) (2026-10-10)
 
 
