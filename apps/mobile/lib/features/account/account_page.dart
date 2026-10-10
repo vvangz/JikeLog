@@ -7,6 +7,7 @@ import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/models.dart';
+import '../../core/sync/sync_providers.dart';
 import '../../shared/ui/jk_feedback.dart';
 import '../../shared/ui/jk_form.dart';
 import '../../shared/ui/jk_page.dart';
@@ -92,11 +93,19 @@ class AccountPage extends ConsumerWidget {
   }
 
   Future<void> _logout(BuildContext context, WidgetRef ref) async {
+    // 退出时清空本机数据：先尝试把未同步的修改推送上去
+    final engine = ref.read(syncEngineProvider);
+    await engine.sync();
+    final pending = await ref.read(pendingChangesProvider.future);
+    if (!context.mounted) return;
     final ok = await showJkConfirm(
       context,
       title: '退出登录',
-      message: '退出后需要重新登录才能同步数据。',
+      message: pending > 0
+          ? '还有 $pending 条修改没有同步到服务器，退出后这些修改将丢失。确定退出吗？'
+          : '退出后本机数据会被清除，重新登录后自动从服务器恢复。',
       confirmLabel: '退出',
+      destructive: pending > 0,
     );
     if (ok) await ref.read(authControllerProvider.notifier).logout();
   }

@@ -10,6 +10,21 @@ import (
 	"github.com/google/uuid"
 )
 
+type Attachment struct {
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	OwnerEntity string
+	OwnerID     uuid.UUID
+	ObjectKey   string
+	FileName    string
+	Mime        string
+	Size        int64
+	Sha256      string
+	Status      string
+	CreatedAt   time.Time
+	CompletedAt *time.Time
+}
+
 type Device struct {
 	ID               uuid.UUID
 	UserID           uuid.UUID
@@ -27,6 +42,39 @@ type Device struct {
 	CreatedAt        time.Time
 	TokensValidAfter time.Time
 	RevokedAt        *time.Time
+	LastAckSeq       int64
+}
+
+type Record struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Entity    string
+	Version   int64
+	ServerSeq int64
+	Fields    []byte
+	Clocks    []byte
+	Absorbed  []byte
+	Deleted   bool
+	DeviceID  *uuid.UUID
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type RecordRevision struct {
+	ID        uuid.UUID
+	RecordID  uuid.UUID
+	UserID    uuid.UUID
+	Entity    string
+	Version   int64
+	Reason    string
+	Fields    []byte
+	DeviceID  *uuid.UUID
+	CreatedAt time.Time
+}
+
+type SyncCursor struct {
+	UserID  uuid.UUID
+	LastSeq int64
 }
 
 type User struct {
@@ -38,6 +86,13 @@ type User struct {
 	PasswordChangedAt time.Time
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+}
+
+type UserKey struct {
+	UserID    uuid.UUID
+	KmsKeyID  string
+	Wrapped   []byte
+	CreatedAt time.Time
 }
 
 type UserSetting struct {

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/dbgen"
 	"github.com/vvangz/JikeLog/server/internal/platform/db"
@@ -39,11 +41,13 @@ type Service struct {
 	tx      db.TxRunner
 	auth    *auth.Service
 	limiter *ratelimit.Limiter
+	// onDeleted 在账号删除后调用，用于清理数据库之外的数据（对象存储中的附件、密钥缓存）。
+	onDeleted []func(ctx context.Context, userID uuid.UUID)
 }
 
-// NewService 创建 Service。
-func NewService(tx db.TxRunner, authSvc *auth.Service, limiter *ratelimit.Limiter) *Service {
-	return &Service{tx: tx, auth: authSvc, limiter: limiter}
+// NewService 创建 Service。onDeleted 在账号删除（事务提交）后依次调用。
+func NewService(tx db.TxRunner, authSvc *auth.Service, limiter *ratelimit.Limiter, onDeleted ...func(ctx context.Context, userID uuid.UUID)) *Service {
+	return &Service{tx: tx, auth: authSvc, limiter: limiter, onDeleted: onDeleted}
 }
 
 // currentUser 读取调用方账号；账号已被删除时按未登录处理。
@@ -130,6 +134,9 @@ func (s *Service) DeleteAccount(ctx context.Context, p auth.Principal, current, 
 	// 设备行随账号级联删除，所有令牌随即失效
 	if _, err := s.tx.Queries().DeleteUser(ctx, u.ID); err != nil {
 		return fmt.Errorf("删除账号失败: %w", err)
+	}
+	for _, fn := range s.onDeleted {
+		fn(context.WithoutCancel(ctx), u.ID)
 	}
 	return nil
 }

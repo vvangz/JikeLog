@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/sync/sync_providers.dart';
 import '../features/settings/settings_controller.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
@@ -12,6 +13,8 @@ class JikeLogApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
+    // 按登录状态启停同步
+    ref.watch(syncCoordinatorProvider);
     return MaterialApp.router(
       title: '即刻日志',
       debugShowCheckedModeBanner: false,

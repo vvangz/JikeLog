@@ -34,6 +34,21 @@ func (e AccountSmsPurpose) Valid() bool {
 	}
 }
 
+// Defines values for AttachmentUploadMethod.
+const (
+	AttachmentUploadMethodPUT AttachmentUploadMethod = "PUT"
+)
+
+// Valid indicates whether the value is a known member of the AttachmentUploadMethod enum.
+func (e AttachmentUploadMethod) Valid() bool {
+	switch e {
+	case AttachmentUploadMethodPUT:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeviceInfoPlatform.
 const (
 	DeviceInfoPlatformAndroid DeviceInfoPlatform = "android"
@@ -94,6 +109,72 @@ func (e HealthCheckStatus) Valid() bool {
 	case HealthCheckStatusDown:
 		return true
 	case HealthCheckStatusUp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PushResultStatus.
+const (
+	PushResultStatusApplied  PushResultStatus = "applied"
+	PushResultStatusConflict PushResultStatus = "conflict"
+	PushResultStatusMerged   PushResultStatus = "merged"
+	PushResultStatusRejected PushResultStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the PushResultStatus enum.
+func (e PushResultStatus) Valid() bool {
+	switch e {
+	case PushResultStatusApplied:
+		return true
+	case PushResultStatusConflict:
+		return true
+	case PushResultStatusMerged:
+		return true
+	case PushResultStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RevisionReason.
+const (
+	RevisionReasonConflict RevisionReason = "conflict"
+	RevisionReasonDelete   RevisionReason = "delete"
+	RevisionReasonEdit     RevisionReason = "edit"
+)
+
+// Valid indicates whether the value is a known member of the RevisionReason enum.
+func (e RevisionReason) Valid() bool {
+	switch e {
+	case RevisionReasonConflict:
+		return true
+	case RevisionReasonDelete:
+		return true
+	case RevisionReasonEdit:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RevisionInfoReason.
+const (
+	RevisionInfoReasonConflict RevisionInfoReason = "conflict"
+	RevisionInfoReasonDelete   RevisionInfoReason = "delete"
+	RevisionInfoReasonEdit     RevisionInfoReason = "edit"
+)
+
+// Valid indicates whether the value is a known member of the RevisionInfoReason enum.
+func (e RevisionInfoReason) Valid() bool {
+	switch e {
+	case RevisionInfoReasonConflict:
+		return true
+	case RevisionInfoReasonDelete:
+		return true
+	case RevisionInfoReasonEdit:
 		return true
 	default:
 		return false
@@ -238,6 +319,104 @@ type AckEnvelope struct {
 	Success   bool   `json:"success"`
 }
 
+// AckRequest defines model for AckRequest.
+type AckRequest struct {
+	Seq int64 `json:"seq"`
+}
+
+// AttachmentComplete defines model for AttachmentComplete.
+type AttachmentComplete struct {
+	ServerSeq int64 `json:"serverSeq"`
+}
+
+// AttachmentCompleteEnvelope defines model for AttachmentCompleteEnvelope.
+type AttachmentCompleteEnvelope struct {
+	Data  AttachmentComplete `json:"data"`
+	Error *ErrorBody         `json:"error,omitempty"`
+	Meta  *PageMeta          `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// AttachmentDownload defines model for AttachmentDownload.
+type AttachmentDownload struct {
+	ExpiresAt time.Time `json:"expiresAt"`
+	Url       string    `json:"url"`
+}
+
+// AttachmentDownloadEnvelope defines model for AttachmentDownloadEnvelope.
+type AttachmentDownloadEnvelope struct {
+	Data  AttachmentDownload `json:"data"`
+	Error *ErrorBody         `json:"error,omitempty"`
+	Meta  *PageMeta          `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// AttachmentUpload defines model for AttachmentUpload.
+type AttachmentUpload struct {
+	ExpiresAt time.Time              `json:"expiresAt"`
+	Headers   map[string]string      `json:"headers"`
+	Method    AttachmentUploadMethod `json:"method"`
+	UploadUrl string                 `json:"uploadUrl"`
+}
+
+// AttachmentUploadMethod defines model for AttachmentUpload.Method.
+type AttachmentUploadMethod string
+
+// AttachmentUploadEnvelope defines model for AttachmentUploadEnvelope.
+type AttachmentUploadEnvelope struct {
+	Data  AttachmentUpload `json:"data"`
+	Error *ErrorBody       `json:"error,omitempty"`
+	Meta  *PageMeta        `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// AttachmentUploadRequest defines model for AttachmentUploadRequest.
+type AttachmentUploadRequest struct {
+	// FileName 文件名的传输密文（AAD 为 `jikelog-e2e-v1|attachment|<id>|fileName|v`）
+	FileName string `json:"fileName"`
+
+	// Id 客户端生成的 UUIDv7，同时作为 attachment 同步记录的 ID
+	Id openapi_types.UUID `json:"id"`
+
+	// Mime Example: image/jpeg
+	Mime string `json:"mime"`
+
+	// OwnerEntity 所属记录的实体类型，如 worklog
+	OwnerEntity string             `json:"ownerEntity"`
+	OwnerId     openapi_types.UUID `json:"ownerId"`
+
+	// Sha256 文件内容的 SHA-256（小写十六进制），下载后客户端据此校验
+	Sha256 string `json:"sha256"`
+	Size   int64  `json:"size"`
+}
+
+// AttachmentUsage defines model for AttachmentUsage.
+type AttachmentUsage struct {
+	MaxSize int64 `json:"maxSize"`
+	Quota   int64 `json:"quota"`
+	Used    int64 `json:"used"`
+}
+
+// AttachmentUsageEnvelope defines model for AttachmentUsageEnvelope.
+type AttachmentUsageEnvelope struct {
+	Data  AttachmentUsage `json:"data"`
+	Error *ErrorBody      `json:"error,omitempty"`
+	Meta  *PageMeta       `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
 // AuthSession defines model for AuthSession.
 type AuthSession struct {
 	// DeviceId 服务端为本次登录分配的设备 ID
@@ -284,6 +463,14 @@ type BindPhoneRequest struct {
 	//
 	// Example: 13812345678
 	Phone Phone `json:"phone"`
+}
+
+// ChangeError defines model for ChangeError.
+type ChangeError struct {
+	// Code VALIDATION_FAILED / UNKNOWN_ENTITY / CLOCK_SKEW / ID_CONFLICT / E2E_DECRYPT_FAILED
+	Code    string             `json:"code"`
+	Fields  *map[string]string `json:"fields,omitempty"`
+	Message string             `json:"message"`
 }
 
 // ChangePasswordRequest defines model for ChangePasswordRequest.
@@ -355,6 +542,32 @@ type DeviceListEnvelope struct {
 	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
 	RequestId string `json:"requestId"`
 	Success   bool   `json:"success"`
+}
+
+// E2ESession defines model for E2ESession.
+type E2ESession struct {
+	ExpiresAt time.Time `json:"expiresAt"`
+	SessionId string    `json:"sessionId"`
+}
+
+// E2ESessionEnvelope defines model for E2ESessionEnvelope.
+type E2ESessionEnvelope struct {
+	Data  E2ESession `json:"data"`
+	Error *ErrorBody `json:"error,omitempty"`
+	Meta  *PageMeta  `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// E2ESessionRequest defines model for E2ESessionRequest.
+type E2ESessionRequest struct {
+	// ClientPublicKey 客户端临时 X25519 公钥（标准 base64，32 字节）
+	ClientPublicKey string `json:"clientPublicKey"`
+
+	// ServerKeyId App 内置服务端公钥的标识（SHA-256 前 8 字节的十六进制）
+	ServerKeyId string `json:"serverKeyId"`
 }
 
 // EnvelopeBase defines model for EnvelopeBase.
@@ -451,6 +664,60 @@ type PasswordLoginRequest struct {
 // Example: 13812345678
 type Phone = string
 
+// PullEnvelope defines model for PullEnvelope.
+type PullEnvelope struct {
+	Data  PullResponse `json:"data"`
+	Error *ErrorBody   `json:"error,omitempty"`
+	Meta  *PageMeta    `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// PullResponse defines model for PullResponse.
+type PullResponse struct {
+	HasMore   bool         `json:"hasMore"`
+	NextSince int64        `json:"nextSince"`
+	Records   []SyncRecord `json:"records"`
+}
+
+// PushEnvelope defines model for PushEnvelope.
+type PushEnvelope struct {
+	Data  PushResponse `json:"data"`
+	Error *ErrorBody   `json:"error,omitempty"`
+	Meta  *PageMeta    `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// PushRequest defines model for PushRequest.
+type PushRequest struct {
+	Changes []SyncChange `json:"changes"`
+}
+
+// PushResponse defines model for PushResponse.
+type PushResponse struct {
+	// Cursor 处理后账号的同步序号
+	Cursor  int64        `json:"cursor"`
+	Results []PushResult `json:"results"`
+}
+
+// PushResult defines model for PushResult.
+type PushResult struct {
+	Error     *ChangeError       `json:"error,omitempty"`
+	Id        openapi_types.UUID `json:"id"`
+	Record    *SyncRecord        `json:"record,omitempty"`
+	ServerSeq *int64             `json:"serverSeq,omitempty"`
+	Status    PushResultStatus   `json:"status"`
+	Version   *int64             `json:"version,omitempty"`
+}
+
+// PushResultStatus defines model for PushResult.Status.
+type PushResultStatus string
+
 // RefreshRequest defines model for RefreshRequest.
 type RefreshRequest struct {
 	RefreshToken string `json:"refreshToken"`
@@ -485,6 +752,58 @@ type ResetPasswordRequest struct {
 	//
 	// Example: 13812345678
 	Phone Phone `json:"phone"`
+}
+
+// Revision defines model for Revision.
+type Revision struct {
+	CreatedAt time.Time `json:"createdAt"`
+	Entity    string    `json:"entity"`
+
+	// Fields 字段值；敏感字段为传输密文
+	Fields   map[string]interface{} `json:"fields"`
+	Id       openapi_types.UUID     `json:"id"`
+	Reason   RevisionReason         `json:"reason"`
+	RecordId openapi_types.UUID     `json:"recordId"`
+	Version  int64                  `json:"version"`
+}
+
+// RevisionReason defines model for Revision.Reason.
+type RevisionReason string
+
+// RevisionEnvelope defines model for RevisionEnvelope.
+type RevisionEnvelope struct {
+	Data  Revision   `json:"data"`
+	Error *ErrorBody `json:"error,omitempty"`
+	Meta  *PageMeta  `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// RevisionInfo defines model for RevisionInfo.
+type RevisionInfo struct {
+	CreatedAt time.Time `json:"createdAt"`
+
+	// DeviceModel 产生该修订的设备型号，设备已删除时为空
+	DeviceModel string             `json:"deviceModel"`
+	Id          openapi_types.UUID `json:"id"`
+	Reason      RevisionInfoReason `json:"reason"`
+	Version     int64              `json:"version"`
+}
+
+// RevisionInfoReason defines model for RevisionInfo.Reason.
+type RevisionInfoReason string
+
+// RevisionListEnvelope defines model for RevisionListEnvelope.
+type RevisionListEnvelope struct {
+	Data  []RevisionInfo `json:"data"`
+	Error *ErrorBody     `json:"error,omitempty"`
+	Meta  *PageMeta      `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
 }
 
 // Settings defines model for Settings.
@@ -602,6 +921,44 @@ type SmsSentEnvelope struct {
 	Success   bool   `json:"success"`
 }
 
+// SyncChange defines model for SyncChange.
+type SyncChange struct {
+	// BaseClocks 修改前最后一次从服务端拿到的字段时钟
+	BaseClocks *map[string]string `json:"baseClocks,omitempty"`
+
+	// Clocks 改过字段的混合逻辑时钟（HLC）`<13 位毫秒>-<4 位十六进制计数>-<16 位十六进制节点>`
+	Clocks *map[string]string `json:"clocks,omitempty"`
+
+	// Deleted 为 true 时删除记录（墓碑）
+	Deleted *bool `json:"deleted,omitempty"`
+
+	// Entity 实体类型，如 worklog
+	Entity string `json:"entity"`
+
+	// Fields 改过的字段：字符串、整数或 null；敏感字段为传输密文（AAD 以 `|v` 结尾）
+	Fields *map[string]json.RawMessage `json:"fields,omitempty"`
+
+	// Id 客户端生成的 UUIDv7
+	Id openapi_types.UUID `json:"id"`
+
+	// Patches 长文本字段相对基准文本的补丁（JSON 字符串）；敏感字段为传输密文（AAD 以 `|p` 结尾）
+	Patches *map[string]string `json:"patches,omitempty"`
+}
+
+// SyncRecord defines model for SyncRecord.
+type SyncRecord struct {
+	Clocks  map[string]string `json:"clocks"`
+	Deleted bool              `json:"deleted"`
+	Entity  string            `json:"entity"`
+
+	// Fields 字段值；敏感字段为传输密文。墓碑为空对象
+	Fields    map[string]interface{} `json:"fields"`
+	Id        openapi_types.UUID     `json:"id"`
+	ServerSeq int64                  `json:"serverSeq"`
+	UpdatedAt time.Time              `json:"updatedAt"`
+	Version   int64                  `json:"version"`
+}
+
 // SystemInfo defines model for SystemInfo.
 type SystemInfo struct {
 	BuildTime string `json:"buildTime"`
@@ -696,8 +1053,41 @@ type VerifyIdentityRequest struct {
 	SmsCode *SmsCode `json:"smsCode,omitempty"`
 }
 
+// E2ESessionHeader defines model for E2ESessionHeader.
+type E2ESessionHeader = string
+
 // Error defines model for Error.
 type Error = ErrorEnvelope
+
+// CreateAttachmentUploadParams defines parameters for CreateAttachmentUpload.
+type CreateAttachmentUploadParams struct {
+	// XJikeLogE2E 传输加密会话 ID（见 createE2ESession）；请求或响应含敏感字段时必须携带
+	XJikeLogE2E *E2ESessionHeader `json:"X-JikeLog-E2E,omitempty"`
+}
+
+// GetRevisionParams defines parameters for GetRevision.
+type GetRevisionParams struct {
+	// XJikeLogE2E 传输加密会话 ID（见 createE2ESession）；请求或响应含敏感字段时必须携带
+	XJikeLogE2E *E2ESessionHeader `json:"X-JikeLog-E2E,omitempty"`
+}
+
+// PullChangesParams defines parameters for PullChanges.
+type PullChangesParams struct {
+	Since int64 `form:"since" json:"since"`
+	Limit *int  `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// XJikeLogE2E 传输加密会话 ID（见 createE2ESession）；请求或响应含敏感字段时必须携带
+	XJikeLogE2E *E2ESessionHeader `json:"X-JikeLog-E2E,omitempty"`
+}
+
+// PushChangesParams defines parameters for PushChanges.
+type PushChangesParams struct {
+	// XJikeLogE2E 传输加密会话 ID（见 createE2ESession）；请求或响应含敏感字段时必须携带
+	XJikeLogE2E *E2ESessionHeader `json:"X-JikeLog-E2E,omitempty"`
+}
+
+// CreateAttachmentUploadJSONRequestBody defines body for CreateAttachmentUpload for application/json ContentType.
+type CreateAttachmentUploadJSONRequestBody = AttachmentUploadRequest
 
 // LoginWithPasswordJSONRequestBody defines body for LoginWithPassword for application/json ContentType.
 type LoginWithPasswordJSONRequestBody = PasswordLoginRequest
@@ -738,8 +1128,29 @@ type UpdateSettingsJSONRequestBody = SettingsInput
 // SendAccountSmsJSONRequestBody defines body for SendAccountSms for application/json ContentType.
 type SendAccountSmsJSONRequestBody = AccountSmsRequest
 
+// AckSyncJSONRequestBody defines body for AckSync for application/json ContentType.
+type AckSyncJSONRequestBody = AckRequest
+
+// CreateE2ESessionJSONRequestBody defines body for CreateE2ESession for application/json ContentType.
+type CreateE2ESessionJSONRequestBody = E2ESessionRequest
+
+// PushChangesJSONRequestBody defines body for PushChanges for application/json ContentType.
+type PushChangesJSONRequestBody = PushRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// CreateAttachmentUpload 申请上传附件
+	// (POST /api/v1/attachments)
+	CreateAttachmentUpload(c *gin.Context, params CreateAttachmentUploadParams)
+	// GetAttachmentUsage 附件用量
+	// (GET /api/v1/attachments/usage)
+	GetAttachmentUsage(c *gin.Context)
+	// CompleteAttachmentUpload 确认上传完成
+	// (POST /api/v1/attachments/{attachmentId}/complete)
+	CompleteAttachmentUpload(c *gin.Context, attachmentId openapi_types.UUID)
+	// GetAttachmentDownload 获取下载地址
+	// (GET /api/v1/attachments/{attachmentId}/download)
+	GetAttachmentDownload(c *gin.Context, attachmentId openapi_types.UUID)
 	// LoginWithPassword 用户名密码登录
 	// (POST /api/v1/auth/login/password)
 	LoginWithPassword(c *gin.Context)
@@ -794,6 +1205,24 @@ type ServerInterface interface {
 	// SendAccountSms 发送账号操作验证码
 	// (POST /api/v1/me/sms/send)
 	SendAccountSms(c *gin.Context)
+	// ListRevisions 修订历史
+	// (GET /api/v1/records/{recordId}/revisions)
+	ListRevisions(c *gin.Context, recordId openapi_types.UUID)
+	// GetRevision 修订内容
+	// (GET /api/v1/revisions/{revisionId})
+	GetRevision(c *gin.Context, revisionId openapi_types.UUID, params GetRevisionParams)
+	// AckSync 确认已处理的同步序号
+	// (POST /api/v1/sync/ack)
+	AckSync(c *gin.Context)
+	// CreateE2ESession 建立传输加密会话
+	// (POST /api/v1/sync/e2e/session)
+	CreateE2ESession(c *gin.Context)
+	// PullChanges 增量拉取
+	// (GET /api/v1/sync/pull)
+	PullChanges(c *gin.Context, params PullChangesParams)
+	// PushChanges 推送本地变更
+	// (POST /api/v1/sync/push)
+	PushChanges(c *gin.Context, params PushChangesParams)
 	// GetSystemInfo 服务版本信息
 	// (GET /api/v1/system/info)
 	GetSystemInfo(c *gin.Context)
@@ -813,6 +1242,109 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(c *gin.Context)
+
+// CreateAttachmentUpload operation middleware
+func (siw *ServerInterfaceWrapper) CreateAttachmentUpload(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateAttachmentUploadParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-JikeLog-E2E" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-JikeLog-E2E")]; found {
+		var XJikeLogE2E E2ESessionHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-JikeLog-E2E, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-JikeLog-E2E", valueList[0], &XJikeLogE2E, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-JikeLog-E2E: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XJikeLogE2E = &XJikeLogE2E
+
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.CreateAttachmentUpload(c, params)
+}
+
+// GetAttachmentUsage operation middleware
+func (siw *ServerInterfaceWrapper) GetAttachmentUsage(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetAttachmentUsage(c)
+}
+
+// CompleteAttachmentUpload operation middleware
+func (siw *ServerInterfaceWrapper) CompleteAttachmentUpload(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "attachmentId" -------------
+	var attachmentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "attachmentId", c.Param("attachmentId"), &attachmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter attachmentId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.CompleteAttachmentUpload(c, attachmentId)
+}
+
+// GetAttachmentDownload operation middleware
+func (siw *ServerInterfaceWrapper) GetAttachmentDownload(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "attachmentId" -------------
+	var attachmentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "attachmentId", c.Param("attachmentId"), &attachmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter attachmentId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetAttachmentDownload(c, attachmentId)
+}
 
 // LoginWithPassword operation middleware
 func (siw *ServerInterfaceWrapper) LoginWithPassword(c *gin.Context) {
@@ -1060,6 +1592,202 @@ func (siw *ServerInterfaceWrapper) SendAccountSms(c *gin.Context) {
 	siw.Handler.SendAccountSms(c)
 }
 
+// ListRevisions operation middleware
+func (siw *ServerInterfaceWrapper) ListRevisions(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "recordId" -------------
+	var recordId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "recordId", c.Param("recordId"), &recordId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter recordId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ListRevisions(c, recordId)
+}
+
+// GetRevision operation middleware
+func (siw *ServerInterfaceWrapper) GetRevision(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "revisionId" -------------
+	var revisionId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "revisionId", c.Param("revisionId"), &revisionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter revisionId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetRevisionParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-JikeLog-E2E" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-JikeLog-E2E")]; found {
+		var XJikeLogE2E E2ESessionHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-JikeLog-E2E, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-JikeLog-E2E", valueList[0], &XJikeLogE2E, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-JikeLog-E2E: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XJikeLogE2E = &XJikeLogE2E
+
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetRevision(c, revisionId, params)
+}
+
+// AckSync operation middleware
+func (siw *ServerInterfaceWrapper) AckSync(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AckSync(c)
+}
+
+// CreateE2ESession operation middleware
+func (siw *ServerInterfaceWrapper) CreateE2ESession(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.CreateE2ESession(c)
+}
+
+// PullChanges operation middleware
+func (siw *ServerInterfaceWrapper) PullChanges(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PullChangesParams
+
+	// ------------- Required query parameter "since" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "since", c.Request.URL.Query(), &params.Since, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter since: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", c.Request.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter limit: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-JikeLog-E2E" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-JikeLog-E2E")]; found {
+		var XJikeLogE2E E2ESessionHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-JikeLog-E2E, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-JikeLog-E2E", valueList[0], &XJikeLogE2E, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-JikeLog-E2E: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XJikeLogE2E = &XJikeLogE2E
+
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PullChanges(c, params)
+}
+
+// PushChanges operation middleware
+func (siw *ServerInterfaceWrapper) PushChanges(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PushChangesParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-JikeLog-E2E" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-JikeLog-E2E")]; found {
+		var XJikeLogE2E E2ESessionHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-JikeLog-E2E, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-JikeLog-E2E", valueList[0], &XJikeLogE2E, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-JikeLog-E2E: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XJikeLogE2E = &XJikeLogE2E
+
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PushChanges(c, params)
+}
+
 // GetSystemInfo operation middleware
 func (siw *ServerInterfaceWrapper) GetSystemInfo(c *gin.Context) {
 
@@ -1147,9 +1875,175 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.DELETE(options.BaseURL+"/api/v1/me/devices/:deviceId", wrapper.RevokeDevice)
 	router.GET(options.BaseURL+"/api/v1/me/settings", wrapper.GetSettings)
 	router.PUT(options.BaseURL+"/api/v1/me/settings", wrapper.UpdateSettings)
+	router.POST(options.BaseURL+"/api/v1/sync/e2e/session", wrapper.CreateE2ESession)
+	router.POST(options.BaseURL+"/api/v1/sync/push", wrapper.PushChanges)
+	router.GET(options.BaseURL+"/api/v1/sync/pull", wrapper.PullChanges)
+	router.POST(options.BaseURL+"/api/v1/sync/ack", wrapper.AckSync)
+	router.GET(options.BaseURL+"/api/v1/records/:recordId/revisions", wrapper.ListRevisions)
+	router.GET(options.BaseURL+"/api/v1/revisions/:revisionId", wrapper.GetRevision)
+	router.POST(options.BaseURL+"/api/v1/attachments", wrapper.CreateAttachmentUpload)
+	router.GET(options.BaseURL+"/api/v1/attachments/usage", wrapper.GetAttachmentUsage)
+	router.POST(options.BaseURL+"/api/v1/attachments/:attachmentId/complete", wrapper.CompleteAttachmentUpload)
+	router.GET(options.BaseURL+"/api/v1/attachments/:attachmentId/download", wrapper.GetAttachmentDownload)
 }
 
 type ErrorJSONResponse ErrorEnvelope
+
+type CreateAttachmentUploadRequestObject struct {
+	Params CreateAttachmentUploadParams
+	Body   *CreateAttachmentUploadJSONRequestBody
+}
+
+type CreateAttachmentUploadResponseObject interface {
+	VisitCreateAttachmentUploadResponse(w http.ResponseWriter) error
+}
+
+type CreateAttachmentUpload201JSONResponse AttachmentUploadEnvelope
+
+func (response CreateAttachmentUpload201JSONResponse) VisitCreateAttachmentUploadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAttachmentUploaddefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response CreateAttachmentUploaddefaultJSONResponse) VisitCreateAttachmentUploadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAttachmentUsageRequestObject struct {
+}
+
+type GetAttachmentUsageResponseObject interface {
+	VisitGetAttachmentUsageResponse(w http.ResponseWriter) error
+}
+
+type GetAttachmentUsage200JSONResponse AttachmentUsageEnvelope
+
+func (response GetAttachmentUsage200JSONResponse) VisitGetAttachmentUsageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAttachmentUsagedefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response GetAttachmentUsagedefaultJSONResponse) VisitGetAttachmentUsageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAttachmentUploadRequestObject struct {
+	AttachmentId openapi_types.UUID `json:"attachmentId"`
+}
+
+type CompleteAttachmentUploadResponseObject interface {
+	VisitCompleteAttachmentUploadResponse(w http.ResponseWriter) error
+}
+
+type CompleteAttachmentUpload200JSONResponse AttachmentCompleteEnvelope
+
+func (response CompleteAttachmentUpload200JSONResponse) VisitCompleteAttachmentUploadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteAttachmentUploaddefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response CompleteAttachmentUploaddefaultJSONResponse) VisitCompleteAttachmentUploadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAttachmentDownloadRequestObject struct {
+	AttachmentId openapi_types.UUID `json:"attachmentId"`
+}
+
+type GetAttachmentDownloadResponseObject interface {
+	VisitGetAttachmentDownloadResponse(w http.ResponseWriter) error
+}
+
+type GetAttachmentDownload200JSONResponse AttachmentDownloadEnvelope
+
+func (response GetAttachmentDownload200JSONResponse) VisitGetAttachmentDownloadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAttachmentDownloaddefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response GetAttachmentDownloaddefaultJSONResponse) VisitGetAttachmentDownloadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type LoginWithPasswordRequestObject struct {
 	Body *LoginWithPasswordJSONRequestBody
@@ -1849,6 +2743,242 @@ func (response SendAccountSmsdefaultJSONResponse) VisitSendAccountSmsResponse(w 
 	return err
 }
 
+type ListRevisionsRequestObject struct {
+	RecordId openapi_types.UUID `json:"recordId"`
+}
+
+type ListRevisionsResponseObject interface {
+	VisitListRevisionsResponse(w http.ResponseWriter) error
+}
+
+type ListRevisions200JSONResponse RevisionListEnvelope
+
+func (response ListRevisions200JSONResponse) VisitListRevisionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRevisionsdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response ListRevisionsdefaultJSONResponse) VisitListRevisionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRevisionRequestObject struct {
+	RevisionId openapi_types.UUID `json:"revisionId"`
+	Params     GetRevisionParams
+}
+
+type GetRevisionResponseObject interface {
+	VisitGetRevisionResponse(w http.ResponseWriter) error
+}
+
+type GetRevision200JSONResponse RevisionEnvelope
+
+func (response GetRevision200JSONResponse) VisitGetRevisionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRevisiondefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response GetRevisiondefaultJSONResponse) VisitGetRevisionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AckSyncRequestObject struct {
+	Body *AckSyncJSONRequestBody
+}
+
+type AckSyncResponseObject interface {
+	VisitAckSyncResponse(w http.ResponseWriter) error
+}
+
+type AckSync200JSONResponse AckEnvelope
+
+func (response AckSync200JSONResponse) VisitAckSyncResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AckSyncdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AckSyncdefaultJSONResponse) VisitAckSyncResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateE2ESessionRequestObject struct {
+	Body *CreateE2ESessionJSONRequestBody
+}
+
+type CreateE2ESessionResponseObject interface {
+	VisitCreateE2ESessionResponse(w http.ResponseWriter) error
+}
+
+type CreateE2ESession201JSONResponse E2ESessionEnvelope
+
+func (response CreateE2ESession201JSONResponse) VisitCreateE2ESessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateE2ESessiondefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response CreateE2ESessiondefaultJSONResponse) VisitCreateE2ESessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PullChangesRequestObject struct {
+	Params PullChangesParams
+}
+
+type PullChangesResponseObject interface {
+	VisitPullChangesResponse(w http.ResponseWriter) error
+}
+
+type PullChanges200JSONResponse PullEnvelope
+
+func (response PullChanges200JSONResponse) VisitPullChangesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PullChangesdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response PullChangesdefaultJSONResponse) VisitPullChangesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PushChangesRequestObject struct {
+	Params PushChangesParams
+	Body   *PushChangesJSONRequestBody
+}
+
+type PushChangesResponseObject interface {
+	VisitPushChangesResponse(w http.ResponseWriter) error
+}
+
+type PushChanges200JSONResponse PushEnvelope
+
+func (response PushChanges200JSONResponse) VisitPushChangesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PushChangesdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response PushChangesdefaultJSONResponse) VisitPushChangesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetSystemInfoRequestObject struct {
 }
 
@@ -1979,6 +3109,18 @@ func (response GetReadyzdefaultJSONResponse) VisitGetReadyzResponse(w http.Respo
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// CreateAttachmentUpload 申请上传附件
+	// (POST /api/v1/attachments)
+	CreateAttachmentUpload(ctx context.Context, request CreateAttachmentUploadRequestObject) (CreateAttachmentUploadResponseObject, error)
+	// GetAttachmentUsage 附件用量
+	// (GET /api/v1/attachments/usage)
+	GetAttachmentUsage(ctx context.Context, request GetAttachmentUsageRequestObject) (GetAttachmentUsageResponseObject, error)
+	// CompleteAttachmentUpload 确认上传完成
+	// (POST /api/v1/attachments/{attachmentId}/complete)
+	CompleteAttachmentUpload(ctx context.Context, request CompleteAttachmentUploadRequestObject) (CompleteAttachmentUploadResponseObject, error)
+	// GetAttachmentDownload 获取下载地址
+	// (GET /api/v1/attachments/{attachmentId}/download)
+	GetAttachmentDownload(ctx context.Context, request GetAttachmentDownloadRequestObject) (GetAttachmentDownloadResponseObject, error)
 	// LoginWithPassword 用户名密码登录
 	// (POST /api/v1/auth/login/password)
 	LoginWithPassword(ctx context.Context, request LoginWithPasswordRequestObject) (LoginWithPasswordResponseObject, error)
@@ -2033,6 +3175,24 @@ type StrictServerInterface interface {
 	// SendAccountSms 发送账号操作验证码
 	// (POST /api/v1/me/sms/send)
 	SendAccountSms(ctx context.Context, request SendAccountSmsRequestObject) (SendAccountSmsResponseObject, error)
+	// ListRevisions 修订历史
+	// (GET /api/v1/records/{recordId}/revisions)
+	ListRevisions(ctx context.Context, request ListRevisionsRequestObject) (ListRevisionsResponseObject, error)
+	// GetRevision 修订内容
+	// (GET /api/v1/revisions/{revisionId})
+	GetRevision(ctx context.Context, request GetRevisionRequestObject) (GetRevisionResponseObject, error)
+	// AckSync 确认已处理的同步序号
+	// (POST /api/v1/sync/ack)
+	AckSync(ctx context.Context, request AckSyncRequestObject) (AckSyncResponseObject, error)
+	// CreateE2ESession 建立传输加密会话
+	// (POST /api/v1/sync/e2e/session)
+	CreateE2ESession(ctx context.Context, request CreateE2ESessionRequestObject) (CreateE2ESessionResponseObject, error)
+	// PullChanges 增量拉取
+	// (GET /api/v1/sync/pull)
+	PullChanges(ctx context.Context, request PullChangesRequestObject) (PullChangesResponseObject, error)
+	// PushChanges 推送本地变更
+	// (POST /api/v1/sync/push)
+	PushChanges(ctx context.Context, request PushChangesRequestObject) (PushChangesResponseObject, error)
 	// GetSystemInfo 服务版本信息
 	// (GET /api/v1/system/info)
 	GetSystemInfo(ctx context.Context, request GetSystemInfoRequestObject) (GetSystemInfoResponseObject, error)
@@ -2099,6 +3259,115 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictGinServerOptions
+}
+
+// CreateAttachmentUpload operation middleware
+func (sh *strictHandler) CreateAttachmentUpload(ctx *gin.Context, params CreateAttachmentUploadParams) {
+	var request CreateAttachmentUploadRequestObject
+
+	request.Params = params
+
+	var body CreateAttachmentUploadJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAttachmentUpload(ctx, request.(CreateAttachmentUploadRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAttachmentUpload")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(CreateAttachmentUploadResponseObject); ok {
+		if err := validResponse.VisitCreateAttachmentUploadResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAttachmentUsage operation middleware
+func (sh *strictHandler) GetAttachmentUsage(ctx *gin.Context) {
+	var request GetAttachmentUsageRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAttachmentUsage(ctx, request.(GetAttachmentUsageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAttachmentUsage")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetAttachmentUsageResponseObject); ok {
+		if err := validResponse.VisitGetAttachmentUsageResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CompleteAttachmentUpload operation middleware
+func (sh *strictHandler) CompleteAttachmentUpload(ctx *gin.Context, attachmentId openapi_types.UUID) {
+	var request CompleteAttachmentUploadRequestObject
+
+	request.AttachmentId = attachmentId
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.CompleteAttachmentUpload(ctx, request.(CompleteAttachmentUploadRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompleteAttachmentUpload")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(CompleteAttachmentUploadResponseObject); ok {
+		if err := validResponse.VisitCompleteAttachmentUploadResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAttachmentDownload operation middleware
+func (sh *strictHandler) GetAttachmentDownload(ctx *gin.Context, attachmentId openapi_types.UUID) {
+	var request GetAttachmentDownloadRequestObject
+
+	request.AttachmentId = attachmentId
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAttachmentDownload(ctx, request.(GetAttachmentDownloadRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAttachmentDownload")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetAttachmentDownloadResponseObject); ok {
+		if err := validResponse.VisitGetAttachmentDownloadResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // LoginWithPassword operation middleware
@@ -2619,6 +3888,180 @@ func (sh *strictHandler) SendAccountSms(ctx *gin.Context) {
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(SendAccountSmsResponseObject); ok {
 		if err := validResponse.VisitSendAccountSmsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRevisions operation middleware
+func (sh *strictHandler) ListRevisions(ctx *gin.Context, recordId openapi_types.UUID) {
+	var request ListRevisionsRequestObject
+
+	request.RecordId = recordId
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRevisions(ctx, request.(ListRevisionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRevisions")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(ListRevisionsResponseObject); ok {
+		if err := validResponse.VisitListRevisionsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRevision operation middleware
+func (sh *strictHandler) GetRevision(ctx *gin.Context, revisionId openapi_types.UUID, params GetRevisionParams) {
+	var request GetRevisionRequestObject
+
+	request.RevisionId = revisionId
+	request.Params = params
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRevision(ctx, request.(GetRevisionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRevision")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetRevisionResponseObject); ok {
+		if err := validResponse.VisitGetRevisionResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AckSync operation middleware
+func (sh *strictHandler) AckSync(ctx *gin.Context) {
+	var request AckSyncRequestObject
+
+	var body AckSyncJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AckSync(ctx, request.(AckSyncRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AckSync")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AckSyncResponseObject); ok {
+		if err := validResponse.VisitAckSyncResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateE2ESession operation middleware
+func (sh *strictHandler) CreateE2ESession(ctx *gin.Context) {
+	var request CreateE2ESessionRequestObject
+
+	var body CreateE2ESessionJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateE2ESession(ctx, request.(CreateE2ESessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateE2ESession")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(CreateE2ESessionResponseObject); ok {
+		if err := validResponse.VisitCreateE2ESessionResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PullChanges operation middleware
+func (sh *strictHandler) PullChanges(ctx *gin.Context, params PullChangesParams) {
+	var request PullChangesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.PullChanges(ctx, request.(PullChangesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PullChanges")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(PullChangesResponseObject); ok {
+		if err := validResponse.VisitPullChangesResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PushChanges operation middleware
+func (sh *strictHandler) PushChanges(ctx *gin.Context, params PushChangesParams) {
+	var request PushChangesRequestObject
+
+	request.Params = params
+
+	var body PushChangesJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.PushChanges(ctx, request.(PushChangesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PushChanges")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(PushChangesResponseObject); ok {
+		if err := validResponse.VisitPushChangesResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {

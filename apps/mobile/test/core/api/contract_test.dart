@@ -9,6 +9,9 @@ import 'package:jikelog/core/api/api_client.dart';
 import 'package:jikelog/core/api/endpoints.dart';
 import 'package:jikelog/core/api/models.dart';
 import 'package:jikelog/core/storage/stores.dart';
+import 'package:jikelog/core/sync/e2e.dart';
+import 'package:jikelog/core/sync/sync_api.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:yaml/yaml.dart';
 
 import '../../support/fake_backend.dart';
@@ -94,6 +97,12 @@ void main() {
     await client.restore();
     final auth = AuthApi(client, testDevice);
     final account = AccountApi(client);
+    final sync = SyncApi(client);
+    final session = E2ESession(
+      id: 's',
+      key: SecretKey(List.filled(32, 1)),
+      expiresAt: DateTime(2100),
+    );
 
     final calls = <(String, String, Future<void> Function())>[
       (
@@ -166,6 +175,34 @@ void main() {
         '/api/v1/me/settings',
         () => account.saveSettings(const UserSettings()),
       ),
+      ('POST', '/api/v1/sync/e2e/session', sync.session),
+      (
+        'POST',
+        '/api/v1/sync/push',
+        () => sync.push(session, [
+          {
+            'entity': 'worklog',
+            'id': '0192a000-0000-7000-8000-000000000001',
+            'fields': {'date': '2026-10-09'},
+            'clocks': {'date': '1791553544000-0000-aaaaaaaaaaaaaaaa'},
+          },
+        ]),
+      ),
+      ('POST', '/api/v1/sync/ack', () => sync.ack(1)),
+      (
+        'POST',
+        '/api/v1/attachments',
+        () => sync.requestUpload(
+          session,
+          id: '0192a000-0000-7000-8000-000000000002',
+          ownerEntity: 'worklog',
+          ownerId: '0192a000-0000-7000-8000-000000000001',
+          fileName: 'a.txt',
+          mime: 'text/plain',
+          size: 1,
+          sha256: 'a' * 64,
+        ),
+      ),
     ];
     for (final (method, path, call) in calls) {
       try {
@@ -185,6 +222,14 @@ void main() {
         isTrue,
         reason: '$method $path 缺少必填字段',
       );
+      if (path == '/api/v1/sync/push') {
+        final change = _schema('SyncChange');
+        for (final c
+            in (sent['changes'] as List).cast<Map<String, dynamic>>()) {
+          expect(_props(change).containsAll(c.keys), isTrue);
+          expect(c.keys.toSet().containsAll(_required(change)), isTrue);
+        }
+      }
       if (sent['device'] is Map) {
         final dev = _schema('DeviceInfo');
         expect(_props(dev).containsAll((sent['device'] as Map).keys), isTrue);
@@ -227,6 +272,44 @@ void main() {
           .toSet(),
       {'authenticated', 'registration_required'},
     );
+  });
+
+  test('同步与附件响应模型能解析契约必填字段', () {
+    final result = PushResult.fromJson(
+      _sample(_schema('PushResult'))! as Map<String, dynamic>,
+    );
+    expect(
+      (_resolve(_schema('PushResult')['properties']['status'] as Map)['enum']
+              as List)
+          .toSet(),
+      {'applied', 'merged', 'conflict', 'rejected'},
+    );
+    expect(result.status, 'applied');
+    final rev = RevisionInfo.fromJson(
+      _sample(_schema('RevisionInfo'))! as Map<String, dynamic>,
+    );
+    expect(rev.reason, 'edit');
+    final record = _sample(_schema('SyncRecord'))! as Map<String, dynamic>;
+    expect(record.keys.toSet(), {
+      'entity',
+      'id',
+      'version',
+      'serverSeq',
+      'deleted',
+      'fields',
+      'clocks',
+      'updatedAt',
+    });
+    for (final name in [
+      'PullResponse',
+      'E2ESession',
+      'AttachmentUpload',
+      'AttachmentUsage',
+      'AttachmentDownload',
+      'AttachmentComplete',
+    ]) {
+      expect(_schema(name)['properties'], isNotNull, reason: name);
+    }
   });
 
   test('验证码用途与契约枚举一致', () {

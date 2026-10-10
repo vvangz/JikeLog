@@ -14,6 +14,9 @@ import '../features/consent/consent_page.dart';
 import '../features/modules/module_page.dart';
 import '../features/settings/about_page.dart';
 import '../features/settings/settings_page.dart';
+import '../features/worklog/revisions_page.dart';
+import '../features/worklog/worklog_editor_page.dart';
+import '../features/worklog/worklog_list_page.dart';
 import '../shared/ui/jk_logo.dart';
 import 'shell/app_shell.dart';
 import 'shell/destinations.dart';
@@ -98,8 +101,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           for (final d in moduleDestinations)
             GoRoute(
               path: d.path,
-              pageBuilder: (_, _) =>
-                  NoTransitionPage(child: ModulePage(destination: d)),
+              pageBuilder: (_, _) => NoTransitionPage(
+                child: d.path == '/worklog'
+                    ? const WorklogListPage()
+                    : ModulePage(destination: d),
+              ),
             ),
           GoRoute(
             path: '/settings',
@@ -113,6 +119,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       // 子页面全屏打开，自带返回栏
+      GoRoute(
+        path: '/worklog/:id',
+        builder: (_, state) =>
+            WorklogEditorPage(id: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/worklog/:id/revisions',
+        builder: (_, state) => RevisionsPage(id: state.pathParameters['id']!),
+      ),
       GoRoute(path: '/settings/about', builder: (_, _) => const AboutPage()),
       GoRoute(path: '/account/phone', builder: (_, _) => const PhonePage()),
       GoRoute(

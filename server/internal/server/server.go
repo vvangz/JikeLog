@@ -13,17 +13,21 @@ import (
 
 	"github.com/vvangz/JikeLog/server/internal/account"
 	"github.com/vvangz/JikeLog/server/internal/apigen"
+	"github.com/vvangz/JikeLog/server/internal/attachment"
 	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/platform/config"
 	"github.com/vvangz/JikeLog/server/internal/platform/httpx"
+	"github.com/vvangz/JikeLog/server/internal/syncer"
 	"github.com/vvangz/JikeLog/server/internal/system"
 )
 
 // 各模块处理器类型名都叫 Handler，用别名嵌入以避免字段名冲突。
 type (
-	systemHandler  = system.Handler
-	authHandler    = auth.Handler
-	accountHandler = account.Handler
+	systemHandler     = system.Handler
+	authHandler       = auth.Handler
+	accountHandler    = account.Handler
+	syncHandler       = syncer.Handler
+	attachmentHandler = attachment.Handler
 )
 
 // API 聚合所有模块处理器，实现生成的 StrictServerInterface。
@@ -31,27 +35,41 @@ type API struct {
 	*systemHandler
 	*authHandler
 	*accountHandler
+	*syncHandler
+	*attachmentHandler
 }
 
 var _ apigen.StrictServerInterface = API{}
 
 // Handlers 为各模块处理器。
 type Handlers struct {
-	System  *system.Handler
-	Auth    *auth.Handler
-	Account *account.Handler
+	System     *system.Handler
+	Auth       *auth.Handler
+	Account    *account.Handler
+	Sync       *syncer.Handler
+	Attachment *attachment.Handler
 }
 
 // NewAPI 创建 API。
 func NewAPI(h Handlers) API {
-	return API{systemHandler: h.System, authHandler: h.Auth, accountHandler: h.Account}
+	return API{
+		systemHandler: h.System, authHandler: h.Auth, accountHandler: h.Account,
+		syncHandler: h.Sync, attachmentHandler: h.Attachment,
+	}
 }
 
-// maxBodyBytes 为 JSON 请求体上限；附件走对象存储直传，不经过 API。
-const maxBodyBytes = 1 << 20
+const (
+	// maxBodyBytes 为 JSON 请求体上限；附件走对象存储直传，不经过 API。
+	maxBodyBytes = 1 << 20
+	// maxPushBodyBytes 为批量推送的请求体上限（最多 100 条变更，长文本可达 10 万字）。
+	maxPushBodyBytes = 4 << 20
+	// wsRoute 为实时通知的 WebSocket 路由（在契约中以说明文字描述，不由代码生成器注册）。
+	wsRoute = "/api/v1/sync/ws"
+)
 
 // NewRouter 创建 Gin 引擎并注册全部路由。authn 用于默认拒绝的认证中间件：除公开路由外都必须登录。
-func NewRouter(cfg config.Config, logger *slog.Logger, api API, authn *auth.Service) (*gin.Engine, error) {
+// ws 为 WebSocket 处理器，为 nil 时不注册。
+func NewRouter(cfg config.Config, logger *slog.Logger, api API, authn *auth.Service, ws gin.HandlerFunc) (*gin.Engine, error) {
 	r := gin.New()
 	// 让 *gin.Context 作为 context.Context 时继承请求的取消与截止时间（客户端断开即取消下游调用）
 	r.ContextWithFallback = true
@@ -61,7 +79,8 @@ func NewRouter(cfg config.Config, logger *slog.Logger, api API, authn *auth.Serv
 	r.HandleMethodNotAllowed = true
 	r.Use(
 		httpx.RequestID(), httpx.SecurityHeaders(), httpx.AccessLog(logger), httpx.Recovery(logger),
-		httpx.CORS(cfg.HTTP.CORSOrigins), httpx.ClientIP(), httpx.BodyLimit(maxBodyBytes),
+		httpx.CORS(cfg.HTTP.CORSOrigins), httpx.ClientIP(),
+		httpx.BodyLimit(maxBodyBytes, map[string]int64{"/api/v1/sync/push": maxPushBodyBytes}),
 		auth.Middleware(authn, isPublicRoute),
 	)
 	r.NoRoute(func(c *gin.Context) {
@@ -80,6 +99,9 @@ func NewRouter(cfg config.Config, logger *slog.Logger, api API, authn *auth.Serv
 	}
 	apigen.RegisterHandlersWithOptions(r, strict, opts)
 	registerProbeHEAD(r, strict, opts)
+	if ws != nil {
+		r.GET(wsRoute, ws)
+	}
 	return r, nil
 }
 

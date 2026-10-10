@@ -6,7 +6,10 @@ import 'app/app.dart';
 import 'app/providers.dart';
 import 'core/config.dart';
 import 'core/device/device_identity.dart';
+import 'core/db/database.dart';
 import 'core/storage/stores.dart';
+import 'core/sync/record_store.dart';
+import 'core/sync/sync_providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,13 +19,22 @@ Future<void> main() async {
       '正式构建必须通过 --dart-define=JIKELOG_API_BASE=https://… 指定 API 地址',
     );
   }
+  final keyProblem = AppConfig.e2eKeyProblem(
+    release: kReleaseMode,
+    debug: kDebugMode,
+  );
+  if (keyProblem != null) throw StateError(keyProblem);
   final store = await PrefsStore.open();
   final device = await DeviceIdentity.load(store);
+  final db = AppDatabase();
+  final clock = await RecordStore.loadClock(db, device.installationId);
   runApp(
     ProviderScope(
       overrides: [
         keyValueStoreProvider.overrideWithValue(store),
         deviceIdentityProvider.overrideWithValue(device),
+        appDatabaseProvider.overrideWithValue(db),
+        hybridClockProvider.overrideWithValue(clock),
       ],
       child: const JikeLogApp(),
     ),

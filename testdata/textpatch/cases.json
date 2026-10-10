@@ -1,0 +1,92 @@
+{
+  "description": "文本补丁共享用例：Go（server/internal/textpatch）与 Dart（apps/mobile/lib/core/sync/text_patch.dart）都必须通过。位置按 Unicode 码点计数。hunks 为客户端相对 base 生成的补丁；current 为服务端当前文本；expected 为把补丁应用到 current 的结果，null 表示应用失败（冲突）。makeCheck 为 true 时，Dart 端还要验证自己生成的补丁应用到 current 得到同样结果。",
+  "cases": [
+    {
+      "name": "两处不同位置的修改可以合并",
+      "base": "上午：参加项目周会。\n下午：编写同步模块。",
+      "target": "上午：参加项目周会，确定排期。\n下午：编写同步模块。",
+      "hunks": [{ "p": 9, "b": "项目周会", "d": "", "i": "，确定排期", "a": "。\n下午" }],
+      "current": "上午：参加项目周会。\n下午：编写同步模块和单元测试。",
+      "expected": "上午：参加项目周会，确定排期。\n下午：编写同步模块和单元测试。",
+      "makeCheck": true
+    },
+    {
+      "name": "同一处被双方修改时应用失败",
+      "base": "今天完成登录页面。",
+      "target": "今天完成登录与注册页面。",
+      "hunks": [{ "p": 6, "b": "完成登录", "d": "", "i": "与注册", "a": "页面。" }],
+      "current": "今天完成登录接口。",
+      "expected": null,
+      "makeCheck": true
+    },
+    {
+      "name": "基准为空时插入到开头",
+      "base": "",
+      "target": "新的日志",
+      "hunks": [{ "p": 0, "b": "", "d": "", "i": "新的日志", "a": "" }],
+      "current": "服务器上的内容",
+      "expected": "新的日志服务器上的内容",
+      "makeCheck": true
+    },
+    {
+      "name": "删除且服务端在前面插入了文字",
+      "base": "a1b2c3d4e5",
+      "target": "a1b2d4e5",
+      "hunks": [{ "p": 4, "b": "a1b2", "d": "c3", "i": "", "a": "d4e5" }],
+      "current": "x a1b2c3d4e5",
+      "expected": "x a1b2d4e5",
+      "makeCheck": true
+    },
+    {
+      "name": "补充平面字符按一个码点计数",
+      "base": "📅 周一：评审",
+      "target": "📅 周一：需求评审",
+      "hunks": [{ "p": 5, "b": " 周一：", "d": "", "i": "需求", "a": "评审" }],
+      "current": "📅 周一：评审\n📌 周二：上线",
+      "expected": "📅 周一：需求评审\n📌 周二：上线",
+      "makeCheck": true
+    },
+    {
+      "name": "上下文重复时取离提示位置最近的一处",
+      "base": "记录。记录。记录。",
+      "target": "记录。记录！记录。",
+      "hunks": [{ "p": 5, "b": "记录", "d": "。", "i": "！", "a": "记" }],
+      "current": "记录。记录。记录。",
+      "expected": "记录。记录！记录。",
+      "makeCheck": true
+    },
+    {
+      "name": "多个片段且服务端在开头插入了一行",
+      "base": "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\n",
+      "target": "line1 edited\nline2\nline3\nline4\nline5\nline6\nline7\nline8 edited\n",
+      "hunks": [
+        { "p": 5, "b": "line1", "d": "", "i": " edited", "a": "\nline2" },
+        { "p": 47, "b": "line8", "d": "", "i": " edited", "a": "\n" }
+      ],
+      "current": "line0\nline1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\n",
+      "expected": "line0\nline1 edited\nline2\nline3\nline4\nline5\nline6\nline7\nline8 edited\n",
+      "makeCheck": true
+    },
+    {
+      "name": "后一个片段不能落在前一个片段的修改之前",
+      "base": "ab-ab",
+      "target": "aXb-ab",
+      "hunks": [
+        { "p": 4, "b": "-a", "d": "b", "i": "Y", "a": "" },
+        { "p": 1, "b": "a", "d": "", "i": "X", "a": "b-" }
+      ],
+      "current": "ab-ab",
+      "expected": null,
+      "makeCheck": false
+    },
+    {
+      "name": "全部删除",
+      "base": "要删除的全部内容",
+      "target": "",
+      "hunks": [{ "p": 0, "b": "", "d": "要删除的全部内容", "i": "", "a": "" }],
+      "current": "要删除的全部内容",
+      "expected": "",
+      "makeCheck": true
+    }
+  ]
+}

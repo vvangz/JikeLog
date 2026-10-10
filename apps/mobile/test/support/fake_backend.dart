@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -9,7 +10,16 @@ import 'package:jikelog/app/providers.dart';
 import 'package:jikelog/core/api/api_client.dart';
 import 'package:jikelog/core/api/models.dart';
 import 'package:jikelog/core/device/device_identity.dart';
+import 'package:jikelog/core/db/database.dart';
 import 'package:jikelog/core/storage/stores.dart';
+import 'package:jikelog/core/sync/hlc.dart';
+import 'package:jikelog/core/sync/realtime.dart';
+import 'package:jikelog/core/sync/sync_providers.dart';
+import 'package:jikelog/features/attachments/attachment_providers.dart';
+import 'package:drift/drift.dart' show DatabaseConnection;
+import 'package:drift/native.dart';
+
+import 'fake_sync_server.dart';
 
 /// 一次被记录的请求。
 class RecordedRequest {
@@ -154,6 +164,9 @@ List<Override> testOverrides({
   required FakeBackend backend,
   KeyValueStore? store,
   TokenStore? tokens,
+  AppDatabase? db,
+  FakeSyncServer? syncServer,
+  Future<Directory> Function()? filesDir,
 }) => [
   keyValueStoreProvider.overrideWithValue(store ?? MemoryStore()),
   deviceIdentityProvider.overrideWithValue(testDevice),
@@ -165,7 +178,39 @@ List<Override> testOverrides({
       adapter: backend,
     ),
   ),
+  appDatabaseProvider.overrideWithValue(db ?? testDatabase()),
+  hybridClockProvider.overrideWithValue(
+    HybridClock(installationId: testDevice.installationId),
+  ),
+  syncTransportProvider.overrideWithValue(
+    FakeTransport(syncServer ?? FakeSyncServer()),
+  ),
+  realtimeClientProvider.overrideWithValue(FakeRealtime()),
+  attachmentDirProvider.overrideWithValue(filesDir ?? testFilesDir),
 ];
+
+/// 组件测试的本机文件目录（附件副本与下载缓存）。
+Future<Directory> testFilesDir() async {
+  final dir = Directory('${Directory.systemTemp.path}/jikelog-test-files-$pid');
+  await dir.create(recursive: true);
+  return dir;
+}
+
+/// 组件测试用的内存数据库：同步关闭流查询，避免组件树销毁后残留清理定时器。
+AppDatabase testDatabase() => AppDatabase(
+  DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true),
+);
+
+/// 不联网的实时连接，只记录启停。
+class FakeRealtime implements RealtimeLink {
+  bool running = false;
+
+  @override
+  void start() => running = true;
+
+  @override
+  Future<void> stop() async => running = false;
+}
 
 /// 轮询直到条件成立（最多 2 秒），用于等待异步状态变化（如启动时的登录态恢复）。
 Future<void> eventually(bool Function() condition, {String reason = ''}) async {

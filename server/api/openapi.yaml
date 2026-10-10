@@ -25,6 +25,10 @@ tags:
     description: 注册、登录、令牌刷新与找回密码
   - name: account
     description: 当前账号：资料、密码、手机号、设备与设置
+  - name: sync
+    description: 多设备同步：推送、拉取、确认、修订历史与传输加密会话（ADR-005、ADR-006）
+  - name: attachment
+    description: 附件：对象存储直传直下
 
 security:
   - bearerAuth: []
@@ -470,12 +474,265 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  # ───────────────────────────── 同步（ADR-005）─────────────────────────────
+  /api/v1/sync/e2e/session:
+    post:
+      tags: [sync]
+      operationId: createE2ESession
+      summary: 建立传输加密会话
+      description: |
+        客户端生成临时 X25519 密钥对并上传公钥，双方各自派生会话密钥（ADR-006）。
+        之后的推送、拉取、修订和附件接口用请求头 `X-JikeLog-E2E` 携带返回的会话 ID，敏感字段以该会话加密。
+        会话绑定当前设备，24 小时后失效；失效时接口返回 409 `E2E_SESSION_INVALID`，重新握手即可。
+        `serverKeyId` 不再受支持时返回 409 `E2E_KEY_UNKNOWN`，需要升级 App。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/E2ESessionRequest'
+      responses:
+        '201':
+          description: 已建立
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/E2ESessionEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/sync/push:
+    post:
+      tags: [sync]
+      operationId: pushChanges
+      summary: 推送本地变更
+      description: |
+        每条变更只带改过的字段及其 HLC，`baseClocks` 为修改前最后一次从服务端拿到的字段时钟。
+        单条变更校验失败只拒绝这一条（`rejected`），不影响同批其他变更。结果为 `merged` 或 `conflict` 时返回服务端最终记录，客户端用它覆盖本地。
+        实时通知：`GET /api/v1/sync/ws`（需登录，升级为 WebSocket），服务端推送 `{"type":"hello"|"changed","seq":…,"origin":…}`，
+        设备下线后以关闭码 4401 断开。
+      parameters:
+        - $ref: '#/components/parameters/E2ESessionHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushRequest'
+      responses:
+        '200':
+          description: 逐条处理结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/sync/pull:
+    get:
+      tags: [sync]
+      operationId: pullChanges
+      summary: 增量拉取
+      description: 按 `serverSeq` 升序返回大于 `since` 的记录（含墓碑，墓碑不含字段）。`hasMore` 为 true 时以 `nextSince` 继续拉取。
+      parameters:
+        - $ref: '#/components/parameters/E2ESessionHeader'
+        - name: since
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 200
+      responses:
+        '200':
+          description: 一页记录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PullEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/sync/ack:
+    post:
+      tags: [sync]
+      operationId: ackSync
+      summary: 确认已处理的同步序号
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AckRequest'
+      responses:
+        '200':
+          description: 已记录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AckEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/records/{recordId}/revisions:
+    get:
+      tags: [sync]
+      operationId: listRevisions
+      summary: 修订历史
+      description: 新的在前，不含内容。原因：edit（编辑前的状态）、conflict（冲突中落败的一方）、delete（删除前的状态）。
+      parameters:
+        - name: recordId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 修订列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevisionListEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/revisions/{revisionId}:
+    get:
+      tags: [sync]
+      operationId: getRevision
+      summary: 修订内容
+      description: 恢复某个版本即以修订内容做一次普通编辑并推送。
+      parameters:
+        - $ref: '#/components/parameters/E2ESessionHeader'
+        - name: revisionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 修订详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevisionEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  # ───────────────────────────── 附件 ─────────────────────────────
+  /api/v1/attachments:
+    post:
+      tags: [attachment]
+      operationId: createAttachmentUpload
+      summary: 申请上传附件
+      description: |
+        返回对象存储的预签名直传地址：客户端用 `PUT` 上传，并原样带上 `headers`（大小与类型已纳入签名）。
+        上传完成后调用 complete，服务端核对大小并生成 attachment 同步记录。
+        单个附件与每个账号的总量有上限（见 usage），超出时返回 413 `ATTACHMENT_TOO_LARGE` / `QUOTA_EXCEEDED`。
+      parameters:
+        - $ref: '#/components/parameters/E2ESessionHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachmentUploadRequest'
+      responses:
+        '201':
+          description: 上传地址
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentUploadEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/attachments/usage:
+    get:
+      tags: [attachment]
+      operationId: getAttachmentUsage
+      summary: 附件用量
+      responses:
+        '200':
+          description: 用量与上限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentUsageEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/attachments/{attachmentId}/complete:
+    post:
+      tags: [attachment]
+      operationId: completeAttachmentUpload
+      summary: 确认上传完成
+      description: 对象尚未上传或大小不符时返回 409 `UPLOAD_INCOMPLETE`。重复调用是幂等的。
+      parameters:
+        - name: attachmentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 已生成同步记录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentCompleteEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/attachments/{attachmentId}/download:
+    get:
+      tags: [attachment]
+      operationId: getAttachmentDownload
+      summary: 获取下载地址
+      parameters:
+        - name: attachmentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 预签名下载地址（10 分钟内有效）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentDownloadEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+
+  parameters:
+    E2ESessionHeader:
+      name: X-JikeLog-E2E
+      in: header
+      required: false
+      description: 传输加密会话 ID（见 createE2ESession）；请求或响应含敏感字段时必须携带
+      schema:
+        type: string
+        maxLength: 64
 
   responses:
     Error:
@@ -1029,3 +1286,383 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/Settings'
+
+    # ───────────────────────────── 同步与附件 ─────────────────────────────
+    E2ESessionRequest:
+      type: object
+      required: [clientPublicKey, serverKeyId]
+      properties:
+        clientPublicKey:
+          type: string
+          description: 客户端临时 X25519 公钥（标准 base64，32 字节）
+          maxLength: 64
+        serverKeyId:
+          type: string
+          description: App 内置服务端公钥的标识（SHA-256 前 8 字节的十六进制）
+          maxLength: 32
+
+    E2ESession:
+      type: object
+      required: [sessionId, expiresAt]
+      properties:
+        sessionId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    E2ESessionEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/E2ESession'
+
+    SyncChange:
+      type: object
+      required: [entity, id]
+      properties:
+        entity:
+          type: string
+          description: 实体类型，如 worklog
+          maxLength: 32
+        id:
+          type: string
+          format: uuid
+          description: 客户端生成的 UUIDv7
+        deleted:
+          type: boolean
+          description: 为 true 时删除记录（墓碑）
+        fields:
+          type: object
+          description: 改过的字段：字符串、整数或 null；敏感字段为传输密文（AAD 以 `|v` 结尾）
+          additionalProperties: {}
+          x-go-type: map[string]json.RawMessage
+        clocks:
+          type: object
+          description: 改过字段的混合逻辑时钟（HLC）`<13 位毫秒>-<4 位十六进制计数>-<16 位十六进制节点>`
+          additionalProperties:
+            type: string
+        baseClocks:
+          type: object
+          description: 修改前最后一次从服务端拿到的字段时钟
+          additionalProperties:
+            type: string
+        patches:
+          type: object
+          description: 长文本字段相对基准文本的补丁（JSON 字符串）；敏感字段为传输密文（AAD 以 `|p` 结尾）
+          additionalProperties:
+            type: string
+
+    PushRequest:
+      type: object
+      required: [changes]
+      properties:
+        changes:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SyncChange'
+
+    SyncRecord:
+      type: object
+      required: [entity, id, version, serverSeq, deleted, fields, clocks, updatedAt]
+      properties:
+        entity:
+          type: string
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+        serverSeq:
+          type: integer
+          format: int64
+        deleted:
+          type: boolean
+        fields:
+          type: object
+          description: 字段值；敏感字段为传输密文。墓碑为空对象
+          additionalProperties: {}
+        clocks:
+          type: object
+          additionalProperties:
+            type: string
+        updatedAt:
+          type: string
+          format: date-time
+
+    ChangeError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: VALIDATION_FAILED / UNKNOWN_ENTITY / CLOCK_SKEW / ID_CONFLICT / E2E_DECRYPT_FAILED
+        message:
+          type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+
+    PushResult:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [applied, merged, conflict, rejected]
+        version:
+          type: integer
+          format: int64
+        serverSeq:
+          type: integer
+          format: int64
+        record:
+          $ref: '#/components/schemas/SyncRecord'
+        error:
+          $ref: '#/components/schemas/ChangeError'
+
+    PushResponse:
+      type: object
+      required: [results, cursor]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PushResult'
+        cursor:
+          type: integer
+          format: int64
+          description: 处理后账号的同步序号
+
+    PushEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/PushResponse'
+
+    PullResponse:
+      type: object
+      required: [records, nextSince, hasMore]
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncRecord'
+        nextSince:
+          type: integer
+          format: int64
+        hasMore:
+          type: boolean
+
+    PullEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/PullResponse'
+
+    AckRequest:
+      type: object
+      required: [seq]
+      properties:
+        seq:
+          type: integer
+          format: int64
+          minimum: 0
+
+    RevisionInfo:
+      type: object
+      required: [id, version, reason, createdAt, deviceModel]
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+        reason:
+          type: string
+          enum: [edit, conflict, delete]
+        createdAt:
+          type: string
+          format: date-time
+        deviceModel:
+          type: string
+          description: 产生该修订的设备型号，设备已删除时为空
+
+    RevisionListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RevisionInfo'
+
+    Revision:
+      type: object
+      required: [id, recordId, entity, version, reason, createdAt, fields]
+      properties:
+        id:
+          type: string
+          format: uuid
+        recordId:
+          type: string
+          format: uuid
+        entity:
+          type: string
+        version:
+          type: integer
+          format: int64
+        reason:
+          type: string
+          enum: [edit, conflict, delete]
+        createdAt:
+          type: string
+          format: date-time
+        fields:
+          type: object
+          description: 字段值；敏感字段为传输密文
+          additionalProperties: {}
+
+    RevisionEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/Revision'
+
+    AttachmentUploadRequest:
+      type: object
+      required: [id, ownerEntity, ownerId, fileName, mime, size, sha256]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 客户端生成的 UUIDv7，同时作为 attachment 同步记录的 ID
+        ownerEntity:
+          type: string
+          description: 所属记录的实体类型，如 worklog
+          maxLength: 32
+        ownerId:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+          description: 文件名的传输密文（AAD 为 `jikelog-e2e-v1|attachment|<id>|fileName|v`）
+          maxLength: 2048
+        mime:
+          type: string
+          maxLength: 127
+          example: image/jpeg
+        size:
+          type: integer
+          format: int64
+          minimum: 1
+        sha256:
+          type: string
+          description: 文件内容的 SHA-256（小写十六进制），下载后客户端据此校验
+          maxLength: 64
+
+    AttachmentUpload:
+      type: object
+      required: [uploadUrl, method, headers, expiresAt]
+      properties:
+        uploadUrl:
+          type: string
+        method:
+          type: string
+          enum: [PUT]
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    AttachmentUploadEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AttachmentUpload'
+
+    AttachmentComplete:
+      type: object
+      required: [serverSeq]
+      properties:
+        serverSeq:
+          type: integer
+          format: int64
+
+    AttachmentCompleteEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AttachmentComplete'
+
+    AttachmentDownload:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    AttachmentDownloadEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AttachmentDownload'
+
+    AttachmentUsage:
+      type: object
+      required: [used, quota, maxSize]
+      properties:
+        used:
+          type: integer
+          format: int64
+        quota:
+          type: integer
+          format: int64
+        maxSize:
+          type: integer
+          format: int64
+
+    AttachmentUsageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AttachmentUsage'

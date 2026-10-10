@@ -31,6 +31,19 @@ const (
 	CaptchaProviderAliyun = "aliyun"
 )
 
+// KMS 通道。
+const (
+	// KMSProviderLocal 用环境变量中的主密钥包裹数据密钥，仅用于开发与测试。
+	KMSProviderLocal  = "local"
+	KMSProviderAliyun = "aliyun"
+)
+
+// 开发示例密钥：由固定字符串派生、随仓库公开（deploy/.env.example），staging / production 禁止使用。
+const (
+	DevE2EPrivateKey = "n8u4Sv4wcSFZAL1k17mtV7bg+ZhRoPOKQn/w5YPLLlM="
+	DevKMSMasterKey  = "v4jRZ7eVOKo/cCE83/e8RMzA3QKJmK4Dqj4hg52Fik4="
+)
+
 const envPrefix = "JIKELOG_"
 
 // Config 为服务完整配置。
@@ -43,6 +56,11 @@ type Config struct {
 	Auth    Auth    `envPrefix:"AUTH_"`
 	SMS     SMS     `envPrefix:"SMS_"`
 	Captcha Captcha `envPrefix:"CAPTCHA_"`
+	E2E     E2E     `envPrefix:"E2E_"`
+	KMS     KMS     `envPrefix:"KMS_"`
+	Storage Storage `envPrefix:"STORAGE_"`
+	// Attachment 为附件限制。
+	Attachment Attachment `envPrefix:"ATTACHMENT_"`
 }
 
 // HTTP 为 HTTP 服务配置。
@@ -97,6 +115,51 @@ type SMS struct {
 // Captcha 为人机验证配置（发送短信前校验）。
 type Captcha struct {
 	Provider string `env:"PROVIDER" envDefault:"none"`
+}
+
+// E2E 为工作日志应用层传输加密配置（ADR-006）。
+type E2E struct {
+	// PrivateKey 为服务端静态 X25519 私钥（base64，32 字节），对应公钥编译进 App。
+	PrivateKey string `env:"PRIVATE_KEY"`
+	// PreviousPrivateKey 为轮换前的旧私钥，新旧版本 App 共存期间两把都可用。
+	PreviousPrivateKey string `env:"PREVIOUS_PRIVATE_KEY"`
+}
+
+// KMS 为落库加密主密钥配置。
+type KMS struct {
+	Provider string `env:"PROVIDER" envDefault:"local"`
+	// LocalMasterKey 为本地主密钥（base64，32 字节），Provider=local 时使用。
+	LocalMasterKey string `env:"LOCAL_MASTER_KEY"`
+}
+
+// Storage 为 S3 兼容对象存储配置（生产为阿里云 OSS，开发为 RustFS）。
+type Storage struct {
+	// Endpoint 为服务端访问对象存储的地址，形如 https://oss-cn-beijing-internal.aliyuncs.com。
+	Endpoint string `env:"ENDPOINT"`
+	// PublicEndpoint 为客户端直传直下使用的地址，用于生成预签名 URL；为空时与 Endpoint 相同。
+	PublicEndpoint string `env:"PUBLIC_ENDPOINT"`
+	Region         string `env:"REGION" envDefault:"us-east-1"`
+	Bucket         string `env:"BUCKET" envDefault:"jikelog"`
+	AccessKey      string `env:"ACCESS_KEY"`
+	SecretKey      string `env:"SECRET_KEY"`
+	// PathStyle 为 true 时使用路径风格（RustFS、MinIO）；阿里云 OSS 需设为 false（虚拟主机风格）。
+	PathStyle bool `env:"PATH_STYLE" envDefault:"true"`
+}
+
+// PresignEndpoint 返回生成预签名 URL 使用的地址。
+func (s Storage) PresignEndpoint() string {
+	if s.PublicEndpoint != "" {
+		return s.PublicEndpoint
+	}
+	return s.Endpoint
+}
+
+// Attachment 为附件限制。
+type Attachment struct {
+	// MaxSize 为单个附件的最大字节数，默认 100MB。
+	MaxSize int64 `env:"MAX_SIZE" envDefault:"104857600"`
+	// Quota 为每个账号的附件总量上限，默认 2GB。
+	Quota int64 `env:"QUOTA" envDefault:"2147483648"`
 }
 
 // Load 从进程环境变量加载配置。

@@ -65,7 +65,7 @@ func TestWriteError(t *testing.T) {
 
 func TestBodyLimit(t *testing.T) {
 	r := gin.New()
-	r.Use(BodyLimit(10))
+	r.Use(BodyLimit(10, nil))
 	r.POST("/", func(c *gin.Context) {
 		var v map[string]any
 		if err := c.ShouldBindJSON(&v); err != nil {
@@ -91,6 +91,29 @@ func TestBodyLimit(t *testing.T) {
 	}
 	if do(`{"a":"0123456789"}`, true) != http.StatusBadRequest {
 		t.Error("未声明长度时读取超限应失败")
+	}
+}
+
+func TestBodyLimitOverride(t *testing.T) {
+	r := gin.New()
+	r.Use(BodyLimit(10, map[string]int64{"/big": 100}))
+	ok := func(c *gin.Context) {
+		var v map[string]any
+		if err := c.ShouldBindJSON(&v); err != nil {
+			c.Status(http.StatusBadRequest)
+			return
+		}
+		c.Status(http.StatusOK)
+	}
+	r.POST("/big", ok)
+	r.POST("/small", ok)
+	body := `{"a":"01234567890123456789"}`
+	for path, want := range map[string]int{"/big": http.StatusOK, "/small": http.StatusRequestEntityTooLarge} {
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, strings.NewReader(body)))
+		if rec.Code != want {
+			t.Errorf("%s = %d, want %d", path, rec.Code, want)
+		}
 	}
 }
 

@@ -197,18 +197,27 @@ func (s *Service) Authenticate(ctx context.Context, authorization string) (Princ
 	if err != nil {
 		return Principal{}, httpx.Unauthorized("登录已失效，请重新登录")
 	}
+	if err := s.CheckSession(ctx, p); err != nil {
+		return Principal{}, err
+	}
+	return p, nil
+}
+
+// CheckSession 在数据库中确认设备会话仍有效、令牌签发于本次会话开始之后。
+// 长连接（WebSocket）期间定期调用，使下线与改密对已建立的连接同样生效。
+func (s *Service) CheckSession(ctx context.Context, p Principal) error {
 	sess, err := s.d.Tx.Queries().GetDeviceSession(ctx, p.DeviceID)
 	if db.IsNotFound(err) {
-		return Principal{}, errDeviceOffline
+		return errDeviceOffline
 	}
 	if err != nil {
 		s.d.Logger.ErrorContext(ctx, "device session lookup failed", "error", err)
-		return Principal{}, httpx.NewError(http.StatusServiceUnavailable, httpx.CodeUnavailable, "服务暂时不可用，请稍后重试")
+		return httpx.NewError(http.StatusServiceUnavailable, httpx.CodeUnavailable, "服务暂时不可用，请稍后重试")
 	}
 	if sess.UserID != p.UserID || p.IssuedAt.UnixMilli() < sess.TokensValidAfter.UnixMilli() {
-		return Principal{}, errDeviceOffline
+		return errDeviceOffline
 	}
-	return p, nil
+	return nil
 }
 
 // errReused 表示 Refresh Token 在宽限期外被重放，需在事务提交后让设备下线。

@@ -44,13 +44,15 @@ var (
 	pgContainer testcontainers.Container
 )
 
-// Main 运行测试并在结束后停止本包启动的容器。用法：func TestMain(m *testing.M) { testinfra.Main(m) }
+// Main 运行测试并在结束后停止本包启动的容器（PostgreSQL、对象存储）。用法：func TestMain(m *testing.M) { testinfra.Main(m) }
 func Main(m *testing.M) {
 	code := m.Run()
-	if pgContainer != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		_ = pgContainer.Terminate(ctx)
-		cancel()
+	for _, c := range []testcontainers.Container{pgContainer, objContainer} {
+		if c != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			_ = c.Terminate(ctx)
+			cancel()
+		}
 	}
 	os.Exit(code)
 }

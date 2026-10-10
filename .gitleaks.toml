@@ -1,0 +1,18 @@
+# gitleaks 配置：沿用全部默认规则，只放行仓库中刻意公开的测试与开发示例密钥。
+# 放行的密钥都由固定字符串派生，staging / production 环境的配置校验会拒绝它们（见 ADR-006）。
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Go 与 Dart 共用的加密测试向量（含早期提交中直接引用该测试私钥的测试代码）"
+paths = ['''^testdata/crypto/''']
+regexes = ['''KkHzna3xWcbE\+LW\+N65r2IjVwu5vjKBpGkjIIHxJaO4=''']
+
+[[allowlists]]
+description = "本地开发示例密钥（deploy/.env.example、App 默认公钥、配置校验中的黑名单）"
+regexes = [
+  '''n8u4Sv4wcSFZAL1k17mtV7bg\+ZhRoPOKQn/w5YPLLlM=''',
+  '''hzHoYda9NBwh0f7KEN0UVflj0FcozpvvPh4esvLPnhM=''',
+  '''v4jRZ7eVOKo/cCE83/e8RMzA3QKJmK4Dqj4hg52Fik4=''',
+]
