@@ -447,7 +447,8 @@ class RecordStore {
       )
       .then((_) => db.setRefs(id, deleted ? const [] : refsOf(entity, fields)));
 
-  /// 派生的排序键：工作日志按日期；笔记置顶在前，再按最后修改的字段时钟（HLC 可按字典序比较）。
+  /// 派生的排序键：工作日志按日期；笔记置顶在前，再按最后修改的字段时钟（HLC 可按字典序比较）；
+  /// 备忘录按时间（补齐为 13 位毫秒数，字典序即时间顺序，便于按日期范围查询）。
   static String _sortKey(
     String entity,
     Map<String, Object?> fields,
@@ -457,8 +458,13 @@ class RecordStore {
     Entities.note =>
       '${fields['pinned'] == 1 ? 1 : 0}|'
           '${clocks.values.fold('', (a, b) => b.compareTo(a) > 0 ? b : a)}',
+    Entities.memo => memoSortKey(fields['at'] as int? ?? 0),
     _ => '',
   };
+
+  /// 备忘录时间对应的排序键。
+  static String memoSortKey(int atMillis) =>
+      atMillis.toString().padLeft(13, '0');
 
   /// 启动时恢复 HLC，保证重启后时钟仍单调。
   static Future<HybridClock> loadClock(

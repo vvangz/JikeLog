@@ -88,13 +88,26 @@ class RecordRefs extends Table {
   Set<Column> get primaryKey => {recordId, kind, value};
 }
 
-@DriftDatabase(tables: [Records, SyncMeta, LocalFiles, RecordRefs])
+/// 本机写入系统日历的事件（ADR-008）：备忘录 ID → 系统日历事件 ID，以及写入时的内容摘要（用于判断是否需要更新）。
+@DataClassName('CalendarLinkRow')
+class CalendarLinks extends Table {
+  TextColumn get memoId => text()();
+  TextColumn get eventId => text()();
+  TextColumn get signature => text()();
+
+  @override
+  Set<Column> get primaryKey => {memoId};
+}
+
+@DriftDatabase(
+  tables: [Records, SyncMeta, LocalFiles, RecordRefs, CalendarLinks],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
     : super(executor ?? driftDatabase(name: 'jikelog'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -113,6 +126,8 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(recordRefs);
         await _createRefsIndex();
       }
+      // v2 → v3：备忘录写入系统日历的对应关系
+      if (from < 3) await m.createTable(calendarLinks);
     },
   );
 
@@ -148,6 +163,7 @@ class AppDatabase extends _$AppDatabase {
     await delete(syncMeta).go();
     await delete(localFiles).go();
     await delete(recordRefs).go();
+    await delete(calendarLinks).go();
   });
 
   Future<String?> meta(String key) async => (await (select(

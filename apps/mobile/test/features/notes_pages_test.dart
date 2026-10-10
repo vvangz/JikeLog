@@ -632,6 +632,8 @@ void _robustnessTests() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    // 回到前台会重新检查提醒权限并登记推送，等它结束
+    await settleApp(tester);
   });
 
   testWidgets('新建后什么都没写就返回：删除这篇空笔记', (tester) async {

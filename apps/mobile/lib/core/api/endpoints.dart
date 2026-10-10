@@ -149,6 +149,20 @@ class AccountApi {
 
   Future<void> revokeDevice(String id) => _c.delete('/api/v1/me/devices/$id');
 
+  /// 登记本设备的推送标识、时区与本地提醒能力（ADR-008）。
+  /// [provider] 与 [token] 同时为空表示不接收服务端推送。
+  Future<void> updatePush({
+    String? provider,
+    String? token,
+    required String timeZone,
+    required bool localReminders,
+  }) => _c.put('/api/v1/me/push', {
+    'provider': provider,
+    'token': token,
+    'timeZone': timeZone,
+    'localReminders': localReminders,
+  });
+
   Future<UserSettings> settings() async => UserSettings.fromJson(
     await _c.get('/api/v1/me/settings') as Map<String, dynamic>,
   );

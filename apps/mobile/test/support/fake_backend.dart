@@ -22,10 +22,12 @@ import 'package:jikelog/features/attachments/attachment_viewers.dart';
 import 'package:jikelog/features/attachments/media.dart';
 import 'package:jikelog/features/notes/editor/rich_editor_view.dart';
 import 'package:jikelog/features/notes/note_editor_page.dart';
+import 'package:jikelog/features/reminders/reminder_coordinator.dart';
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 
 import 'fake_media.dart';
+import 'fake_reminders.dart';
 import 'fake_sync_server.dart';
 
 /// 一次被记录的请求。
@@ -210,6 +212,10 @@ List<Override> testOverrides({
   recorderFactoryProvider.overrideWithValue(
     () => FakeRecorder(permitted: TestHooks.micPermitted),
   ),
+  localNotifierProvider.overrideWith((_) => TestHooks.notifier),
+  pushClientProvider.overrideWith((_) => TestHooks.push),
+  systemCalendarProvider.overrideWith((_) => TestHooks.calendar),
+  deviceTimeZoneProvider.overrideWith((_) => TestHooks.timeZone),
 ];
 
 /// 组件测试中可替换的平台行为（每个测试结束后由 [TestHooks.reset] 恢复）。
@@ -218,6 +224,10 @@ abstract final class TestHooks {
   static bool Function(Uri) launch = _yes;
   static bool Function(File, String) openExternal = _yes2;
   static bool micPermitted = true;
+  static FakeLocalNotifier notifier = FakeLocalNotifier();
+  static FakePushClient push = FakePushClient();
+  static FakeSystemCalendar calendar = FakeSystemCalendar();
+  static FakeTimeZone timeZone = FakeTimeZone();
   static final launched = <Uri>[];
   static final opened = <String>[];
 
@@ -233,6 +243,10 @@ abstract final class TestHooks {
   }
 
   static void reset() {
+    notifier = FakeLocalNotifier();
+    push = FakePushClient();
+    calendar = FakeSystemCalendar();
+    timeZone = FakeTimeZone();
     FakeRichEditor.autoReady = true;
     FakeRichEditor.silent = false;
     pickImage = _none;

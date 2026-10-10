@@ -157,6 +157,7 @@ void main() {
       HybridClock(installationId: 'x'),
     ).write('worklog', wl1, {'date': '2026-10-01', 'content': '旧数据'});
     await v2.customStatement('DROP TABLE record_refs');
+    await v2.customStatement('DROP TABLE calendar_links');
     await v2.customStatement('PRAGMA user_version = 1');
     await v2.close();
 
@@ -166,6 +167,47 @@ void main() {
     expect((await s.get(wl1))!.fields['content'], '旧数据');
     await s.write('note', note, {'format': 'markdown', 'tags': '升级后'});
     expect((await upgraded.refsOf(note)).single.value, '升级后');
+    // v3 的系统日历对应表同样建好
+    expect(await upgraded.select(upgraded.calendarLinks).get(), isEmpty);
+  });
+
+  test('从 schema v2 升级：建立系统日历对应表', () async {
+    final dir = await Directory.systemTemp.createTemp('jikelog-db');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/v2.sqlite');
+    final v3 = AppDatabase(NativeDatabase(file));
+    await RecordStore(
+      v3,
+      HybridClock(installationId: 'x'),
+    ).write('note', note, {'format': 'markdown', 'tags': '保留'});
+    await v3.customStatement('DROP TABLE calendar_links');
+    await v3.customStatement('PRAGMA user_version = 2');
+    await v3.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    expect((await upgraded.refsOf(note)).single.value, '保留');
+    await upgraded
+        .into(upgraded.calendarLinks)
+        .insert(
+          CalendarLinksCompanion.insert(
+            memoId: 'm',
+            eventId: 'e',
+            signature: 's',
+          ),
+        );
+    expect(await upgraded.select(upgraded.calendarLinks).get(), hasLength(1));
+    await upgraded.wipe();
+    expect(await upgraded.select(upgraded.calendarLinks).get(), isEmpty);
+  });
+
+  test('备忘录按时间排序', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final s = RecordStore(db, HybridClock(installationId: 'x'));
+    await s.write('memo', wl1, {'content': '晚', 'at': 1791553544000});
+    expect(await _sortKey(db, wl1), '1791553544000');
+    expect(RecordStore.memoSortKey(5), '0000000000005');
   });
 }
 

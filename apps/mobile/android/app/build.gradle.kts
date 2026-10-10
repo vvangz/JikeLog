@@ -12,6 +12,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // 本地通知插件在旧版 Android 上需要 java.time 等新 API
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -26,6 +28,12 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // 极光推送：AppKey 不入库，由环境变量 JPUSH_APPKEY 注入；为空时 App 不初始化推送（只用本地提醒）
+        manifestPlaceholders += mapOf(
+            "JPUSH_PKGNAME" to "com.jikelog.app",
+            "JPUSH_APPKEY" to (System.getenv("JPUSH_APPKEY") ?: ""),
+            "JPUSH_CHANNEL" to "developer-default",
+        )
     }
 
     buildTypes {
@@ -45,4 +53,8 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

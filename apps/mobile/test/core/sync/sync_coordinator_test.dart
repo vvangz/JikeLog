@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jikelog/core/config.dart';
 import 'package:jikelog/core/api/models.dart';
 import 'package:jikelog/core/storage/stores.dart';
 import 'package:jikelog/core/sync/sync_providers.dart';
@@ -27,7 +28,9 @@ void main() {
     final c = ProviderContainer(
       overrides: testOverrides(
         backend: backend,
-        store: MemoryStore({'consent.version': '1'}),
+        store: MemoryStore({
+          'consent.version': '${AppConfig.privacyPolicyVersion}',
+        }),
         tokens: MemoryTokenStore(testTokens),
         db: db,
         syncServer: server,
@@ -97,7 +100,9 @@ void main() {
     final c = ProviderContainer(
       overrides: testOverrides(
         backend: backend,
-        store: MemoryStore({'consent.version': '1'}),
+        store: MemoryStore({
+          'consent.version': '${AppConfig.privacyPolicyVersion}',
+        }),
         tokens: MemoryTokenStore(testTokens),
         db: db,
         syncServer: server,
@@ -143,7 +148,9 @@ void main() {
     final c = ProviderContainer(
       overrides: testOverrides(
         backend: backend,
-        store: MemoryStore({'consent.version': '1'}),
+        store: MemoryStore({
+          'consent.version': '${AppConfig.privacyPolicyVersion}',
+        }),
         tokens: MemoryTokenStore(testTokens),
       ),
     );

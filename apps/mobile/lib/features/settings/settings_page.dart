@@ -7,6 +7,7 @@ import '../../app/theme/jk_tokens.g.dart';
 import '../../core/api/models.dart';
 import '../../shared/ui/jk_feedback.dart';
 import '../../shared/ui/jk_page.dart';
+import 'reminder_settings.dart';
 import 'settings_controller.dart';
 
 /// 可选的默认提前提醒（分钟）。
@@ -114,6 +115,10 @@ class SettingsPage extends ConsumerWidget {
                 ),
               ),
             ),
+            const Divider(height: 1),
+            const ReminderPermissionTile(),
+            const Divider(height: 1),
+            const CalendarExportTile(),
           ],
         ),
         const JkSectionTitle('其他'),

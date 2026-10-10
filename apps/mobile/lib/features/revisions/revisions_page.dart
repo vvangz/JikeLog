@@ -13,6 +13,8 @@ import '../../shared/ui/jk_button.dart';
 import '../../shared/ui/jk_feedback.dart';
 import '../../shared/ui/jk_states.dart';
 import '../attachments/attachment_viewers.dart';
+import '../memos/memo_models.dart';
+import '../memos/memo_repository.dart';
 import '../notes/note_repository.dart';
 import '../worklog/worklog_repository.dart';
 
@@ -22,13 +24,17 @@ final _revisionsProvider = FutureProvider.autoDispose
     );
 
 /// 实体在提示语中的称呼。
-String _noun(String entity) => entity == Entities.note ? '笔记' : '日志';
+String _noun(String entity) => switch (entity) {
+  Entities.note => '笔记',
+  Entities.memo => '备忘',
+  _ => '日志',
+};
 
 /// 修订历史：查看并恢复编辑前、冲突中落败、删除前的版本（需要联网）。
 class RevisionsPage extends ConsumerStatefulWidget {
   const RevisionsPage({super.key, required this.entity, required this.id});
 
-  /// 实体类型：worklog 或 note。
+  /// 实体类型：worklog、note 或 memo。
   final String entity;
   final String id;
 
@@ -154,7 +160,18 @@ class _RevisionDetailState extends ConsumerState<_RevisionDetail> {
   Future<void> _restore(Map<String, Object?> f) async {
     setState(() => _restoring = true);
     try {
-      if (widget.entity == Entities.note) {
+      if (widget.entity == Entities.memo) {
+        final at = f['at'];
+        await ref
+            .read(memoRepositoryProvider)
+            .update(
+              widget.recordId,
+              content: f['content'] as String? ?? '',
+              at: at is int ? DateTime.fromMillisecondsSinceEpoch(at) : null,
+              allDay: f['allDay'] == 1,
+              reminders: parseReminders(f['reminders'] as String? ?? ''),
+            );
+      } else if (widget.entity == Entities.note) {
         await ref
             .read(noteRepositoryProvider)
             .update(
@@ -211,11 +228,17 @@ class _RevisionDetailState extends ConsumerState<_RevisionDetail> {
           final isNote = widget.entity == Entities.note;
           final location = f['location'] as String? ?? '';
           final content = (isNote ? f['body'] : f['content']) as String? ?? '';
-          final heading = isNote
-              ? ((f['title'] as String?)?.trim().isNotEmpty ?? false
-                    ? f['title']! as String
-                    : '无标题笔记')
-              : '${f['date'] ?? ''}${location.isEmpty ? '' : ' · $location'}';
+          final at = f['at'];
+          final heading = switch (widget.entity) {
+            Entities.note =>
+              (f['title'] as String?)?.trim().isNotEmpty ?? false
+                  ? f['title']! as String
+                  : '无标题笔记',
+            Entities.memo when at is int => _time(
+              DateTime.fromMillisecondsSinceEpoch(at),
+            ),
+            _ => '${f['date'] ?? ''}${location.isEmpty ? '' : ' · $location'}',
+          };
           return ListView(
             padding: const EdgeInsets.all(JkTokens.spacingLg),
             children: [
