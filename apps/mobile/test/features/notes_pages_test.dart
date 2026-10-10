@@ -127,6 +127,7 @@ Future<void> _remoteBody(
 void main() {
   tearDown(TestHooks.reset);
   _revisionTests();
+  _robustnessTests();
 
   testWidgets('空状态 → 新建富文本笔记 → 输入 → 自动保存并同步 → 返回列表', (tester) async {
     final server = FakeSyncServer();
@@ -139,6 +140,7 @@ void main() {
     expect(find.byKey(const Key('rich-toolbar')), findsOneWidget);
     final ed = FakeRichEditor.current!;
     expect(ed.received.first['type'], 'init');
+    expect(ed.received[1]['type'], 'focus', reason: '新建的笔记直接开始输入');
 
     await tester.enterText(find.byKey(const Key('note-title')), '周会纪要');
     ed.type('- [ ] 整理接口文档');
@@ -274,7 +276,8 @@ void main() {
     await tester.tapAt(const Offset(200, 20)); // 关闭面板
     await settleApp(tester);
 
-    await tapAndSettle(tester, find.byKey(const Key('note-favorite')));
+    await tapAndSettle(tester, find.byKey(const Key('note-menu')));
+    await tapAndSettle(tester, find.text('收藏'));
     await tapAndSettle(tester, find.byKey(const Key('note-menu')));
     await tapAndSettle(tester, find.text('置顶'));
     await _autosave(tester);
@@ -575,5 +578,74 @@ void _revisionTests() {
       () => find.textContaining('.m4a').evaluate().isNotEmpty,
     );
     expect(find.textContaining('录音 '), findsOneWidget);
+  });
+}
+
+void _robustnessTests() {
+  testWidgets('编辑器就绪前到达的其他设备修改：用最新内容初始化，之后照常自动保存', (tester) async {
+    FakeRichEditor.autoReady = false;
+    await pumpApp(tester, syncServer: FakeSyncServer());
+    final id = await _newNote(tester);
+    final ed = FakeRichEditor.current!;
+    await _autosave(tester); // 新笔记先同步，之后到达的远端修改才会覆盖本机的空正文
+    (_c(tester).read(syncTransportProvider) as FakeTransport).online = false;
+    await _remoteBody(tester, id, '其他设备写的');
+    ed.becomeReady();
+    await settleApp(tester);
+    expect(ed.received.first['type'], 'init');
+    expect(ed.received.first['markdown'], '其他设备写的');
+    ed.type('其他设备写的\n本机补充');
+    await _autosave(tester);
+    expect((await _note(tester, id)).body, '其他设备写的\n本机补充');
+  });
+
+  testWidgets('编辑器没有响应替换时切换到 Markdown：本地输入合并到替换内容上', (tester) async {
+    await pumpApp(tester, syncServer: FakeSyncServer());
+    final id = await _newNote(tester);
+    final ed = FakeRichEditor.current!;
+    ed.type('第一段\n第二段');
+    await _autosave(tester);
+    (_c(tester).read(syncTransportProvider) as FakeTransport).online = false;
+    FakeRichEditor.silent = true;
+    ed.type('第一段，本地\n第二段', deliver: false);
+    await _remoteBody(tester, id, '第一段\n第二段，远端');
+    await tapAndSettle(tester, find.byKey(const Key('note-format')));
+    await tester.pump(const Duration(seconds: 2));
+    await settleApp(tester);
+    final body = find.byKey(const Key('note-body'));
+    expect(tester.widget<TextField>(body).controller!.text, '第一段，本地\n第二段，远端');
+    await tester.enterText(body, '第一段，本地\n第二段，远端\n继续写');
+    await _autosave(tester);
+    expect((await _note(tester, id)).body, endsWith('继续写'));
+  });
+
+  testWidgets('进入后台时立即保存尚未保存的输入', (tester) async {
+    await pumpApp(tester, syncServer: FakeSyncServer());
+    final id = await _newNote(tester);
+    FakeRichEditor.current!.type('切到后台前写的', deliver: false);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump(const Duration(milliseconds: 100));
+    await settleApp(tester);
+    expect((await _note(tester, id)).body, '切到后台前写的');
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+  });
+
+  testWidgets('新建后什么都没写就返回：删除这篇空笔记', (tester) async {
+    await pumpApp(tester, syncServer: FakeSyncServer());
+    final id = await _newNote(tester);
+    await tester.pageBack();
+    await settleApp(tester);
+    expect(
+      await _run<Note?>(
+        tester,
+        () => _c(tester).read(noteRepositoryProvider).get(id),
+      ),
+      isNull,
+    );
+    expect(find.text('还没有笔记'), findsOneWidget);
   });
 }

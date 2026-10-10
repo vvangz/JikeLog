@@ -13,8 +13,8 @@ import 'note_filters.dart';
 import 'note_models.dart';
 import 'note_repository.dart';
 
-/// 宽屏时筛选面板常驻左侧。
-const _panelBreakpoint = 840.0;
+/// 页面宽度达到此值时筛选面板常驻左侧。
+const _panelBreakpoint = 720.0;
 
 /// 笔记主界面：按文件夹、标签、收藏筛选的笔记列表。
 class NotesListPage extends ConsumerWidget {
@@ -29,10 +29,8 @@ class NotesListPage extends ConsumerWidget {
           format: NoteFormat.rich,
           folderId: filter is FolderNotes ? filter.folderId : null,
           tag: filter is TagNotes ? filter.tag : null,
+          favorite: filter is FavoriteNotes,
         );
-    if (filter is FavoriteNotes) {
-      await ref.read(noteRepositoryProvider).update(id, favorite: true);
-    }
     if (context.mounted) await context.push('/notes/$id');
   }
 
@@ -44,17 +42,15 @@ class NotesListPage extends ConsumerWidget {
       expand: false,
       initialChildSize: 0.6,
       maxChildSize: 0.9,
-      builder: (_, _) =>
-          NoteFilterPanel(onSelected: () => Navigator.of(sheet).pop()),
+      builder: (_, scroll) => NoteFilterPanel(
+        scroll: scroll,
+        onSelected: () => Navigator.of(sheet).pop(),
+      ),
     ),
   );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final wide = MediaQuery.sizeOf(context).width >= _panelBreakpoint;
-    final list = _NoteList(
-      onOpenPanel: wide ? null : () => _openPanel(context),
-    );
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
@@ -63,15 +59,21 @@ class NotesListPage extends ConsumerWidget {
         icon: const Icon(Icons.add),
         label: const Text('新建笔记'),
       ),
-      body: wide
-          ? Row(
-              children: [
-                const SizedBox(width: 280, child: NoteFilterPanel()),
-                VerticalDivider(width: 1, color: context.jkColors.divider),
-                Expanded(child: list),
-              ],
-            )
-          : list,
+      // 按页面自身的宽度判断（宽屏时左侧还有常驻的导航侧栏）
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < _panelBreakpoint) {
+            return _NoteList(onOpenPanel: () => _openPanel(context));
+          }
+          return Row(
+            children: [
+              const SizedBox(width: 280, child: NoteFilterPanel()),
+              VerticalDivider(width: 1, color: context.jkColors.divider),
+              const Expanded(child: _NoteList()),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -127,35 +129,38 @@ class _NoteList extends ConsumerWidget {
         ),
         data: (all) {
           final items = applyFilter(all, filter, tree);
-          return ListView(
+          final empty = Padding(
+            padding: const EdgeInsets.only(top: JkTokens.spacingXxl),
+            child: JkEmptyState(
+              icon: const JkIcon(JkIcons.notes, size: 32),
+              title: all.isEmpty ? '还没有笔记' : '这里还没有笔记',
+              message: all.isEmpty
+                  ? '支持 Markdown 与富文本、代码块、表格、待办清单，可以插入图片、PDF、录音等附件'
+                  : '点击右下角新建笔记',
+            ),
+          );
+          // 按需构建：笔记多时只构建屏幕上的条目
+          return ListView.builder(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.only(bottom: 96), // 给悬浮按钮留出空间
-            children: [
-              header,
-              if (items.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: JkTokens.spacingXxl),
-                  child: JkEmptyState(
-                    icon: const JkIcon(JkIcons.notes, size: 32),
-                    title: all.isEmpty ? '还没有笔记' : '这里还没有笔记',
-                    message: all.isEmpty
-                        ? '支持 Markdown 与富文本、代码块、表格、待办清单，可以插入图片、PDF、录音等附件'
-                        : '点击右下角新建笔记',
-                  ),
-                ),
-              for (final n in items)
-                Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 720),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: JkTokens.spacingLg,
-                      ),
-                      child: _NoteTile(note: n, tree: tree),
+            itemCount: 1 + (items.isEmpty ? 1 : items.length),
+            itemBuilder: (context, i) {
+              if (i == 0) return header;
+              if (items.isEmpty) return empty;
+              final n = items[i - 1];
+              return Center(
+                key: ValueKey(n.id),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: JkTokens.spacingLg,
                     ),
+                    child: _NoteTile(note: n, tree: tree),
                   ),
                 ),
-            ],
+              );
+            },
           );
         },
       ),

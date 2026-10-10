@@ -233,6 +233,8 @@ abstract final class TestHooks {
   }
 
   static void reset() {
+    FakeRichEditor.autoReady = true;
+    FakeRichEditor.silent = false;
     pickImage = _none;
     launch = _yes;
     openExternal = _yes2;

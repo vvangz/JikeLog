@@ -15,6 +15,9 @@ final attachmentFileProvider = FutureProvider.autoDispose.family<File, String>(
 /// 直接传给编辑器的图片大小上限；更大的图片缩小后再传。
 const maxInlineImageBytes = 1536 * 1024;
 
+/// 超过这个大小的文件不当作图片读取（正文可能引用了 PDF、音频等大文件）。
+const maxImageFileBytes = 20 * 1024 * 1024;
+
 /// 缩小后的最大宽度（像素）。
 const inlineImageWidth = 1280;
 
@@ -42,6 +45,7 @@ String? sniffImageMime(Uint8List b) {
 ///
 /// 常见格式且不太大时直接编码；否则解码后缩小为 PNG。无法解码（不是图片）时返回 null。
 Future<String?> imageDataUrl(File file) async {
+  if (await file.length() > maxImageFileBytes) return null;
   final bytes = await file.readAsBytes();
   final mime = sniffImageMime(bytes);
   if (mime != null && bytes.length <= maxInlineImageBytes) {

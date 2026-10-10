@@ -33,31 +33,62 @@ class AttachmentSection extends ConsumerWidget {
       context: context,
       showDragHandle: true,
       isDismissible: false,
+      enableDrag: false, // 录音中不能下拉误关（会丢弃录音）
       builder: (_) => const RecorderSheet(),
     );
     if (file == null) return;
-    await ref
-        .read(attachmentServiceProvider)
-        .add(
-          ownerEntity: ownerEntity,
-          ownerId: ownerId,
-          source: file,
-          fileName: file.uri.pathSegments.last,
-        );
-    await file.delete();
+    try {
+      await ref
+          .read(attachmentServiceProvider)
+          .add(
+            ownerEntity: ownerEntity,
+            ownerId: ownerId,
+            source: file,
+            fileName: file.uri.pathSegments.last,
+          );
+    } on ApiException catch (e) {
+      if (context.mounted) {
+        showJkToast(context, e.message, kind: JkToastKind.error);
+      }
+    } on Object catch (e) {
+      debugPrint('保存录音失败: $e');
+      if (context.mounted) {
+        showJkToast(context, '保存录音失败，请重试', kind: JkToastKind.error);
+      }
+    } finally {
+      // 录音已复制到附件目录（或保存失败）：临时文件不再需要，不留明文副本
+      if (await file.exists()) await file.delete();
+    }
   }
 
   Future<void> _add(BuildContext context, WidgetRef ref) async {
     final picked = await ref.read(filePickerProvider)();
+    if (!context.mounted) return;
     final service = ref.read(attachmentServiceProvider);
+    final failed = <String>[];
+    // 逐个添加：一个文件失败（例如超过大小上限）不影响其余文件
     for (final f in picked) {
       final path = f.path;
       if (path == null) continue;
-      await service.add(
-        ownerEntity: ownerEntity,
-        ownerId: ownerId,
-        source: File(path),
-        fileName: f.name,
+      try {
+        await service.add(
+          ownerEntity: ownerEntity,
+          ownerId: ownerId,
+          source: File(path),
+          fileName: f.name,
+        );
+      } on ApiException catch (e) {
+        failed.add('${f.name}：${e.message}');
+      } on Object catch (e) {
+        debugPrint('添加附件失败: $e');
+        failed.add('${f.name}：无法读取文件');
+      }
+    }
+    if (failed.isNotEmpty && context.mounted) {
+      showJkToast(
+        context,
+        '以下文件没有添加：\n${failed.join('\n')}',
+        kind: JkToastKind.error,
       );
     }
   }
@@ -139,7 +170,9 @@ class _AttachmentTileState extends ConsumerState<_AttachmentTile> {
       confirmLabel: '删除',
       destructive: true,
     );
-    if (ok) await ref.read(attachmentServiceProvider).remove(widget.item.id);
+    if (ok && mounted) {
+      await ref.read(attachmentServiceProvider).remove(widget.item.id);
+    }
   }
 
   @override

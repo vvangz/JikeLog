@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
+import '../../shared/ui/jk_feedback.dart';
 import 'note_models.dart';
 import 'note_repository.dart';
 
@@ -31,7 +32,11 @@ class LinkedNotesSection extends ConsumerWidget {
         ],
       ),
     );
-    if (id != null) await ref.read(noteRepositoryProvider).link(id, worklogId);
+    if (id == null) return;
+    final ok = await ref.read(noteRepositoryProvider).link(id, worklogId);
+    if (!ok && context.mounted) {
+      showJkToast(context, '这篇笔记关联的工作日志数量已达上限', kind: JkToastKind.error);
+    }
   }
 
   Future<void> _create(BuildContext context, WidgetRef ref) async {

@@ -141,6 +141,30 @@ void main() {
       expect(t.path(_a), 'A');
     });
 
+    test('远处祖先不存在时，下级的层级保持不变；按原始上级链禁止写出循环', () {
+      const x = '0192a000-0000-7000-8000-0000000000ee'; // 已在其他设备上删除
+      final t = FolderTree([
+        _folder(_a, 'P', x),
+        _folder(_b, 'Q', _a),
+        _folder(_c, 'R', _b),
+      ]);
+      expect(t.roots.single.folder.id, _a);
+      expect(t.path(_c), 'P / Q / R');
+      expect(t.subtree(_a), {_a, _b, _c});
+      expect(t.canMove(_a, _c), isFalse);
+    });
+
+    test('循环的下级挂在环上的文件夹下面', () {
+      final t = FolderTree([
+        _folder(_a, 'A', _b),
+        _folder(_b, 'B', _a),
+        _folder(_c, 'C', _a),
+      ]);
+      expect(t.parentOf(_c), _a);
+      expect(t.subtree(_a), {_a, _c});
+      expect(t.canMove(_a, _b), isFalse, reason: '原始上级链上 B 已在 A 之下');
+    });
+
     test('不能把文件夹移到自己或自己的下级中', () {
       final t = FolderTree([_folder(_a, '工作'), _folder(_b, '项目', _a)]);
       expect(t.canMove(_a, _b), isFalse);

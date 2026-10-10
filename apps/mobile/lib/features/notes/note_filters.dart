@@ -126,8 +126,16 @@ List<(String, int)> tagCounts(List<Note> notes) {
   return out;
 }
 
-/// 每个文件夹（含下级）中的笔记数。
-Map<String, int> folderCounts(List<Note> notes, FolderTree tree) => {
-  for (final id in tree.byId.keys)
-    id: applyFilter(notes, FolderNotes(id), tree).length,
-};
+/// 每个文件夹（含下级）中的笔记数：先按所在文件夹计数，再逐级加到上级（O(笔记数 + 文件夹数 × 深度)）。
+Map<String, int> folderCounts(List<Note> notes, FolderTree tree) {
+  final counts = {for (final id in tree.byId.keys) id: 0};
+  for (final n in notes) {
+    final seen = <String>{};
+    String? cur = n.folderId;
+    while (cur != null && counts.containsKey(cur) && seen.add(cur)) {
+      counts[cur] = counts[cur]! + 1;
+      cur = tree.parentOf(cur);
+    }
+  }
+  return counts;
+}

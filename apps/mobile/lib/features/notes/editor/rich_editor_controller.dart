@@ -156,7 +156,16 @@ class RichEditorController {
 
   Future<void> Function(String js)? _run;
   Future<Object?> Function(String js)? _evaluate;
+
+  /// 初始化消息。其中的正文随修改与替换更新：页面重新加载（例如 WebView 渲染进程重建）时用最新内容初始化。
   Map<String, Object>? _pendingInit;
+
+  /// 已发出、尚未收到确认的替换。
+  bool _awaitingAck = false;
+  bool _disposed = false;
+
+  /// 取回编辑器内容的超时：WebView 卡死时不能让离开页面一直等待。
+  static const flushTimeout = Duration(seconds: 2);
 
   /// 连接到 WebView。页面加载完成（收到 ready）后发送初始化消息。
   void attach({
@@ -174,6 +183,7 @@ class RichEditorController {
     required Map<String, Object> theme,
   }) {
     _rev = 0;
+    _awaitingAck = false;
     _pendingInit = {
       'type': 'init',
       'markdown': markdown,
@@ -197,8 +207,14 @@ class RichEditorController {
     );
   }
 
-  /// 处理编辑器发来的消息（JavaScript 通道）。格式不对的消息忽略。
+  void _remember(String markdown) {
+    final init = _pendingInit;
+    if (init != null) _pendingInit = {...init, 'markdown': markdown};
+  }
+
+  /// 处理编辑器发来的消息（JavaScript 通道）。格式不对的消息、销毁后迟到的消息忽略。
   Future<void> handleMessage(String raw) async {
+    if (_disposed) return;
     final Object? decoded;
     try {
       decoded = jsonDecode(raw);
@@ -209,17 +225,30 @@ class RichEditorController {
     switch (decoded['type']) {
       case 'ready':
         ready.value = true;
+        _rev = 0;
         _sendInit();
+        if (_focusOnReady && _pendingInit != null) {
+          _focusOnReady = false;
+          unawaited(_send({'type': 'focus'}));
+        }
+        // 页面重新加载：初始化内容已包含等待确认的替换
+        if (_awaitingAck) {
+          _awaitingAck = false;
+          onSetApplied?.call();
+        }
       case 'change':
         final md = decoded['markdown'];
         final rev = decoded['rev'];
         if (md is String && rev is int) {
           _rev = rev;
+          _remember(md);
           onChange(md);
         }
       case 'setApplied':
+        _awaitingAck = false;
         onSetApplied?.call();
       case 'setRejected':
+        _awaitingAck = false;
         onSetRejected?.call();
       case 'state':
         final s = decoded['state'];
@@ -244,8 +273,21 @@ class RichEditorController {
   }
 
   /// 用其他设备的修改（或合并结果）替换内容。编辑器中有尚未收到的修改时会被拒绝（[onSetRejected]）。
-  Future<void> setMarkdown(String markdown) =>
-      _send({'type': 'setMarkdown', 'markdown': markdown, 'expectRev': _rev});
+  ///
+  /// 页面尚未就绪时只更新初始化内容，并立即确认（就绪后用新内容初始化，不会再有回复）。
+  Future<void> setMarkdown(String markdown) async {
+    _remember(markdown);
+    if (!ready.value) {
+      onSetApplied?.call();
+      return;
+    }
+    _awaitingAck = true;
+    await _send({
+      'type': 'setMarkdown',
+      'markdown': markdown,
+      'expectRev': _rev,
+    });
+  }
 
   Future<void> run(RichCommand c) => _send({'type': 'command', 'name': c.name});
 
@@ -260,12 +302,22 @@ class RichEditorController {
   Future<void> insertImage(String attachmentId, String alt) =>
       _send({'type': 'insertImage', 'id': attachmentId, 'alt': alt});
 
-  Future<void> setTheme(Map<String, Object> theme) {
-    _pendingInit = {...?_pendingInit, 'theme': theme};
-    return _send({'type': 'theme', 'theme': theme});
+  Future<void> setTheme(Map<String, Object> theme) async {
+    final init = _pendingInit;
+    if (init != null) _pendingInit = {...init, 'theme': theme};
+    if (ready.value) await _send({'type': 'theme', 'theme': theme});
   }
 
-  Future<void> focus() => _send({'type': 'focus'});
+  bool _focusOnReady = false;
+
+  /// 聚焦到文末。页面尚未就绪时，就绪并初始化后再聚焦。
+  Future<void> focus() async {
+    if (!ready.value) {
+      _focusOnReady = true;
+      return;
+    }
+    await _send({'type': 'focus'});
+  }
 
   /// 立即取回尚未发出的修改（离开页面、切换格式前）。没有时返回 null。
   Future<String?> flush() async {
@@ -274,7 +326,7 @@ class RichEditorController {
     try {
       final r = await evaluate(
         'JSON.stringify({c: window.jikelog ? window.jikelog.flush() : null})',
-      );
+      ).timeout(flushTimeout);
       // 结果包在对象里再解码：Android 的 WebView 会把字符串结果再包一层 JSON 引号，
       // 直接返回正文时无法区分"正文恰好是合法 JSON"与"多包了一层"
       Object? v = r;
@@ -287,6 +339,7 @@ class RichEditorController {
       final rev = c['rev'];
       if (md is! String || rev is! int) return null;
       _rev = rev;
+      _remember(md);
       return md;
     } on Object catch (e) {
       debugPrint('取回编辑器内容失败: $e');
@@ -295,6 +348,7 @@ class RichEditorController {
   }
 
   void dispose() {
+    _disposed = true;
     format.dispose();
     ready.dispose();
     _run = null;

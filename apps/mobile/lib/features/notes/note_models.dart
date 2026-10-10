@@ -15,7 +15,7 @@ enum NoteFormat {
 /// 一篇笔记。
 @immutable
 class Note {
-  const Note({
+  Note({
     required this.id,
     required this.title,
     required this.body,
@@ -69,17 +69,49 @@ class Note {
   final bool hasConflict;
   final String? syncError;
 
+  /// 预览只看正文开头：列表每次刷新都会重新生成全部笔记，不能对长正文整篇处理。
+  static const _previewChars = 2000;
+
+  late final String _head = body.length <= _previewChars
+      ? body
+      : body.substring(0, _previewChars);
+
   /// 列表与标题栏中显示的标题：没有标题时用正文的第一行。
-  String get displayTitle {
+  late final String displayTitle = _titleOrFirstLine();
+
+  /// 列表中的正文摘要（纯文本）。
+  late final String excerpt = plainPreview(_head);
+
+  String _titleOrFirstLine() {
     final t = title.trim();
     if (t.isNotEmpty) return t;
     final first = plainPreview(
-      body.split('\n').firstWhere((l) => l.trim().isNotEmpty, orElse: () => ''),
+      _head
+          .split('\n')
+          .firstWhere((l) => l.trim().isNotEmpty, orElse: () => ''),
     );
     return first.isEmpty ? '无标题笔记' : first;
   }
 
-  String get excerpt => plainPreview(body);
+  @override
+  bool operator ==(Object other) =>
+      other is Note &&
+      other.id == id &&
+      other.title == title &&
+      other.body == body &&
+      other.format == format &&
+      other.folderId == folderId &&
+      other.favorite == favorite &&
+      other.pinned == pinned &&
+      listEquals(other.tags, tags) &&
+      listEquals(other.worklogIds, worklogIds) &&
+      other.updatedAt == updatedAt &&
+      other.pending == pending &&
+      other.hasConflict == hasConflict &&
+      other.syncError == syncError;
+
+  @override
+  int get hashCode => Object.hash(id, title, body.length, updatedAt, pending);
 
   /// 最后修改时间取各字段 HLC 的最大值（HLC 前 13 位为毫秒时间戳），
   /// 而不是本机写入时间：拉取到旧笔记时不应让它排到最前面。
@@ -115,6 +147,9 @@ class NoteFolder {
 /// 文件夹名的上限（与服务端一致）。
 const maxFolderNameLength = 50;
 
+/// 笔记正文的上限（字符，与服务端一致）。
+const maxNoteBodyLength = 100000;
+
 /// 笔记标题的上限（与服务端一致）。
 const maxNoteTitleLength = 200;
 
@@ -147,11 +182,16 @@ class FolderTree {
       list.sort(_byName);
     }
     _parentOf = parentOf;
+    _children = {
+      for (final e in kids.entries)
+        if (e.key != null) e.key!: [for (final f in e.value) f.id],
+    };
     roots = _build(kids, null, 0);
   }
 
   final Map<String, NoteFolder> byId;
   late final Map<String, String?> _parentOf;
+  late final Map<String, List<String>> _children;
   late final List<FolderNode> roots;
 
   static int _byName(NoteFolder a, NoteFolder b) {
@@ -159,16 +199,23 @@ class FolderTree {
     return c != 0 ? c : a.id.compareTo(b.id);
   }
 
-  /// 沿上级链向上走；遇到不存在的上级或回到自身（循环）时视为顶层。
+  /// 显示用的上级：直接上级不存在，或自己在循环上时视为顶层；其余保留原来的上级
+  /// （祖先链上更远处的异常不影响自己，否则整条链都会被拍平）。
   String? _effectiveParent(NoteFolder f) {
-    final seen = <String>{f.id};
-    var cur = f.parentId;
-    while (cur != null) {
-      final p = byId[cur];
-      if (p == null || !seen.add(cur)) return null;
-      cur = p.parentId;
+    final parent = f.parentId;
+    if (parent == null || !byId.containsKey(parent)) return null;
+    return _onCycle(f.id) ? null : parent;
+  }
+
+  /// 沿原始上级链向上走能否回到自己。
+  bool _onCycle(String id) {
+    final seen = <String>{};
+    String? cur = byId[id]?.parentId;
+    while (cur != null && byId.containsKey(cur) && seen.add(cur)) {
+      if (cur == id) return true;
+      cur = byId[cur]!.parentId;
     }
-    return f.parentId;
+    return false;
   }
 
   List<FolderNode> _build(
@@ -197,13 +244,13 @@ class FolderTree {
   /// 显示用的上级（容错后的）。
   String? parentOf(String id) => _parentOf[id];
 
-  /// [id] 及其全部下级文件夹。
+  /// [id] 及其全部下级文件夹（按显示的树）。
   Set<String> subtree(String id) {
     final out = <String>{};
     void walk(String cur) {
       if (!out.add(cur)) return;
-      for (final e in _parentOf.entries) {
-        if (e.value == cur) walk(e.key);
+      for (final c in _children[cur] ?? const <String>[]) {
+        walk(c);
       }
     }
 
@@ -224,7 +271,17 @@ class FolderTree {
     return names.join(' / ');
   }
 
-  /// 把 [id] 移到 [target] 下是否合法（不能移到自己或自己的下级中）。
-  bool canMove(String id, String? target) =>
-      target == null || !subtree(id).contains(target);
+  /// 把 [id] 移到 [target] 下是否合法：不能移到自己或自己的下级中。
+  /// 按原始的上级链判断（而不是容错后显示的树），否则可能写出真正的循环。
+  bool canMove(String id, String? target) {
+    if (target == null) return true;
+    if (subtree(id).contains(target)) return false;
+    final seen = <String>{};
+    String? cur = target;
+    while (cur != null && seen.add(cur)) {
+      if (cur == id) return false;
+      cur = byId[cur]?.parentId;
+    }
+    return true;
+  }
 }

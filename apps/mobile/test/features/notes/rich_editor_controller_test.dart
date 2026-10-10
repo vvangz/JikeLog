@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
+
+import 'package:fake_async/fake_async.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jikelog/app/theme/jk_tokens.g.dart';
@@ -61,6 +64,7 @@ void main() {
   });
 
   test('正文作为字符串字面量传入，不会被当作代码执行', () async {
+    await c.handleMessage('{"type":"ready"}');
     await c.setMarkdown("');alert(1);//</script>");
     expect(
       web.scripts.single,
@@ -148,6 +152,7 @@ void main() {
       onSetRejected: () => rejected++,
     )..attach(run: web.run, evaluate: web.evaluate);
     addTearDown(c2.dispose);
+    await c2.handleMessage('{"type":"ready"}');
     await c2.setMarkdown('远端');
     expect(web.sent.last, {
       'type': 'setMarkdown',
@@ -168,7 +173,70 @@ void main() {
     expect(web.sent.last['expectRev'], 0);
   });
 
+  test('页面就绪前的替换只更新初始化内容并立即确认；修改也会更新初始化内容', () async {
+    var applied = 0;
+    final c2 = RichEditorController(
+      onChange: (_) {},
+      loadImage: (_) async => null,
+      onSetApplied: () => applied++,
+    )..attach(run: web.run, evaluate: web.evaluate);
+    addTearDown(c2.dispose);
+    // 初始化之前设置主题不会产生残缺的初始化消息
+    await c2.setTheme({'dark': true});
+    c2.init(markdown: '打开时的内容', placeholder: '', theme: {'dark': false});
+    await c2.setMarkdown('其他设备的修改');
+    expect(applied, 1);
+    expect(web.sent, isEmpty);
+    await c2.handleMessage('{"type":"ready"}');
+    expect(web.sent.single['type'], 'init');
+    expect(web.sent.single['markdown'], '其他设备的修改');
+
+    await c2.handleMessage(
+      jsonEncode({'type': 'change', 'markdown': '本地输入', 'rev': 1}),
+    );
+    await c2.setTheme({'dark': true});
+    // 渲染进程重建后页面重新就绪：用最新内容初始化，序号归零
+    await c2.handleMessage('{"type":"ready"}');
+    expect(web.sent.last['type'], 'init');
+    expect(web.sent.last['markdown'], '本地输入');
+    expect(web.sent.last['theme'], {'dark': true});
+    await c2.setMarkdown('再次替换');
+    expect(web.sent.last['expectRev'], 0);
+  });
+
+  test('等待确认时页面重新加载：初始化内容已包含替换，视为已确认', () async {
+    var applied = 0;
+    final c2 = RichEditorController(
+      onChange: (_) {},
+      loadImage: (_) async => null,
+      onSetApplied: () => applied++,
+    )..attach(run: web.run, evaluate: web.evaluate);
+    addTearDown(c2.dispose);
+    c2.init(markdown: '旧', placeholder: '', theme: {'dark': false});
+    await c2.handleMessage('{"type":"ready"}');
+    await c2.setMarkdown('新');
+    expect(applied, 0);
+    await c2.handleMessage('{"type":"ready"}');
+    expect(applied, 1);
+    expect(web.sent.last['markdown'], '新');
+  });
+
+  test('销毁后迟到的消息被忽略', () async {
+    final got = <String>[];
+    final c2 = RichEditorController(
+      onChange: got.add,
+      loadImage: (_) async => null,
+    );
+    c2.dispose();
+    await c2.handleMessage(
+      jsonEncode({'type': 'change', 'markdown': 'x', 'rev': 1}),
+    );
+    await c2.handleMessage('{"type":"ready"}');
+    expect(got, isEmpty);
+  });
+
   test('命令、链接、图片、主题、聚焦', () async {
+    await c.handleMessage('{"type":"ready"}');
     await c.run(RichCommand.insertTable);
     expect(await c.setLink(' https://example.com '), isTrue);
     expect(await c.setLink('javascript:alert(1)'), isFalse);
@@ -211,6 +279,21 @@ void main() {
       await c.flush();
       await c.setMarkdown('合并后');
       expect(web.sent.last['expectRev'], 3);
+    });
+
+    test('WebView 没有响应时超时返回 null，不阻塞离开页面', () {
+      fakeAsync((async) {
+        final c2 = RichEditorController(
+          onChange: (_) {},
+          loadImage: (_) async => null,
+        )..attach(run: web.run, evaluate: (_) => Completer<Object?>().future);
+        unawaited(c2.handleMessage('{"type":"ready"}'));
+        String? result = 'unset';
+        unawaited(c2.flush().then((v) => result = v));
+        async.elapse(RichEditorController.flushTimeout);
+        expect(result, isNull);
+        c2.dispose();
+      });
     });
 
     test('没有尚未发出的修改、结果异常或未就绪时返回 null', () async {

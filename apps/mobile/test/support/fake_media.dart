@@ -24,10 +24,18 @@ class FakeRichEditor {
   bool unsent = false;
   final received = <Map<String, dynamic>>[];
 
+  /// 为 false 时页面不会自动就绪（模拟 WebView 加载较慢），由测试调用 [becomeReady]。
+  static bool autoReady = true;
+
+  /// 为 true 时不回复替换（模拟 WebView 没有响应）。
+  static bool silent = false;
+
   void attach() {
     controller.attach(run: _run, evaluate: _evaluate);
-    scheduleMicrotask(() => controller.handleMessage('{"type":"ready"}'));
+    if (autoReady) scheduleMicrotask(becomeReady);
   }
+
+  void becomeReady() => unawaited(controller.handleMessage('{"type":"ready"}'));
 
   void _emit(Map<String, Object?> m) =>
       unawaited(controller.handleMessage(jsonEncode(m)));
@@ -42,6 +50,7 @@ class FakeRichEditor {
         _rev = 0;
         unsent = false;
       case 'setMarkdown':
+        if (silent) return;
         if (unsent) _send();
         if (_rev != msg['expectRev']) {
           _emit({'type': 'setRejected'});

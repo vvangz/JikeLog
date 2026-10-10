@@ -8,6 +8,10 @@ import 'rich_editor_controller.dart';
 /// 编辑器页面随 App 打包（apps/note-editor 的构建产物，ADR-007）。
 const editorAsset = 'assets/editor/index.html';
 
+/// 是否为打包的编辑器页面本身（Android 上从 flutter_assets 加载）。只允许停留在这个页面。
+bool isEditorUrl(String url) =>
+    url == 'file:///android_asset/flutter_assets/$editorAsset';
+
 /// 承载编辑器的视图，测试中替换为不含 WebView 的实现。
 typedef RichEditorViewBuilder = Widget Function(
   BuildContext context,
@@ -44,7 +48,7 @@ class _RichEditorWebViewState extends State<RichEditorWebView> {
       // 页面只能停留在打包的编辑器上：拦截一切跳转（链接由工具栏交给系统浏览器打开）
       ..setNavigationDelegate(
         NavigationDelegate(
-          onNavigationRequest: (req) => req.url.endsWith(editorAsset)
+          onNavigationRequest: (req) => isEditorUrl(req.url)
               ? NavigationDecision.navigate
               : NavigationDecision.prevent,
         ),

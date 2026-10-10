@@ -5,10 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
 import '../../core/sync/refs.dart';
+import '../../shared/ui/jk_feedback.dart';
 import '../attachments/attachment_section.dart';
 import '../worklog/worklog_repository.dart';
 import 'note_dialogs.dart';
-import 'note_filters.dart';
 import 'note_models.dart';
 import 'note_repository.dart';
 
@@ -116,13 +116,11 @@ class _TagsRow extends ConsumerWidget {
   final Note note;
 
   Future<void> _add(BuildContext context, WidgetRef ref) async {
-    // 笔记列表可能尚未被监听（Riverpod 暂停未监听的 provider），直接从本机库读取
-    final notes = await ref.read(noteRepositoryProvider).watchNotes().first;
-    if (!context.mounted) return;
     final all = [
-      for (final (t, _) in tagCounts(notes))
+      for (final t in await ref.read(noteRepositoryProvider).allTags())
         if (!note.tags.contains(t)) t,
     ];
+    if (!context.mounted) return;
     final tag = await showTextInputDialog(
       context,
       title: '添加标签',
@@ -131,8 +129,10 @@ class _TagsRow extends ConsumerWidget {
       confirmLabel: '添加',
       suggestions: all,
     );
-    if (tag != null) {
-      await ref.read(noteRepositoryProvider).addTag(note.id, tag);
+    if (tag == null) return;
+    final ok = await ref.read(noteRepositoryProvider).addTag(note.id, tag);
+    if (!ok && context.mounted) {
+      showJkToast(context, '标签数量已达上限，请先移除一些标签', kind: JkToastKind.error);
     }
   }
 
@@ -193,8 +193,12 @@ class _LinkedWorklogs extends ConsumerWidget {
                 worklogs: all,
                 exclude: note.worklogIds.toSet(),
               );
-              if (id != null) {
-                await ref.read(noteRepositoryProvider).link(note.id, id);
+              if (id == null) return;
+              final ok = await ref
+                  .read(noteRepositoryProvider)
+                  .link(note.id, id);
+              if (!ok && context.mounted) {
+                showJkToast(context, '关联的工作日志数量已达上限', kind: JkToastKind.error);
               }
             },
             icon: const Icon(Icons.add_link, size: 18),

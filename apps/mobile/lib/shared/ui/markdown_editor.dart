@@ -41,6 +41,32 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
 
   TextEditingController get _c => widget.controller;
 
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onText);
+  }
+
+  @override
+  void didUpdateWidget(MarkdownEditor old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_onText);
+      widget.controller.addListener(_onText);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onText);
+    super.dispose();
+  }
+
+  /// 预览时内容被替换（例如合并了其他设备的修改）也要刷新预览。
+  void _onText() {
+    if (_preview && mounted) setState(() {});
+  }
+
   /// 用 [left]/[right] 包裹选中文本；没有选中时插入占位文字并选中。
   void _wrap(String left, String right, String placeholder) {
     final sel = _c.selection;
@@ -75,19 +101,8 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
     );
   }
 
-  /// 在光标处插入一段独立的块（前后补空行）。
-  void _insertBlock(String block, int cursorOffset) {
-    final text = _c.text;
-    final pos = _c.selection.isValid ? _c.selection.start : text.length;
-    final before = pos > 0 && text[pos - 1] != '\n' ? '\n\n' : '';
-    final insert = '$before$block\n';
-    _c.value = TextEditingValue(
-      text: text.replaceRange(pos, pos, insert),
-      selection: TextSelection.collapsed(
-        offset: pos + before.length + cursorOffset,
-      ),
-    );
-  }
+  void _insertBlock(String block, int cursorOffset) =>
+      insertMarkdownBlock(_c, block, cursorOffset: cursorOffset);
 
   @override
   Widget build(BuildContext context) {
@@ -202,5 +217,24 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
     icon: Icon(icon, size: 20),
     // 预览时禁用编辑类按钮
     onPressed: edit && _preview ? null : onPressed,
+  );
+}
+
+/// 在光标处插入一段独立的块（前后补空行）。光标移到块内 [cursorOffset] 处，默认在块之后。
+void insertMarkdownBlock(
+  TextEditingController c,
+  String block, {
+  int? cursorOffset,
+}) {
+  final text = c.text;
+  final pos = c.selection.isValid ? c.selection.start : text.length;
+  final before = pos > 0 && text[pos - 1] != '\n' ? '\n\n' : '';
+  final insert = '$before$block\n';
+  c.value = TextEditingValue(
+    text: text.replaceRange(pos, pos, insert),
+    selection: TextSelection.collapsed(
+      offset:
+          pos + before.length + (cursorOffset ?? insert.length - before.length),
+    ),
   );
 }

@@ -1,6 +1,16 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../../../core/sync/text_patch.dart';
+
+/// 离开页面时正文没有保存成功。
+class SaveFailed implements Exception {
+  const SaveFailed();
+
+  @override
+  String toString() => '正文保存失败';
+}
 
 /// 已发给编辑器、尚未确认的一次替换。
 class _Pending {
@@ -35,6 +45,7 @@ class BodySync {
     required this.save,
     required this.show,
     this.onConflict,
+    this.canSave,
     this.autosave = const Duration(seconds: 1),
   }) : _saved = initial,
        _local = initial,
@@ -48,6 +59,9 @@ class BodySync {
 
   /// 双方改了同一处、无法合并：保留本地输入（保存时按最后修改覆盖），对方的版本可在修订历史中找回。
   final void Function()? onConflict;
+
+  /// 内容能否保存（例如超过长度上限时不保存，服务端会拒绝）。不能保存时保留在编辑器中。
+  final bool Function(String body)? canSave;
   final Duration autosave;
 
   /// 本机记录中的正文（最后一次保存或读到的值）。
@@ -81,13 +95,27 @@ class BodySync {
   Future<void> flush({bool force = false}) async {
     _timer?.cancel();
     if (_closed || _local == _saved) return;
+    if (!(canSave?.call(_local) ?? true)) return;
     if (_pending != null && !force) {
       _schedule();
       return;
     }
-    _saved = _local;
-    if (_pending == null) _base = _local;
-    await save(_local);
+    final (prevSaved, prevBase) = (_saved, _base);
+    final body = _local;
+    _saved = body;
+    if (_pending == null) _base = body;
+    try {
+      await save(body);
+    } on Object catch (e) {
+      // 没保存成功：恢复状态，下次输入或离开页面时重试
+      debugPrint('保存正文失败: $e');
+      if (_saved == body) {
+        _saved = prevSaved;
+        _base = prevBase;
+      }
+      // 离开页面时要让页面知道（提示用户）；自动保存失败只记录日志
+      if (force) throw const SaveFailed();
+    }
   }
 
   /// 本机记录中的正文变化（其他设备的修改、同步合并的结果）。
@@ -152,11 +180,47 @@ class BodySync {
     _schedule();
   }
 
+  /// 等待已发出的替换得到编辑器的确认或拒绝（最多 [timeout]）。拆除编辑器前调用。
+  Future<void> settled({Duration timeout = const Duration(seconds: 1)}) async {
+    const step = Duration(milliseconds: 20);
+    for (
+      var waited = Duration.zero;
+      _pending != null && !_closed && waited < timeout;
+      waited += step
+    ) {
+      await Future<void>.delayed(step);
+    }
+  }
+
+  /// 编辑器被拆除（切换编辑方式、离开页面）。[editor] 为编辑器中尚未送达的最终内容（没有时为 null）。
+  ///
+  /// 仍有未确认的替换时（编辑器没有响应），编辑器中是替换前的内容加上输入：把输入合并到替换内容上。
+  void detach(String? editor) {
+    final p = _pending;
+    if (p == null) {
+      if (editor != null) edited(editor);
+      return;
+    }
+    _pending = null;
+    final current = editor ?? (_local == p.target ? p.from : _local);
+    final merged = TextPatch.rebase(p.from, current, p.target);
+    if (merged.ok) {
+      _local = merged.text;
+      _base = p.remote;
+    } else {
+      _local = current;
+      _conflict();
+    }
+  }
+
   /// 停止：之后不再保存（记录已删除时）。
   void close() {
     _closed = true;
     _timer?.cancel();
   }
 
-  void dispose() => _timer?.cancel();
+  void dispose() {
+    _closed = true;
+    _timer?.cancel();
+  }
 }

@@ -98,6 +98,24 @@ void main() {
     });
   });
 
+  test('不能保存的内容（超过上限）不保存，删减后再保存', () async {
+    final saved = <String>[];
+    final b = BodySync(
+      initial: '',
+      save: (v) async => saved.add(v),
+      show: (_) {},
+      canSave: (v) => v.length <= 3,
+    );
+    b.edited('太长的内容');
+    await b.flush(force: true);
+    expect(saved, isEmpty);
+    expect(b.hasUnsaved, isTrue);
+    b.edited('短');
+    await b.flush(force: true);
+    expect(saved, ['短']);
+    b.dispose();
+  });
+
   test('离开页面立即保存；关闭后不再保存', () async {
     final h = _Harness('a');
     h.type('ab');

@@ -24,10 +24,13 @@ class NoteFilterNotifier extends Notifier<NoteFilter> {
 
 /// 筛选面板：全部、收藏、未分类、文件夹树、标签；文件夹与标签可在此管理。
 class NoteFilterPanel extends ConsumerWidget {
-  const NoteFilterPanel({super.key, this.onSelected});
+  const NoteFilterPanel({super.key, this.onSelected, this.scroll});
 
   /// 选中后调用（窄屏时关闭面板）。
   final VoidCallback? onSelected;
+
+  /// 放在可拖动的底部面板中时，由面板提供滚动控制器（滚到顶后继续下拉可收起面板）。
+  final ScrollController? scroll;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -73,6 +76,7 @@ class NoteFilterPanel extends ConsumerWidget {
 
     return ListView(
       key: const Key('note-filter-panel'),
+      controller: scroll,
       padding: const EdgeInsets.symmetric(vertical: JkTokens.spacingSm),
       children: [
         item(const AllNotes(), Icons.notes, '全部笔记', notes.length),

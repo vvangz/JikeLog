@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -32,9 +33,13 @@ class NoteRepository {
         ..where((t) => t.entity.equals(entity) & t.deleted.not());
 
   /// 全部笔记：置顶在前，再按最后修改时间倒序。
-  Stream<List<Note>> watchNotes() => (_entity(
-    Entities.note,
-  )..orderBy([(t) => OrderingTerm.desc(t.sortKey)])).watch().map(_notes);
+  ///
+  /// 记录表任何写入（包括工作日志、附件）都会触发重新查询；内容没变时不再通知，避免列表重建。
+  Stream<List<Note>> watchNotes() =>
+      (_entity(Entities.note)..orderBy([(t) => OrderingTerm.desc(t.sortKey)]))
+          .watch()
+          .map(_notes)
+          .distinct(listEquals);
 
   /// 单篇笔记；被删除（包括在其他设备上删除）后为 null。
   Stream<Note?> watch(String id) =>
@@ -88,6 +93,7 @@ class NoteRepository {
     String? folderId,
     String? tag,
     String? worklogId,
+    bool favorite = false,
   }) async {
     final id = const Uuid().v7();
     await store.write(Entities.note, id, {
@@ -95,7 +101,7 @@ class NoteRepository {
       'body': '',
       'format': format.name,
       'folderId': folderId,
-      'favorite': 0,
+      'favorite': favorite ? 1 : 0,
       'pinned': 0,
       'tags': tag ?? '',
       'worklogs': worklogId ?? '',
@@ -113,7 +119,7 @@ class NoteRepository {
     bool? favorite,
     bool? pinned,
   }) async {
-    await store.write(Entities.note, id, {
+    await store.write(Entities.note, id, create: false, {
       'title': ?title,
       'body': ?body,
       'format': ?format?.name,
@@ -125,52 +131,62 @@ class NoteRepository {
 
   /// 移到文件夹（null 为未分类）。
   Future<void> moveTo(String id, String? folderId) async {
-    await store.write(Entities.note, id, {'folderId': folderId});
+    await store.write(Entities.note, id, create: false, {'folderId': folderId});
     engine.schedule();
   }
 
   /// 修改多行文本字段（标签、关联）：在原文本上增删行，便于两台设备同时修改时按补丁合并。
-  Future<void> _editLines(
+  ///
+  /// 结果超过服务端的长度上限时不写入并返回 false（否则推送会被拒绝，这篇笔记无法同步）。
+  Future<bool> _editLines(
     String id,
     String field,
     String Function(List<String> lines) edit,
   ) async {
-    final cur = await store.get(id);
-    if (cur == null || cur.deleted) return;
-    final next = edit(parseLines(cur.fields[field]));
-    await store.write(Entities.note, id, {field: next});
+    // 读改写放在同一个事务中：中间不能插入同步拉取到的修改，否则会基于旧值整字段覆盖
+    final ok = await db.transaction(() async {
+      final cur = await store.get(id);
+      if (cur == null || cur.deleted) return true;
+      final next = edit(parseLines(cur.fields[field]));
+      if (next.runes.length > (_maxLines[field] ?? 0)) return false;
+      await store.write(Entities.note, id, create: false, {field: next});
+      return true;
+    });
     engine.schedule();
+    return ok;
   }
 
-  /// 添加标签（已存在时不变）。返回 false 表示标签不合法。
+  /// 多行文本字段的长度上限（与服务端 schema 一致）。
+  static const _maxLines = {'tags': 2000, 'worklogs': 8000};
+
+  /// 添加标签（已存在时不变）。返回 false 表示标签不合法或标签总长度已达上限。
   Future<bool> addTag(String id, String tag) async {
     final t = tag.trim();
     if (t.isEmpty || t.contains('\n') || t.runes.length > maxTagLength) {
       return false;
     }
-    await _editLines(
+    return _editLines(
       id,
       'tags',
       (lines) => (lines.contains(t) ? lines : [...lines, t]).join('\n'),
     );
-    return true;
   }
 
-  Future<void> removeTag(String id, String tag) => _editLines(
+  Future<bool> removeTag(String id, String tag) => _editLines(
     id,
     'tags',
     (lines) => lines.where((l) => l != tag).join('\n'),
   );
 
-  /// 关联到工作日志（双向显示：工作日志页通过本地索引反查）。
-  Future<void> link(String id, String worklogId) => _editLines(
+  /// 关联到工作日志（双向显示：工作日志页通过本地索引反查）。返回 false 表示关联数量已达上限。
+  Future<bool> link(String id, String worklogId) => _editLines(
     id,
     'worklogs',
     (lines) =>
         (lines.contains(worklogId) ? lines : [...lines, worklogId]).join('\n'),
   );
 
-  Future<void> unlink(String id, String worklogId) => _editLines(
+  Future<bool> unlink(String id, String worklogId) => _editLines(
     id,
     'worklogs',
     (lines) => lines.where((l) => l != worklogId).join('\n'),
@@ -207,6 +223,15 @@ class NoteRepository {
     }
   }
 
+  /// 用过的全部标签（去重），用于添加标签时的建议。直接查索引，不读取笔记正文。
+  Future<List<String>> allTags() async {
+    final q = db.selectOnly(db.recordRefs, distinct: true)
+      ..addColumns([db.recordRefs.value])
+      ..where(db.recordRefs.kind.equals(RefKind.tag))
+      ..orderBy([OrderingTerm.asc(db.recordRefs.value)]);
+    return [for (final r in await q.get()) r.read(db.recordRefs.value)!];
+  }
+
   Future<List<String>> _notesWithRef(String kind, String value) async {
     final q = db.selectOnly(db.recordRefs)
       ..addColumns([db.recordRefs.recordId])
@@ -230,7 +255,9 @@ class NoteRepository {
   }
 
   Future<void> renameFolder(String id, String name) async {
-    await store.write(Entities.noteFolder, id, {'name': _folderName(name)});
+    await store.write(Entities.noteFolder, id, create: false, {
+      'name': _folderName(name),
+    });
     engine.schedule();
   }
 
@@ -238,7 +265,9 @@ class NoteRepository {
   Future<bool> moveFolder(String id, String? parentId) async {
     final tree = FolderTree(await watchFolders().first);
     if (!tree.canMove(id, parentId)) return false;
-    await store.write(Entities.noteFolder, id, {'parentId': parentId});
+    await store.write(Entities.noteFolder, id, create: false, {
+      'parentId': parentId,
+    });
     engine.schedule();
     return true;
   }
@@ -248,10 +277,14 @@ class NoteRepository {
     final tree = FolderTree(await watchFolders().first);
     final parent = tree.parentOf(id);
     for (final noteId in await _notesWithRef(RefKind.folder, id)) {
-      await store.write(Entities.note, noteId, {'folderId': parent});
+      await store.write(Entities.note, noteId, create: false, {
+        'folderId': parent,
+      });
     }
     for (final child in tree.byId.values.where((f) => f.parentId == id)) {
-      await store.write(Entities.noteFolder, child.id, {'parentId': parent});
+      await store.write(Entities.noteFolder, child.id, create: false, {
+        'parentId': parent,
+      });
     }
     await store.remove(id);
     engine.schedule();

@@ -233,24 +233,53 @@ class RecorderSheet extends ConsumerStatefulWidget {
 }
 
 class _RecorderSheetState extends ConsumerState<RecorderSheet> {
+  @override
+  void initState() {
+    super.initState();
+    // 清理上次异常退出（例如录音中进程被杀）留下的录音文件
+    unawaited(_cleanupStale());
+  }
+
+  Future<void> _cleanupStale() async {
+    try {
+      await deleteStaleRecordings(await ref.read(recordingDirProvider)());
+    } on Object catch (e) {
+      debugPrint('清理录音临时文件失败: $e');
+    }
+  }
+
   late final Recorder _recorder = ref.read(recorderFactoryProvider)();
   Timer? _ticker;
   Duration _elapsed = Duration.zero;
   bool _recording = false;
   String? _error;
 
+  bool _starting = false;
+
   Future<void> _start() async {
+    if (_starting || _recording) return;
+    _starting = true;
     try {
       if (!await _recorder.hasPermission()) {
-        setState(() => _error = '没有麦克风权限，请在系统设置中允许即刻日志使用麦克风');
+        if (mounted) {
+          setState(() => _error = '没有麦克风权限，请在系统设置中允许即刻日志使用麦克风');
+        }
         return;
       }
       final dir = await ref.read(recordingDirProvider)();
+      if (!mounted) return;
       final now = DateTime.now();
       final name =
-          '录音 ${now.year}-${_two(now.month)}-${_two(now.day)} '
+          '$recordingPrefix${now.year}-${_two(now.month)}-${_two(now.day)} '
           '${_two(now.hour)}${_two(now.minute)}${_two(now.second)}.m4a';
       await _recorder.start(p.join(dir.path, name));
+      if (!mounted) {
+        // 开始期间面板已关闭：停止并删除
+        final path = await _recorder.stop();
+        if (path != null) await _deleteQuietly(File(path));
+        return;
+      }
+      _ticker?.cancel();
       _elapsed = Duration.zero;
       _ticker = Timer.periodic(
         const Duration(seconds: 1),
@@ -263,14 +292,27 @@ class _RecorderSheetState extends ConsumerState<RecorderSheet> {
     } on Object catch (e) {
       debugPrint('录音失败: $e');
       if (mounted) setState(() => _error = '无法开始录音');
+    } finally {
+      _starting = false;
     }
   }
 
   Future<void> _stop() async {
     _ticker?.cancel();
     _recording = false;
-    final path = await _recorder.stop();
-    if (!mounted) return;
+    String? path;
+    try {
+      path = await _recorder.stop();
+    } on Object catch (e) {
+      debugPrint('停止录音失败: $e');
+      if (mounted) setState(() => _error = '录音保存失败，请重试');
+      return;
+    }
+    if (!mounted) {
+      // 停止期间面板已关闭：录音不会被保存，删除文件
+      if (path != null) await _deleteQuietly(File(path));
+      return;
+    }
     Navigator.of(context).pop(path == null ? null : File(path));
   }
 
@@ -279,7 +321,7 @@ class _RecorderSheetState extends ConsumerState<RecorderSheet> {
   Future<void> _discard() async {
     try {
       final path = await _recorder.stop();
-      if (path != null) await File(path).delete();
+      if (path != null) await _deleteQuietly(File(path));
     } on Object catch (e) {
       debugPrint('丢弃录音失败: $e');
     }
@@ -336,6 +378,30 @@ class _RecorderSheetState extends ConsumerState<RecorderSheet> {
   );
 }
 
+/// 录音临时文件的前缀（保存为附件后即删除）。
+const recordingPrefix = '录音 ';
+
+/// 删除临时目录中残留的录音文件。
+Future<void> deleteStaleRecordings(Directory dir) async {
+  if (!await dir.exists()) return;
+  await for (final e in dir.list()) {
+    final name = p.basename(e.path);
+    if (e is File &&
+        name.startsWith(recordingPrefix) &&
+        name.endsWith('.m4a')) {
+      await _deleteQuietly(e);
+    }
+  }
+}
+
+Future<void> _deleteQuietly(File f) async {
+  try {
+    if (await f.exists()) await f.delete();
+  } on Object catch (e) {
+    debugPrint('删除录音文件失败: $e');
+  }
+}
+
 /// 正文中的附件图片（Markdown 预览）。
 class AttachmentImage extends ConsumerWidget {
   const AttachmentImage({super.key, required this.id, this.alt});
@@ -365,6 +431,11 @@ class AttachmentImage extends ConsumerWidget {
             borderRadius: BorderRadius.circular(JkTokens.radiusMd),
             child: Image.file(
               file,
+              // 按显示宽度解码，避免手机原图（上千万像素）占用大量内存
+              cacheWidth:
+                  (MediaQuery.sizeOf(context).width *
+                          MediaQuery.devicePixelRatioOf(context))
+                      .round(),
               semanticLabel: alt,
               errorBuilder: (_, _, _) => placeholder('图片无法显示'),
             ),

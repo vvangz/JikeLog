@@ -132,39 +132,45 @@ class RecordStore {
 
   /// 修改（或新建）记录的部分字段。值未变的字段不会产生新的时钟。
   /// 已删除的记录忽略写入（例如编辑页关闭时迟到的保存），不能把墓碑改回正常记录。
-  Future<void> write(String entity, String id, Map<String, Object?> changes) =>
-      db.transaction(() async {
-        final cur = await get(id);
-        if (cur != null && cur.deleted) return;
-        final fields = {...?cur?.fields};
-        final clocks = {...?cur?.clocks};
-        var touched = false;
-        for (final e in changes.entries) {
-          if (cur != null &&
-              fields.containsKey(e.key) &&
-              fields[e.key] == e.value) {
-            continue;
-          }
-          fields[e.key] = e.value;
-          clocks[e.key] = clock.now();
-          touched = true;
-        }
-        if (!touched && cur != null) return;
-        await _save(
-          id: id,
-          entity: entity,
-          fields: fields,
-          clocks: clocks,
-          baseFields: cur?.baseFields ?? const {},
-          baseClocks: cur?.baseClocks ?? const {},
-          version: cur?.version ?? 0,
-          serverSeq: cur?.serverSeq ?? 0,
-          deleted: false,
-          dirty: true,
-          hasConflict: cur?.hasConflict ?? false,
-        );
-        await db.setMeta(_clockKey, clock.last);
-      });
+  /// [create] 为 false 时记录不存在就忽略：从未同步就被删除的记录没有墓碑，迟到的修改不能把它重建出来。
+  Future<void> write(
+    String entity,
+    String id,
+    Map<String, Object?> changes, {
+    bool create = true,
+  }) => db.transaction(() async {
+    final cur = await get(id);
+    if (cur != null && cur.deleted) return;
+    if (cur == null && !create) return;
+    final fields = {...?cur?.fields};
+    final clocks = {...?cur?.clocks};
+    var touched = false;
+    for (final e in changes.entries) {
+      if (cur != null &&
+          fields.containsKey(e.key) &&
+          fields[e.key] == e.value) {
+        continue;
+      }
+      fields[e.key] = e.value;
+      clocks[e.key] = clock.now();
+      touched = true;
+    }
+    if (!touched && cur != null) return;
+    await _save(
+      id: id,
+      entity: entity,
+      fields: fields,
+      clocks: clocks,
+      baseFields: cur?.baseFields ?? const {},
+      baseClocks: cur?.baseClocks ?? const {},
+      version: cur?.version ?? 0,
+      serverSeq: cur?.serverSeq ?? 0,
+      deleted: false,
+      dirty: true,
+      hasConflict: cur?.hasConflict ?? false,
+    );
+    await db.setMeta(_clockKey, clock.last);
+  });
 
   /// 删除记录：从未同步过的直接删除，否则留下墓碑待推送。
   Future<void> remove(String id) => db.transaction(() async {
