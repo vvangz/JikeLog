@@ -2,6 +2,24 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [0.5.0](https://github.com/vvangz/JikeLog/compare/v0.4.0...v0.5.0) (2026-10-10)
+
+
+### 新功能
+
+* **mobile:** 备忘录、日历视图、本地提醒、推送登记与系统日历同步 ([6e6477e](https://github.com/vvangz/JikeLog/commit/6e6477edfe3b037f3bafe57bf72dd5d7da7499b1))
+* **server:** 备忘录同步实体、提醒调度与推送登记（M4 服务端） ([4b2071b](https://github.com/vvangz/JikeLog/commit/4b2071b0cd5ac549a189e50f36924512f32d82b1))
+
+
+### 问题修复
+
+* 处理 M4 审查意见 ([571a6e2](https://github.com/vvangz/JikeLog/commit/571a6e2840dec9a8108601b575f2cd003743bac8))
+
+
+### 文档
+
+* v0.5.0 开发日志与审查记录；使用说明 06 备忘录 ([6cb0980](https://github.com/vvangz/JikeLog/commit/6cb09803200e5b66f5e762bd1ad810ebf6e27512))
+
 ## [0.4.0](https://github.com/vvangz/JikeLog/compare/v0.3.0...v0.4.0) (2026-10-10)
 
 
