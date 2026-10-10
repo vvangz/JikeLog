@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CHANGE_DEBOUNCE_MS, createBridge, type Bridge } from './bridge';
 import { cspScriptHashes } from './csp';
+import { inlineBuild } from './inline';
 import { fontFaceCss, installFonts } from './fonts';
 import type { Outbound } from './protocol';
 
@@ -165,5 +166,27 @@ describe('fonts', () => {
     installFonts();
     const css = [...document.head.querySelectorAll('style')].map((s) => s.textContent).join('');
     expect(css).toContain("font-family:'Space Grotesk'");
+  });
+});
+
+describe('inlineBuild', () => {
+  it('把引用的脚本与样式内联进页面，并转义提前结束标签的内容', () => {
+    const html =
+      '<head><link rel="stylesheet" crossorigin href="/assets/a.css"></head>' +
+      '<body><script type="module" crossorigin src="/assets/a.js"></script></body>';
+    const files = new Map([
+      ['assets/a.css', 'p{color:red}</style>'],
+      ['assets/a.js', 'const s="</script>";'],
+    ]);
+    const { html: out, inlined } = inlineBuild(html, files);
+    expect(out).toBe(
+      '<head><style>p{color:red}<\\/style></style></head>' +
+        '<body><script type="module">const s="<\\/script>";</script></body>',
+    );
+    expect(inlined).toEqual(['assets/a.css', 'assets/a.js']);
+  });
+
+  it('引用了不存在的文件时报错', () => {
+    expect(() => inlineBuild('<script type="module" src="/x.js"></script>', new Map())).toThrow();
   });
 });
