@@ -88,7 +88,7 @@ void main() {
     expect(find.text('记账'), findsWidgets);
     await tapAndSettle(tester, find.byKey(const Key('nav-/ledger')).last);
     expect(find.byType(Sidebar), findsOneWidget);
-    expect(find.textContaining('v0.6.0'), findsOneWidget);
+    expect(find.byKey(const Key('ledger-tab')), findsOneWidget);
   });
 
   testWidgets('宽屏：常驻完整侧栏，入口图标收起为图标栏', (tester) async {
@@ -100,7 +100,7 @@ void main() {
     expect(tester.widget<Sidebar>(find.byType(Sidebar)).expanded, isFalse);
 
     await tapAndSettle(tester, find.byKey(const Key('nav-/ledger')));
-    expect(find.textContaining('v0.6.0'), findsOneWidget);
+    expect(find.byKey(const Key('ledger-tab')), findsOneWidget);
   });
 
   testWidgets('读屏可通过语义动作激活侧栏入口', (tester) async {
@@ -111,7 +111,7 @@ void main() {
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
     node.owner!.performAction(node.id, SemanticsAction.tap);
     await settleApp(tester);
-    expect(find.textContaining('v0.6.0'), findsOneWidget);
+    expect(find.byKey(const Key('ledger-tab')), findsOneWidget);
     handle.dispose();
   });
 
