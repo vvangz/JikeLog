@@ -3,7 +3,7 @@ description: "即刻日志：工作日志、笔记、备忘录、记账"
 publish_to: 'none'
 
 # 版本号由 Release Please 维护
-version: 0.3.0 # x-release-please-version（Android versionCode 由构建参数 --build-number 提供）
+version: 0.4.0 # x-release-please-version（Android versionCode 由构建参数 --build-number 提供）
 
 environment:
   sdk: ^3.13.5

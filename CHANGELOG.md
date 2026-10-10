@@ -2,6 +2,27 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [0.4.0](https://github.com/vvangz/JikeLog/compare/v0.3.0...v0.4.0) (2026-10-10)
+
+
+### 新功能
+
+* **mobile:** 笔记数据层：实体、关联索引、文件夹树与筛选 ([fe62067](https://github.com/vvangz/JikeLog/commit/fe620676db84a08d1cc27bb5d5a9a60ced617d37))
+* **mobile:** 笔记模块：双格式编辑、文件夹、标签、收藏、附件与关联工作日志 ([938b70f](https://github.com/vvangz/JikeLog/commit/938b70ff40507f733e188516d56085ea6da39942))
+* **note-editor:** Tiptap 富文本编辑器，构建为单个 HTML 供 WebView 加载 ([e7550f1](https://github.com/vvangz/JikeLog/commit/e7550f19bc39b33e2a280ad5d04208cb94961a80))
+* **server:** 笔记与笔记文件夹同步实体（M3 服务端） ([5514ac1](https://github.com/vvangz/JikeLog/commit/5514ac1c5d4a5c87222e210c72bbaae0f6ddd91d))
+
+
+### 问题修复
+
+* **mobile:** 处理 M3 审查意见 ([faf3f91](https://github.com/vvangz/JikeLog/commit/faf3f911f3a69acc9fcdb64aa2afc4748b569190))
+* **note-editor:** 用自己的构建插件内联脚本与样式，去掉有高危漏洞公告的依赖 ([59ae52b](https://github.com/vvangz/JikeLog/commit/59ae52b8cc3f8427d5fb717490633b5096cd75f6))
+
+
+### 文档
+
+* v0.4.0 开发日志与审查记录；使用说明 05 笔记 ([8016609](https://github.com/vvangz/JikeLog/commit/801660971e78bd2795295f377ba0d25d7969dfeb))
+
 ## [0.3.0](https://github.com/vvangz/JikeLog/compare/v0.2.0...v0.3.0) (2026-10-10)
 
 
