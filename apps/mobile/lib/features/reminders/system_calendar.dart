@@ -1,6 +1,5 @@
 import 'package:device_calendar_plus/device_calendar_plus.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/db/database.dart';
 import '../../core/storage/stores.dart';
@@ -115,7 +114,8 @@ CalendarEventData eventOf(Memo m) {
     return CalendarEventData(
       title: title,
       start: m.day,
-      end: m.day.add(const Duration(days: 1)),
+      // 按日历日加一天（不用 24 小时，跨夏令时切换也正确）
+      end: DateTime(m.day.year, m.day.month, m.day.day + 1),
       allDay: true,
     );
   }
@@ -145,6 +145,9 @@ class CalendarExporter {
   static const _enabledKey = 'calendar.export.enabled';
   static const _calendarKey = 'calendar.export.id';
 
+  /// 日历中的事件属于哪个账号：换了账号登录时整个日历重建。
+  static const _ownerKey = 'calendar.export.owner';
+
   bool get enabled => prefs.getString(_enabledKey) == '1';
 
   /// 开启：请求权限并创建日历。没有获得权限时返回 false。
@@ -160,69 +163,68 @@ class CalendarExporter {
     await _dropCalendar();
   });
 
-  /// 按最新的备忘录同步系统日历。未开启或没有权限时不做任何事。
-  Future<void> reconcile(List<Memo> memos) => _serial(() async {
-    if (!enabled || !await calendar.hasAccess()) return;
-    final calendarId = await _ensureCalendar();
-    final now = _now();
-    final wanted = {
-      for (final m in memos)
-        if (m.at.isAfter(now.subtract(_pastWindow)) &&
-            m.at.isBefore(now.add(_futureWindow)))
-          m.id: eventOf(m),
-    };
-    final links = {
-      for (final l in await db.select(db.calendarLinks).get()) l.memoId: l,
-    };
-    for (final l in links.values) {
-      if (wanted.containsKey(l.memoId)) continue;
-      await _ignoreMissing(() => calendar.deleteEvent(l.eventId));
-      await (db.delete(
-        db.calendarLinks,
-      )..where((t) => t.memoId.equals(l.memoId))).go();
-    }
-    for (final MapEntry(key: memoId, value: e) in wanted.entries) {
-      final link = links[memoId];
-      if (link?.signature == e.signature) continue;
-      var eventId = link?.eventId;
-      if (eventId != null) {
-        final updated = await _ignoreMissing(
-          () => calendar.updateEvent(eventId!, e),
-        );
-        if (!updated) eventId = null; // 用户在系统日历中删掉了事件：重新创建
-      }
-      eventId ??= await calendar.createEvent(calendarId, e);
-      await db
-          .into(db.calendarLinks)
-          .insertOnConflictUpdate(
-            CalendarLinksCompanion.insert(
-              memoId: memoId,
-              eventId: eventId,
-              signature: e.signature,
-            ),
-          );
-    }
-  });
+  /// 按最新的备忘录同步系统日历（[owner] 为当前账号）。未开启或没有权限时不做任何事。
+  Future<void> reconcile(List<Memo> memos, {required String owner}) =>
+      _serial(() async {
+        if (!enabled || !await calendar.hasAccess()) return;
+        final calendarId = await _ensureCalendar(owner);
+        final now = _now();
+        final wanted = {
+          for (final m in memos)
+            if (m.at.isAfter(now.subtract(_pastWindow)) &&
+                m.at.isBefore(now.add(_futureWindow)))
+              m.id: eventOf(m),
+        };
+        final links = {
+          for (final l in await db.select(db.calendarLinks).get()) l.memoId: l,
+        };
+        for (final l in links.values) {
+          if (wanted.containsKey(l.memoId)) continue;
+          await _ignoreMissing(() => calendar.deleteEvent(l.eventId));
+          await (db.delete(
+            db.calendarLinks,
+          )..where((t) => t.memoId.equals(l.memoId))).go();
+        }
+        for (final MapEntry(key: memoId, value: e) in wanted.entries) {
+          final link = links[memoId];
+          if (link?.signature == e.signature) continue;
+          var eventId = link?.eventId;
+          if (eventId != null) {
+            final updated = await _ignoreMissing(
+              () => calendar.updateEvent(eventId!, e),
+            );
+            if (!updated) eventId = null; // 用户在系统日历中删掉了事件：重新创建
+          }
+          eventId ??= await calendar.createEvent(calendarId, e);
+          await db
+              .into(db.calendarLinks)
+              .insertOnConflictUpdate(
+                CalendarLinksCompanion.insert(
+                  memoId: memoId,
+                  eventId: eventId,
+                  signature: e.signature,
+                ),
+              );
+        }
+      });
 
   /// 退出登录时删除日历（其中是该账号的备忘）。开关保留，重新登录后重建。
   Future<void> clear() => _serial(() async {
     if (await calendar.hasAccess()) await _dropCalendar();
   });
 
-  Future<String> _ensureCalendar() async {
+  Future<String> _ensureCalendar(String owner) async {
     final saved = prefs.getString(_calendarKey);
-    final hasLinks = (await (db.select(
-      db.calendarLinks,
-    )..limit(1)).get()).isNotEmpty;
     if (saved != null && await calendar.exists(saved)) {
-      if (hasLinks) return saved;
-      // 本地对应关系已清空（换账号登录后本地数据被清除）：旧事件无从对应，整个日历重建
+      if (prefs.getString(_ownerKey) == owner) return saved;
+      // 换了账号：其中是上一个账号的备忘，无从对应，整个日历重建
       await _ignoreMissing(() => calendar.deleteCalendar(saved));
     }
     // 日历不存在了（首次开启，或被用户删除）：之前的对应关系全部作废
     await db.delete(db.calendarLinks).go();
     final id = await calendar.createCalendar(systemCalendarName);
     await prefs.setString(_calendarKey, id);
+    await prefs.setString(_ownerKey, owner);
     return id;
   }
 
@@ -230,10 +232,12 @@ class CalendarExporter {
     final id = prefs.getString(_calendarKey);
     if (id != null) await _ignoreMissing(() => calendar.deleteCalendar(id));
     await prefs.remove(_calendarKey);
+    await prefs.remove(_ownerKey);
     await db.delete(db.calendarLinks).go();
   }
 
-  /// 执行操作；目标已不存在时忽略并返回 false。
+  /// 执行操作；目标已不存在时忽略并返回 false。其他错误（权限、系统日历忙）照常抛出，
+  /// 对应关系保持不变，下次同步时重试——不能当作"不存在"而重复创建事件。
   static Future<bool> _ignoreMissing(Future<void> Function() op) async {
     try {
       await op();
@@ -241,9 +245,6 @@ class CalendarExporter {
     } on DeviceCalendarException catch (e) {
       if (e.errorCode == DeviceCalendarError.notFound) return false;
       rethrow;
-    } on PlatformException catch (e) {
-      debugPrint('系统日历操作失败: $e');
-      return false;
     }
   }
 

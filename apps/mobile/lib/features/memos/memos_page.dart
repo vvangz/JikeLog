@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -108,11 +110,34 @@ class MemosPage extends ConsumerWidget {
   }
 }
 
-class _MemoList extends ConsumerWidget {
+class _MemoList extends ConsumerStatefulWidget {
   const _MemoList();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_MemoList> createState() => _MemoListState();
+}
+
+class _MemoListState extends ConsumerState<_MemoList> {
+  /// 每分钟刷新一次分组：页面开着时到点的备忘移入"已逾期"，过了零点日期标题随之变化。
+  late final Timer _tick = Timer.periodic(
+    const Duration(minutes: 1),
+    (_) => setState(() {}),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _tick; // 启动定时器
+  }
+
+  @override
+  void dispose() {
+    _tick.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final list = ref.watch(memoListProvider);
     return RefreshIndicator(
       onRefresh: () => ref.read(syncEngineProvider).sync(),
@@ -207,7 +232,7 @@ class _Sections extends StatelessWidget {
         ),
       );
     }
-    return ListView(
+    return ListView.builder(
       key: const Key('memo-list'),
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(
@@ -216,15 +241,13 @@ class _Sections extends StatelessWidget {
         JkTokens.spacingLg,
         96,
       ),
-      children: [
-        for (final r in rows)
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720),
-              child: r,
-            ),
-          ),
-      ],
+      itemCount: rows.length,
+      itemBuilder: (_, i) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: rows[i],
+        ),
+      ),
     );
   }
 }

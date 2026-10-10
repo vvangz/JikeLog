@@ -713,6 +713,9 @@ type PushRegistration struct {
 	// LocalReminders 设备能否自己按时弹出提醒（已授予通知与精确闹钟权限）
 	LocalReminders bool `json:"localReminders"`
 
+	// LocalUntil 本地闹钟覆盖到的时刻（设备只排定最近若干条提醒），晚于此刻的提醒仍由服务端推送；为空表示全部覆盖
+	LocalUntil *time.Time `json:"localUntil,omitempty"`
+
 	// Provider 推送通道；为空表示该设备不接收服务端推送
 	Provider *PushRegistrationProvider `json:"provider,omitempty"`
 

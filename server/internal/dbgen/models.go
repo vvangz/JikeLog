@@ -47,6 +47,7 @@ type Device struct {
 	PushToken        *string
 	TimeZone         string
 	LocalReminders   bool
+	LocalUntil       *time.Time
 }
 
 type MemoReminder struct {

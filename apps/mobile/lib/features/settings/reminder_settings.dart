@@ -89,11 +89,25 @@ class CalendarExportTile extends ConsumerWidget {
     key: const Key('calendar-export'),
     secondary: const Icon(Icons.event_available_outlined),
     title: const Text('备忘录同步到系统日历'),
-    subtitle: const Text('写入本机的"即刻日志"日历，不随系统账户同步到云端'),
+    subtitle: const Text('备忘的第一行与时间写入本机的"即刻日志"日历，不随系统账户同步到云端'),
     value: ref.watch(calendarExportEnabledProvider),
     onChanged: (on) async {
-      final ok = await ref.read(calendarExportEnabledProvider.notifier).set(on);
-      if (!ok && context.mounted) {
+      if (on) {
+        // 写入系统日历后不再受 App 的加密保护，先说明清楚
+        final ok = await showJkConfirm(
+          context,
+          title: '同步到系统日历',
+          message:
+              '每条备忘的第一行和时间会以明文写入本机的"即刻日志"日历，'
+              '手机上获得日历权限的其他应用可以读取。关闭后该日历会被删除。',
+          confirmLabel: '开启',
+        );
+        if (!ok) return;
+      }
+      final granted = await ref
+          .read(calendarExportEnabledProvider.notifier)
+          .set(on);
+      if (!granted && context.mounted) {
         showJkToast(context, '没有获得日历权限，可在系统设置中允许后重试');
       }
     },

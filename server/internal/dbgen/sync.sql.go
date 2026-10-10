@@ -97,12 +97,17 @@ func (q *Queries) CountPendingAttachments(ctx context.Context, userID uuid.UUID)
 	return n, err
 }
 
-const deleteMemoReminders = `-- name: DeleteMemoReminders :exec
-DELETE FROM memo_reminders WHERE memo_id = $1
+const deleteMemoReminder = `-- name: DeleteMemoReminder :exec
+DELETE FROM memo_reminders WHERE memo_id = $1 AND offset_min = $2
 `
 
-func (q *Queries) DeleteMemoReminders(ctx context.Context, memoID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteMemoReminders, memoID)
+type DeleteMemoReminderParams struct {
+	MemoID    uuid.UUID
+	OffsetMin int32
+}
+
+func (q *Queries) DeleteMemoReminder(ctx context.Context, arg DeleteMemoReminderParams) error {
+	_, err := q.db.Exec(ctx, deleteMemoReminder, arg.MemoID, arg.OffsetMin)
 	return err
 }
 
@@ -338,28 +343,6 @@ func (q *Queries) InsertAttachment(ctx context.Context, arg InsertAttachmentPara
 	return err
 }
 
-const insertMemoReminder = `-- name: InsertMemoReminder :exec
-INSERT INTO memo_reminders (memo_id, user_id, offset_min, fire_at)
-VALUES ($1, $2, $3, $4)
-`
-
-type InsertMemoReminderParams struct {
-	MemoID    uuid.UUID
-	UserID    uuid.UUID
-	OffsetMin int32
-	FireAt    time.Time
-}
-
-func (q *Queries) InsertMemoReminder(ctx context.Context, arg InsertMemoReminderParams) error {
-	_, err := q.db.Exec(ctx, insertMemoReminder,
-		arg.MemoID,
-		arg.UserID,
-		arg.OffsetMin,
-		arg.FireAt,
-	)
-	return err
-}
-
 const insertRecord = `-- name: InsertRecord :execrows
 INSERT INTO records (id, user_id, entity, version, server_seq, fields, clocks, absorbed, deleted, device_id)
 VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9)
@@ -473,6 +456,35 @@ func (q *Queries) ListDeletedAttachments(ctx context.Context, maxRows int32) ([]
 	return items, nil
 }
 
+const listMemoReminders = `-- name: ListMemoReminders :many
+SELECT offset_min, fire_at FROM memo_reminders WHERE memo_id = $1
+`
+
+type ListMemoRemindersRow struct {
+	OffsetMin int32
+	FireAt    time.Time
+}
+
+func (q *Queries) ListMemoReminders(ctx context.Context, memoID uuid.UUID) ([]ListMemoRemindersRow, error) {
+	rows, err := q.db.Query(ctx, listMemoReminders, memoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMemoRemindersRow{}
+	for rows.Next() {
+		var i ListMemoRemindersRow
+		if err := rows.Scan(&i.OffsetMin, &i.FireAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecordsSince = `-- name: ListRecordsSince :many
 SELECT id, user_id, entity, version, server_seq, fields, clocks, absorbed, deleted, device_id, created_at, updated_at FROM records
 WHERE user_id = $1 AND server_seq > $2
@@ -522,12 +534,16 @@ func (q *Queries) ListRecordsSince(ctx context.Context, arg ListRecordsSincePara
 const listReminderTargets = `-- name: ListReminderTargets :many
 SELECT id, push_provider, push_token, time_zone FROM devices
 WHERE user_id = $1 AND revoked_at IS NULL AND push_token IS NOT NULL
-  AND NOT (local_reminders AND last_ack_seq >= $2::bigint)
+  AND NOT (
+    local_reminders AND last_ack_seq >= $2::bigint
+    AND (local_until IS NULL OR local_until >= $3::timestamptz)
+  )
 `
 
 type ListReminderTargetsParams struct {
 	UserID  uuid.UUID
 	MemoSeq int64
+	FireAt  time.Time
 }
 
 type ListReminderTargetsRow struct {
@@ -538,9 +554,9 @@ type ListReminderTargetsRow struct {
 }
 
 // 需要服务端推送的设备：有推送标识，且不能确定它已在本地按时提醒
-// （没有本地提醒能力，或尚未同步到这一版备忘录）。
+// （没有本地提醒能力、尚未同步到这一版备忘录，或提醒时刻超出了本地闹钟覆盖的范围）。
 func (q *Queries) ListReminderTargets(ctx context.Context, arg ListReminderTargetsParams) ([]ListReminderTargetsRow, error) {
-	rows, err := q.db.Query(ctx, listReminderTargets, arg.UserID, arg.MemoSeq)
+	rows, err := q.db.Query(ctx, listReminderTargets, arg.UserID, arg.MemoSeq, arg.FireAt)
 	if err != nil {
 		return nil, err
 	}
@@ -744,6 +760,32 @@ func (q *Queries) UpdateRecord(ctx context.Context, arg UpdateRecordParams) erro
 		arg.Deleted,
 		arg.DeviceID,
 		arg.ID,
+	)
+	return err
+}
+
+const upsertMemoReminder = `-- name: UpsertMemoReminder :exec
+INSERT INTO memo_reminders (memo_id, user_id, offset_min, fire_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (memo_id, offset_min) DO UPDATE
+SET fire_at = EXCLUDED.fire_at, attempts = 0, lease_until = NULL
+WHERE memo_reminders.fire_at <> EXCLUDED.fire_at
+`
+
+type UpsertMemoReminderParams struct {
+	MemoID    uuid.UUID
+	UserID    uuid.UUID
+	OffsetMin int32
+	FireAt    time.Time
+}
+
+// 时刻变化的提醒重新开始计数；时刻未变的保持原样（可能正在发送）。
+func (q *Queries) UpsertMemoReminder(ctx context.Context, arg UpsertMemoReminderParams) error {
+	_, err := q.db.Exec(ctx, upsertMemoReminder,
+		arg.MemoID,
+		arg.UserID,
+		arg.OffsetMin,
+		arg.FireAt,
 	)
 	return err
 }

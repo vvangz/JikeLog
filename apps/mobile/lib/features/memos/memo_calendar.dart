@@ -69,10 +69,7 @@ class _MemoCalendarState extends ConsumerState<MemoCalendar> {
     final days = groupByDay(memos, worklogs);
     final weekStart = ref.watch(settingsControllerProvider).weekStart;
     final calendar = _calendar(context, days, weekStart);
-    final agenda = DayAgenda(
-      day: widget.selected,
-      items: days[dateOnly(widget.selected)] ?? const [],
-    );
+    final items = days[dateOnly(widget.selected)] ?? const <DayItem>[];
     return LayoutBuilder(
       builder: (context, c) => c.maxWidth >= 720
           ? Row(
@@ -83,14 +80,27 @@ class _MemoCalendarState extends ConsumerState<MemoCalendar> {
                   child: SingleChildScrollView(child: calendar),
                 ),
                 const VerticalDivider(width: 1),
-                Expanded(child: agenda),
+                Expanded(
+                  child: ListView(
+                    key: const Key('memo-agenda'),
+                    padding: _agendaPadding,
+                    children: dayAgenda(context, widget.selected, items),
+                  ),
+                ),
               ],
             )
+          // 手机上日历与当天内容在同一个滚动区域里：屏幕矮或字号大时也能滚到当天内容
           : CustomScrollView(
+              key: const Key('memo-agenda'),
               slivers: [
                 SliverToBoxAdapter(child: calendar),
                 const SliverToBoxAdapter(child: Divider(height: 1)),
-                SliverFillRemaining(hasScrollBody: true, child: agenda),
+                SliverPadding(
+                  padding: _agendaPadding,
+                  sliver: SliverList.list(
+                    children: dayAgenda(context, widget.selected, items),
+                  ),
+                ),
               ],
             ),
     );
@@ -179,65 +189,56 @@ class _Markers extends StatelessWidget {
   }
 }
 
+const _agendaPadding = EdgeInsets.fromLTRB(
+  JkTokens.spacingLg,
+  JkTokens.spacingMd,
+  JkTokens.spacingLg,
+  96,
+);
+
 /// 选中日期的备忘与工作日志。
-class DayAgenda extends StatelessWidget {
-  const DayAgenda({super.key, required this.day, required this.items});
-
-  final DateTime day;
-  final List<DayItem> items;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.jkColors;
-    final memos = [
-      for (final i in items)
-        if (i is MemoItem) i.memo,
-    ];
-    final worklogs = [
-      for (final i in items)
-        if (i is WorklogItem) i.worklog,
-    ];
-    return ListView(
-      key: const Key('memo-agenda'),
-      padding: const EdgeInsets.fromLTRB(
-        JkTokens.spacingLg,
-        JkTokens.spacingMd,
-        JkTokens.spacingLg,
-        96,
+List<Widget> dayAgenda(
+  BuildContext context,
+  DateTime day,
+  List<DayItem> items,
+) {
+  final c = context.jkColors;
+  final memos = [
+    for (final i in items)
+      if (i is MemoItem) i.memo,
+  ];
+  final worklogs = [
+    for (final i in items)
+      if (i is WorklogItem) i.worklog,
+  ];
+  return [
+    Text(
+      friendlyDate(day, DateTime.now()),
+      style: Theme.of(context).textTheme.titleMedium,
+    ),
+    const SizedBox(height: JkTokens.spacingSm),
+    if (items.isEmpty)
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: JkTokens.spacingLg),
+        child: Text('这一天没有备忘和工作日志', style: TextStyle(color: c.textSecondary)),
       ),
-      children: [
-        Text(
-          friendlyDate(day, DateTime.now()),
-          style: Theme.of(context).textTheme.titleMedium,
+    for (final m in memos) MemoTile(memo: m, showDate: false),
+    for (final w in worklogs)
+      Card(
+        margin: const EdgeInsets.only(bottom: JkTokens.spacingSm),
+        child: ListTile(
+          key: Key('agenda-worklog-${w.id}'),
+          leading: const Icon(Icons.work_outline),
+          title: Text(w.location.isEmpty ? '工作日志' : w.location),
+          subtitle: Text(
+            plainPreview(w.content).isEmpty
+                ? '（未填写内容）'
+                : plainPreview(w.content),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () => context.push('/worklog/${w.id}'),
         ),
-        const SizedBox(height: JkTokens.spacingSm),
-        if (items.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: JkTokens.spacingLg),
-            child: Text(
-              '这一天没有备忘和工作日志',
-              style: TextStyle(color: c.textSecondary),
-            ),
-          ),
-        for (final m in memos) MemoTile(memo: m, showDate: false),
-        for (final w in worklogs)
-          Card(
-            margin: const EdgeInsets.only(bottom: JkTokens.spacingSm),
-            child: ListTile(
-              key: Key('agenda-worklog-${w.id}'),
-              leading: const Icon(Icons.work_outline),
-              title: Text(w.location.isEmpty ? '工作日志' : w.location),
-              subtitle: Text(
-                plainPreview(w.content).isEmpty
-                    ? '（未填写内容）'
-                    : plainPreview(w.content),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onTap: () => context.push('/worklog/${w.id}'),
-            ),
-          ),
-      ],
-    );
-  }
+      ),
+  ];
 }

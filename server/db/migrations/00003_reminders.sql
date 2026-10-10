@@ -9,6 +9,8 @@ ALTER TABLE devices
     ADD COLUMN time_zone       text    NOT NULL DEFAULT '',
     -- 设备能否自己按时弹出提醒（已授予通知与精确闹钟权限）。为 false 时服务端总会推送
     ADD COLUMN local_reminders boolean NOT NULL DEFAULT false,
+    -- 本地闹钟覆盖到的时刻：设备只排定最近若干条提醒，晚于此刻的提醒仍由服务端推送；为空表示全部覆盖
+    ADD COLUMN local_until     timestamptz,
     ADD CONSTRAINT devices_push_provider CHECK (push_provider IN ('jpush')),
     ADD CONSTRAINT devices_push_token CHECK ((push_provider IS NULL) = (push_token IS NULL));
 
@@ -38,6 +40,7 @@ DROP INDEX devices_push_token_key;
 ALTER TABLE devices
     DROP CONSTRAINT devices_push_token,
     DROP CONSTRAINT devices_push_provider,
+    DROP COLUMN local_until,
     DROP COLUMN local_reminders,
     DROP COLUMN time_zone,
     DROP COLUMN push_token,

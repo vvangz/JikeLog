@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -208,7 +209,7 @@ func TestReminderRetriesThenGivesUp(t *testing.T) {
 		t.Fatal("领取期限内不应重复领取")
 	}
 	for range 2 {
-		a.clock.Advance(3 * time.Minute)
+		a.clock.Advance(6 * time.Minute) // 领取期限（5 分钟）过后重试
 		a.tick()
 	}
 	if a.pendingReminders(id) != 0 || len(a.pushes.take()) != 3 {
@@ -242,12 +243,24 @@ func TestPushRegistration(t *testing.T) {
 		return tok
 	}
 	a.registerPush(d1, "reg-shared", true)
-	// 同一部手机换了账号登录：推送标识转移到新设备
-	a.registerPush(other, "reg-shared", true)
-	if token(d1.deviceID) != nil || *token(other.deviceID) != "reg-shared" {
-		t.Fatal("推送标识应只属于最后登记的设备")
+	// 其他账号仍在使用的设备上的标识不能抢占
+	steal := map[string]any{"provider": "jpush", "token": "reg-shared", "timeZone": "Asia/Shanghai", "localReminders": true}
+	a.expect(a.call(http.MethodPut, "/api/v1/me/push", steal, other.access), http.StatusConflict, "PUSH_TOKEN_IN_USE")
+	if *token(d1.deviceID) != "reg-shared" {
+		t.Fatal("被拒绝的登记不能影响原设备")
 	}
-	a.expect(a.call(http.MethodPut, "/api/v1/me/push", map[string]any{"timeZone": "", "localReminders": true}, d2.access), http.StatusOK, "")
+	// 同一账号的另一台设备（重装 App）可以接管
+	a.registerPush(d2, "reg-shared", true)
+	if token(d1.deviceID) != nil || *token(d2.deviceID) != "reg-shared" {
+		t.Fatal("同一账号内推送标识应转移到最后登记的设备")
+	}
+	// 原设备退出登录后（同一部手机换了账号），其他账号可以使用
+	a.expect(a.call(http.MethodPost, "/api/v1/auth/logout", nil, d2.access), http.StatusOK, "")
+	a.registerPush(other, "reg-shared", true)
+	if *token(other.deviceID) != "reg-shared" {
+		t.Fatal("原设备下线后标识应可转移")
+	}
+	a.expect(a.call(http.MethodPut, "/api/v1/me/push", map[string]any{"timeZone": "", "localReminders": true}, d1.access), http.StatusOK, "")
 
 	bad := []map[string]any{
 		{"provider": "jpush", "timeZone": "Asia/Shanghai", "localReminders": true},
@@ -266,5 +279,85 @@ func TestPushRegistration(t *testing.T) {
 	a.expect(a.call(http.MethodPost, "/api/v1/auth/logout", nil, other.access), http.StatusOK, "")
 	if token(other.deviceID) != nil {
 		t.Fatal("退出登录应清除推送标识")
+	}
+}
+
+func TestPushRegistrationRateLimited(t *testing.T) {
+	a := newTestApp(t)
+	d1, _ := a.twoDevices("push02")
+	body := map[string]any{"timeZone": "Asia/Shanghai", "localReminders": true}
+	for range 30 {
+		a.expect(a.call(http.MethodPut, "/api/v1/me/push", body, d1.access), http.StatusOK, "")
+	}
+	a.expect(a.call(http.MethodPut, "/api/v1/me/push", body, d1.access), http.StatusTooManyRequests, "RATE_LIMITED")
+}
+
+func TestReminderPushBeyondLocalHorizon(t *testing.T) {
+	a := newTestApp(t)
+	d1, _ := a.twoDevices("memo07")
+	c1 := a.handshake(d1)
+	r := a.push(d1, c1, a.memoChange(c1, newID(), 2*time.Hour, "0", nil))
+	a.ack(d1, num(r.Body["data"].(map[string]any), "cursor"))
+	// 本地闹钟只覆盖到 1 小时后：2 小时后的提醒仍由服务端推送
+	horizon := a.clock.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	body := map[string]any{"provider": "jpush", "token": "reg-d1", "timeZone": "Asia/Shanghai", "localReminders": true, "localUntil": horizon}
+	a.expect(a.call(http.MethodPut, "/api/v1/me/push", body, d1.access), http.StatusOK, "")
+	a.clock.Advance(2*time.Hour + time.Second)
+	a.tick()
+	if sent := a.pushes.take(); len(sent) != 1 {
+		t.Fatalf("超出本地覆盖范围的提醒应推送：%+v", sent)
+	}
+}
+
+func TestEditAfterDueKeepsPendingReminder(t *testing.T) {
+	a := newTestApp(t)
+	d1, _ := a.twoDevices("memo08")
+	c1 := a.handshake(d1)
+	a.registerPush(d1, "reg-d1", false)
+	id := newID()
+	a.push(d1, c1, a.memoChange(c1, id, time.Minute, "0,30", nil))
+	a.clock.Advance(time.Minute + time.Second) // 到时，但调度器还没来得及发送
+	k := a.hlc(0, nodeA)
+	a.push(d1, c1, c1.encode(worklogChange{entity: "memo", id: id,
+		fields: map[string]any{"content": "改了内容"}, clocks: map[string]string{"content": k}}))
+	if a.pendingReminders(id) != 1 {
+		t.Fatalf("到时未发的提醒应保留，pending = %d", a.pendingReminders(id))
+	}
+	a.tick()
+	if len(a.pushes.take()) != 1 {
+		t.Fatal("保留的提醒应发送")
+	}
+}
+
+func TestReminderInvalidTokenCleared(t *testing.T) {
+	a := newTestApp(t)
+	d1, _ := a.twoDevices("memo09")
+	c1 := a.handshake(d1)
+	a.registerPush(d1, "reg-gone", false)
+	a.push(d1, c1, a.memoChange(c1, newID(), time.Minute, "0", nil))
+	a.pushes.fail = fmt.Errorf("%w: uninstalled", pusher.ErrNoTarget)
+	a.clock.Advance(time.Minute + time.Second)
+	a.tick()
+	var tok *string
+	if err := a.pool.QueryRow(context.Background(), "SELECT push_token FROM devices WHERE id = $1", d1.deviceID).Scan(&tok); err != nil || tok != nil {
+		t.Fatalf("失效的推送标识应清除：%v %v", tok, err)
+	}
+}
+
+func TestReminderDroppedAfterTooManyAttempts(t *testing.T) {
+	a := newTestApp(t)
+	d1, _ := a.twoDevices("memo10")
+	c1 := a.handshake(d1)
+	a.registerPush(d1, "reg-d1", false)
+	id := newID()
+	a.push(d1, c1, a.memoChange(c1, id, time.Minute, "0", nil))
+	// 模拟此前的尝试中途崩溃，没有记录结果
+	if _, err := a.pool.Exec(context.Background(), "UPDATE memo_reminders SET attempts = 3 WHERE memo_id = $1", id); err != nil {
+		t.Fatal(err)
+	}
+	a.clock.Advance(time.Minute + time.Second)
+	a.tick()
+	if len(a.pushes.take()) != 0 || a.pendingReminders(id) != 0 {
+		t.Fatal("超过尝试次数的提醒不再发送")
 	}
 }

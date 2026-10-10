@@ -104,6 +104,8 @@ class PluginLocalNotifier implements LocalNotifier {
       importance: Importance.high,
       priority: Priority.high,
       category: AndroidNotificationCategory.reminder,
+      // 锁屏时不显示备忘内容（通知标题是备忘的第一行）
+      visibility: NotificationVisibility.private,
     ),
   );
 

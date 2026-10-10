@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
+import '../../shared/ui/jk_feedback.dart';
 import '../../shared/ui/sync_badges.dart';
 import 'memo_models.dart';
 import 'memo_repository.dart';
@@ -17,6 +18,17 @@ class MemoTile extends ConsumerWidget {
 
   /// 列表按日期分组时只显示时间。
   final bool showDate;
+
+  Future<void> _setDone(BuildContext context, WidgetRef ref, bool done) async {
+    try {
+      await ref.read(memoRepositoryProvider).update(memo.id, done: done);
+    } on Object catch (e) {
+      debugPrint('保存备忘失败: $e');
+      if (context.mounted) {
+        showJkToast(context, '保存失败，请重试', kind: JkToastKind.error);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,12 +53,13 @@ class MemoTile extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              Checkbox(
-                key: Key('memo-check-${m.id}'),
-                value: m.done,
-                onChanged: (v) => ref
-                    .read(memoRepositoryProvider)
-                    .update(m.id, done: v ?? false),
+              Semantics(
+                label: m.done ? '标记为未完成：${m.title}' : '标记为已完成：${m.title}',
+                child: Checkbox(
+                  key: Key('memo-check-${m.id}'),
+                  value: m.done,
+                  onChanged: (v) => _setDone(context, ref, v ?? false),
+                ),
               ),
               Expanded(
                 child: Padding(
@@ -76,12 +89,20 @@ class MemoTile extends ConsumerWidget {
                               color: overdue ? c.error : c.textSecondary,
                             ),
                           ),
+                          if (overdue && !showDate) ...[
+                            const SizedBox(width: JkTokens.spacingXs),
+                            Text(
+                              '已逾期',
+                              style: t.bodySmall?.copyWith(color: c.error),
+                            ),
+                          ],
                           if (m.reminders.isNotEmpty && !m.done) ...[
                             const SizedBox(width: JkTokens.spacingSm),
                             Icon(
                               Icons.notifications_none,
                               size: 14,
                               color: c.textSecondary,
+                              semanticLabel: '已设置提醒',
                             ),
                           ],
                         ],

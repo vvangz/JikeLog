@@ -10,6 +10,7 @@ import 'package:jikelog/features/memos/memo_models.dart';
 import 'package:jikelog/features/memos/memo_repository.dart';
 import 'package:jikelog/features/memos/memo_widgets.dart';
 import 'package:jikelog/features/reminders/local_notifier.dart';
+import 'package:jikelog/features/reminders/reminder_coordinator.dart';
 import 'package:jikelog/features/reminders/reminder_scheduler.dart';
 import 'package:jikelog/features/worklog/worklog_repository.dart';
 
@@ -88,6 +89,8 @@ FakeBackend _backend() =>
 
 void main() {
   tearDown(TestHooks.reset);
+  setUp(ReminderCoordinator.resetLaunchForTesting);
+  _reviewFixTests();
 
   testWidgets('空状态 → 新建备忘 → 输入后自动保存并同步，排定本地提醒', (tester) async {
     final server = FakeSyncServer();
@@ -309,6 +312,7 @@ void main() {
       'token': 'reg-123',
       'timeZone': 'Asia/Shanghai',
       'localReminders': false,
+      'localUntil': null,
     });
 
     await _create(tester);
@@ -353,6 +357,7 @@ void main() {
     expect(find.text('已开启，备忘会按时提醒'), findsOneWidget);
 
     await tapAndSettle(tester, find.byKey(const Key('calendar-export')));
+    await tapAndSettle(tester, find.text('开启'));
     await tester.pump(const Duration(milliseconds: 400));
     await settleApp(tester);
     expect(TestHooks.calendar.calendars.values, ['即刻日志']);
@@ -365,6 +370,7 @@ void main() {
       ..granted = false
       ..grantOnRequest = false;
     await tapAndSettle(tester, find.byKey(const Key('calendar-export')));
+    await tapAndSettle(tester, find.text('开启'));
     expect(find.text('没有获得日历权限，可在系统设置中允许后重试'), findsOneWidget);
   });
 
@@ -390,6 +396,7 @@ void main() {
     await _create(tester);
     await _go(tester, '/settings');
     await tapAndSettle(tester, find.byKey(const Key('calendar-export')));
+    await tapAndSettle(tester, find.text('开启'));
     await tester.pump(const Duration(milliseconds: 400));
     await settleApp(tester);
     expect(TestHooks.notifier.scheduled, isNotEmpty);
@@ -438,5 +445,127 @@ void main() {
     await remote({}, deleted: true);
     expect(find.text('这条备忘已在其他设备上删除'), findsOneWidget);
     expect(find.byKey(const Key('memo-content')), findsNothing);
+  });
+}
+
+void _reviewFixTests() {
+  testWidgets('本地闹钟排满时把覆盖范围告诉服务端', (tester) async {
+    final backend = await pumpApp(tester, backend: _backend());
+    final base = DateTime.now().add(const Duration(days: 1));
+    for (var i = 0; i < 13; i++) {
+      await _create(
+        tester,
+        content: '备忘 $i',
+        at: base.add(Duration(hours: i)),
+        reminders: [0, 5, 15, 60, 1440],
+      );
+    }
+    await tester.pump(const Duration(milliseconds: 400));
+    await settleApp(tester);
+    expect(TestHooks.notifier.scheduled, hasLength(maxPlannedAlarms));
+    final body = backend.last('PUT', '/api/v1/me/push').body!;
+    expect(body['localReminders'], isTrue);
+    expect(DateTime.parse(body['localUntil'] as String), isA<DateTime>());
+  });
+
+  testWidgets('退出后重新登录会重新登记推送', (tester) async {
+    final backend = await pumpApp(tester, backend: _backend());
+    expect(backend.count('PUT', '/api/v1/me/push'), 1);
+    await tapAndSettle(tester, find.byKey(const Key('sidebar-toggle')));
+    await tapAndSettle(tester, find.byKey(const Key('nav-/account')));
+    await tapAndSettle(tester, find.byKey(const Key('account-logout')));
+    for (var i = 0; i < 40 && find.text('退出').evaluate().isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 25)),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tapAndSettle(tester, find.text('退出'));
+    await enter(tester, const Key('login-username'), 'zhangsan');
+    await enter(tester, const Key('login-password'), 'Passw0rd!');
+    await tapAndSettle(tester, find.byKey(const Key('login-submit')));
+    expect(backend.count('PUT', '/api/v1/me/push'), 2);
+  });
+
+  testWidgets('点按通知：编辑页已打开时不重复打开；格式不对的 ID 忽略；启动通知只处理一次', (tester) async {
+    const id0 = '0192a000-0000-7000-8000-00000000aaaa';
+    TestHooks.notifier.launch = '$id0|0|1|2';
+    await pumpApp(tester, backend: _backend());
+    // 启动时的通知指向一条不存在的备忘：打开后显示不存在
+    expect(find.text('备忘不存在'), findsOneWidget);
+    await tester.pageBack();
+    await settleApp(tester);
+
+    final id = await _create(tester, content: '只开一个');
+    TestHooks.notifier.onTap!('$id|0|1|2');
+    await settleApp(tester);
+    TestHooks.notifier.onTap!('$id|0|1|2');
+    await settleApp(tester);
+    expect(find.byKey(const Key('memo-content')), findsOneWidget);
+    await tester.pageBack();
+    await settleApp(tester);
+    expect(find.byKey(const Key('memo-content')), findsNothing);
+
+    TestHooks.push.onOpen!('../settings');
+    await settleApp(tester);
+    expect(find.byKey(const Key('memo-content')), findsNothing);
+  });
+
+  testWidgets('有未保存的输入时其他设备的修改合并进来', (tester) async {
+    await pumpApp(tester, backend: _backend());
+    final id = await _create(tester, content: '第一段\n第二段');
+    await _autosave(tester);
+    await _go(tester, '/memos');
+    unawaited(_c(tester).read(routerProvider).push('/memos/$id'));
+    await settleApp(tester);
+    final field = find.byKey(const Key('memo-content'));
+    await tester.enterText(field, '第一段，本地补充\n第二段');
+    await tester.pump(const Duration(milliseconds: 100));
+    await _run(tester, () async {
+      final store = _c(tester).read(recordStoreProvider);
+      final cur = (await store.get(id))!;
+      final clock =
+          '${DateTime.now().millisecondsSinceEpoch + 60000}-0000-bbbbbbbbbbbbbbbb';
+      await store.applyRemote(
+        RemoteRecord(
+          entity: 'memo',
+          id: id,
+          version: cur.version + 1,
+          serverSeq: cur.serverSeq + 1,
+          deleted: false,
+          fields: {...cur.fields, 'content': '第一段\n第二段，远端补充'},
+          clocks: {...cur.clocks, 'content': clock},
+        ),
+      );
+    });
+    expect(
+      tester.widget<TextField>(field).controller!.text,
+      '第一段，本地补充\n第二段，远端补充',
+    );
+    await _autosave(tester);
+    expect((await _memo(tester, id)).content, '第一段，本地补充\n第二段，远端补充');
+  });
+
+  testWidgets('矮屏 + 大字号：日历与当天内容可以滚动查看', (tester) async {
+    await pumpApp(tester, backend: _backend(), height: 560, textScale: 1.5);
+    await _create(
+      tester,
+      content: '矮屏也能看到',
+      at: dateOnly(DateTime.now()).add(const Duration(hours: 23)),
+    );
+    await _go(tester, '/memos');
+    await tapAndSettle(tester, find.text('日历'));
+    expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(
+      find.text('矮屏也能看到'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const Key('memo-agenda')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.text('矮屏也能看到'), findsOneWidget);
   });
 }

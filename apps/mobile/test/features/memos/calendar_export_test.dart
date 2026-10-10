@@ -46,7 +46,7 @@ void main() {
   );
 
   test('未开启时不写入', () async {
-    await exporter.reconcile([memo('a')]);
+    await exporter.reconcile([memo('a')], owner: 'u1');
     expect(cal.calendars, isEmpty);
     expect(exporter.enabled, isFalse);
   });
@@ -57,7 +57,7 @@ void main() {
       memo('a'),
       memo('b', at: DateTime(2026, 10, 13, 9), allDay: true, content: '体检\n空腹'),
       memo('old', at: DateTime(2026, 8, 1)), // 超出过去 30 天
-    ]);
+    ], owner: 'u1');
     expect(cal.calendars.values, [systemCalendarName]);
     final events = {for (final e in cal.all) e.title: e};
     expect(events.keys, unorderedEquals(['周会', '体检']));
@@ -68,7 +68,7 @@ void main() {
 
     await exporter.reconcile([
       memo('a', at: DateTime(2026, 10, 12, 17), done: true),
-    ]);
+    ], owner: 'u1');
     expect(cal.all.single.title, '✓ 周会');
     expect(cal.all.single.start, DateTime(2026, 10, 12, 17));
     expect(cal.events, hasLength(1), reason: '更新事件而不是新建');
@@ -76,30 +76,34 @@ void main() {
 
   test('用户在系统日历中删掉事件或日历后重建', () async {
     await exporter.enable();
-    await exporter.reconcile([memo('a')]);
+    await exporter.reconcile([memo('a')], owner: 'u1');
     cal.events.clear();
-    await exporter.reconcile([memo('a', content: '改名')]);
+    await exporter.reconcile([memo('a', content: '改名')], owner: 'u1');
     expect(cal.all.single.title, '改名');
 
     cal.calendars.clear();
     cal.events.clear();
-    await exporter.reconcile([memo('a', content: '改名')]);
+    await exporter.reconcile([memo('a', content: '改名')], owner: 'u1');
     expect(cal.calendars, hasLength(1));
     expect(cal.all.single.title, '改名');
   });
 
-  test('本地对应关系被清空（换账号）时整个日历重建，不留下旧事件', () async {
+  test('换了账号时整个日历重建，不留下旧事件；没有备忘时不反复重建', () async {
     await exporter.enable();
-    await exporter.reconcile([memo('a'), memo('b')]);
+    await exporter.reconcile([], owner: 'u1');
+    final first = cal.calendars.keys.single;
+    await exporter.reconcile([], owner: 'u1');
+    expect(cal.calendars.keys.single, first, reason: '同一账号不重建');
+    await exporter.reconcile([memo('a'), memo('b')], owner: 'u1');
     await db.wipe();
-    await exporter.reconcile([memo('c', content: '新账号的备忘')]);
+    await exporter.reconcile([memo('c', content: '新账号的备忘')], owner: 'u2');
     expect(cal.calendars, hasLength(1));
     expect(cal.all.map((e) => e.title), ['新账号的备忘']);
   });
 
   test('关闭时删除日历；没有权限时开启失败', () async {
     await exporter.enable();
-    await exporter.reconcile([memo('a')]);
+    await exporter.reconcile([memo('a')], owner: 'u1');
     await exporter.disable();
     expect(exporter.enabled, isFalse);
     expect(cal.calendars, isEmpty);
@@ -114,13 +118,13 @@ void main() {
 
   test('退出登录时删除日历但保留开关；收回权限后不再写入', () async {
     await exporter.enable();
-    await exporter.reconcile([memo('a')]);
+    await exporter.reconcile([memo('a')], owner: 'u1');
     await exporter.clear();
     expect(cal.calendars, isEmpty);
     expect(exporter.enabled, isTrue);
 
     cal.granted = false;
-    await exporter.reconcile([memo('a')]);
+    await exporter.reconcile([memo('a')], owner: 'u1');
     expect(cal.calendars, isEmpty);
   });
 }

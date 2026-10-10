@@ -23,9 +23,12 @@ const (
 	// PollInterval 为检查到期提醒的间隔，推送最多因此延后这么久。
 	PollInterval = 10 * time.Second
 	// batchSize 为每次领取的提醒数，领取不满时本轮结束。
-	batchSize = 100
+	batchSize = 20
 	// lease 为领取后独占的时长：发送失败或实例崩溃时，到期后由任一实例重试。
-	lease = 2 * time.Minute
+	lease = 5 * time.Minute
+	// leaseMargin：领取期限只剩这么多时不再发送本批剩余的提醒（交给到期后的重新领取），
+	// 避免其他实例已重新领取时重复推送。
+	leaseMargin = time.Minute
 	// maxAttempts 为一条提醒最多尝试发送的次数。
 	maxAttempts = 3
 	// staleAfter 之后才领取到的提醒（服务长时间停机）不再发送，过时的提醒只会打扰用户。
@@ -78,11 +81,15 @@ func (r *Dispatcher) Run(ctx context.Context) {
 func (r *Dispatcher) Tick(ctx context.Context) (int, error) {
 	total := 0
 	for {
+		claimed := r.d.Now()
 		due, err := r.claim(ctx)
 		if err != nil {
 			return total, err
 		}
 		for _, row := range due {
+			if r.d.Now().Sub(claimed) > lease-leaseMargin {
+				return total, nil // 推送通道太慢：剩余的提醒在领取期限过后重新领取
+			}
 			if err := r.dispatch(ctx, row); err != nil {
 				return total, err
 			}
@@ -115,6 +122,11 @@ func (r *Dispatcher) dispatch(ctx context.Context, row dbgen.ClaimDueRemindersRo
 		log.WarnContext(ctx, "reminder dropped: too late", "fire_at", row.FireAt)
 		return r.finish(ctx, row)
 	}
+	if row.Attempts > maxAttempts {
+		// 之前的尝试中途崩溃（没有记录结果），不再继续
+		log.WarnContext(ctx, "reminder dropped: too many attempts", "attempts", row.Attempts)
+		return r.finish(ctx, row)
+	}
 	q := r.d.Tx.Queries()
 	rec, err := q.GetRecord(ctx, dbgen.GetRecordParams{ID: row.MemoID, UserID: row.UserID})
 	if db.IsNotFound(err) {
@@ -131,7 +143,9 @@ func (r *Dispatcher) dispatch(ctx context.Context, row dbgen.ClaimDueRemindersRo
 	if rec.Deleted {
 		return r.finish(ctx, row)
 	}
-	targets, err := q.ListReminderTargets(ctx, dbgen.ListReminderTargetsParams{UserID: row.UserID, MemoSeq: rec.ServerSeq})
+	targets, err := q.ListReminderTargets(ctx, dbgen.ListReminderTargetsParams{
+		UserID: row.UserID, MemoSeq: rec.ServerSeq, FireAt: row.FireAt,
+	})
 	if err != nil {
 		return fmt.Errorf("查询推送设备失败: %w", err)
 	}
@@ -145,12 +159,15 @@ func (r *Dispatcher) dispatch(ctx context.Context, row dbgen.ClaimDueRemindersRo
 	return r.finish(ctx, row)
 }
 
-// send 按设备时区分组发送（推送文案中的时间按时区显示）。
+// send 按设备时区分组发送（推送文案中的时间按时区显示）。某一组可重试地失败时整条提醒重试，
+// 已发送成功的组会再收到一次（多台设备时区不同且推送通道故障时才会发生，可以接受）。
 func (r *Dispatcher) send(ctx context.Context, row dbgen.ClaimDueRemindersRow, memo memoTime, targets []dbgen.ListReminderTargetsRow) error {
 	groups := map[string][]string{}
+	provider := map[string]string{}
 	for _, t := range targets {
-		if t.PushToken != nil {
+		if t.PushToken != nil && t.PushProvider != nil {
 			groups[t.TimeZone] = append(groups[t.TimeZone], *t.PushToken)
+			provider[*t.PushToken] = *t.PushProvider
 		}
 	}
 	var errs []error
@@ -162,11 +179,25 @@ func (r *Dispatcher) send(ctx context.Context, row dbgen.ClaimDueRemindersRow, m
 			Extras: map[string]string{"type": syncer.EntityMemo, "memoId": row.MemoID.String()},
 			TTL:    pushTTL,
 		})
-		if err != nil && !errors.Is(err, pusher.ErrNoTarget) {
+		switch {
+		case errors.Is(err, pusher.ErrNoTarget):
+			r.clearTokens(ctx, tokens, provider)
+		case err != nil:
 			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// clearTokens 清除推送通道报告已失效的标识（App 已卸载等），之后不再向它们推送。
+func (r *Dispatcher) clearTokens(ctx context.Context, tokens []string, provider map[string]string) {
+	q := r.d.Tx.Queries()
+	for _, t := range tokens {
+		pv := provider[t]
+		if err := q.ClearPushByToken(ctx, dbgen.ClearPushByTokenParams{PushProvider: &pv, PushToken: &t}); err != nil {
+			r.d.Logger.WarnContext(ctx, "clear invalid push token failed", "error", err)
+		}
+	}
 }
 
 func (r *Dispatcher) finish(ctx context.Context, row dbgen.ClaimDueRemindersRow) error {

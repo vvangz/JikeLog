@@ -448,6 +448,7 @@ paths:
       description: |
         App 同意隐私政策并取得推送标识后调用，退出登录时设备上的登记随之清除（ADR-008）。
         服务端在备忘录提醒时刻，对尚未同步到该备忘录、或不能在本地按时提醒的设备发送推送。
+        推送标识正被其他账号仍在使用的设备占用时返回 409（PUSH_TOKEN_IN_USE）；每台设备每小时最多调用 30 次。
       requestBody:
         required: true
         content:
@@ -1288,6 +1289,11 @@ components:
         localReminders:
           type: boolean
           description: 设备能否自己按时弹出提醒（已授予通知与精确闹钟权限）
+        localUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: 本地闹钟覆盖到的时刻（设备只排定最近若干条提醒），晚于此刻的提醒仍由服务端推送；为空表示全部覆盖
 
     SettingsInput:
       type: object

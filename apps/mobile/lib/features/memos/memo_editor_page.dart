@@ -46,6 +46,12 @@ class _MemoEditorPageState extends ConsumerState<MemoEditorPage> {
   bool _deleting = false;
   String _savedContent = '';
 
+  /// 编辑框上次的文字（区分真正的编辑与光标移动）。
+  String _lastText = '';
+
+  /// 进行中的保存。
+  Future<void>? _inflight;
+
   /// 新建且尚未保存时的草稿字段。
   late DateTime _draftAt;
   bool _draftAllDay = false;
@@ -74,35 +80,51 @@ class _MemoEditorPageState extends ConsumerState<MemoEditorPage> {
 
   void _load(Memo m) {
     _savedContent = m.content;
+    _lastText = m.content;
     _content.text = m.content;
     _loaded = true;
   }
 
   void _onEdit() {
-    if (!_loaded) return;
+    // 只移动光标、输入法组字等不改变文字的变化不算编辑
+    if (!_loaded || _content.text == _lastText) return;
+    _lastText = _content.text;
     setState(() {}); // 更新"内容不能为空"提示
     _timer?.cancel();
     _timer = Timer(_autosave, () => unawaited(_flush()));
   }
 
-  Future<void> _flush() async {
+  /// 保存当前内容。保存按顺序进行：新建尚未完成时，后一次保存等它完成后按"修改"处理，
+  /// 不会建出两条备忘。
+  Future<void> _flush() {
     _timer?.cancel();
+    final content = _content.text; // 离开页面时控制器随后就会释放，先取出文字
+    final prev = _inflight ?? Future<void>.value();
+    return _inflight = prev.then((_) => _save(content));
+  }
+
+  Future<void> _save(String content) async {
     if (!_loaded) return; // 已删除，不能再写入
-    final content = _content.text;
     if (content.trim().isEmpty || content == _savedContent) return;
-    _savedContent = content;
-    final id = _id;
-    if (id != null) {
-      await _repo.update(id, content: content);
-      return;
+    try {
+      final id = _id;
+      if (id != null) {
+        await _repo.update(id, content: content);
+      } else {
+        _id = await _repo.create(
+          content: content,
+          at: _draftAt,
+          allDay: _draftAllDay,
+          reminders: _draftReminders,
+        );
+        if (mounted) setState(() {});
+      }
+      // 写入成功后才算已保存：失败时下次保存还会重试
+      _savedContent = content;
+    } on Object catch (e) {
+      debugPrint('保存备忘失败: $e');
+      if (mounted) showJkToast(context, '保存失败，请重试', kind: JkToastKind.error);
     }
-    _id = await _repo.create(
-      content: content,
-      at: _draftAt,
-      allDay: _draftAllDay,
-      reminders: _draftReminders,
-    );
-    if (mounted) setState(() {});
   }
 
   /// 其他设备的修改到达：没有未保存的输入时直接刷新，否则把本地输入合并到新内容上。
@@ -112,7 +134,8 @@ class _MemoEditorPageState extends ConsumerState<MemoEditorPage> {
         _timer?.cancel();
         _loaded = false;
         showJkToast(context, '这条备忘已在其他设备上删除');
-        _close();
+        // 上面可能还叠着修订历史页，直接回到列表
+        context.go('/memos');
       }
       return;
     }
@@ -125,15 +148,35 @@ class _MemoEditorPageState extends ConsumerState<MemoEditorPage> {
     final saved = _savedContent;
     _savedContent = next.content;
     if (local == saved) {
-      _content.text = next.content;
+      _setContent(next.content);
       return;
     }
     final merged = TextPatch.rebase(saved, local, next.content);
     if (merged.ok) {
-      _content.text = merged.text;
+      _setContent(merged.text); // 触发自动保存，保存合并后的内容
     } else if (mounted) {
       showJkToast(context, '其他设备同时修改了这里，已保留你的输入，对方的版本可在修订历史中查看');
     }
+  }
+
+  /// 替换编辑框内容，光标尽量留在原来的文字旁边。
+  void _setContent(String text) {
+    final old = _content.text;
+    var cursor = _content.selection.baseOffset;
+    if (cursor > _commonPrefix(old, text)) cursor += text.length - old.length;
+    _content.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: cursor.clamp(0, text.length)),
+    );
+  }
+
+  static int _commonPrefix(String a, String b) {
+    final n = a.length < b.length ? a.length : b.length;
+    var i = 0;
+    while (i < n && a.codeUnitAt(i) == b.codeUnitAt(i)) {
+      i++;
+    }
+    return i;
   }
 
   /// 修改时间、全天或提醒：已保存的备忘立即写入，新建的先记在草稿里。
@@ -148,7 +191,21 @@ class _MemoEditorPageState extends ConsumerState<MemoEditorPage> {
       });
       return;
     }
-    await _repo.update(id, at: at, allDay: allDay, reminders: reminders);
+    try {
+      await _repo.update(id, at: at, allDay: allDay, reminders: reminders);
+    } on Object catch (e) {
+      debugPrint('保存备忘失败: $e');
+      if (mounted) showJkToast(context, '保存失败，请重试', kind: JkToastKind.error);
+    }
+  }
+
+  Future<void> _toggleDone(Memo m) async {
+    try {
+      await _repo.update(m.id, done: !m.done);
+    } on Object catch (e) {
+      debugPrint('保存备忘失败: $e');
+      if (mounted) showJkToast(context, '保存失败，请重试', kind: JkToastKind.error);
+    }
   }
 
   Future<void> _pickDate(DateTime at) async {
@@ -198,7 +255,16 @@ class _MemoEditorPageState extends ConsumerState<MemoEditorPage> {
     _timer?.cancel();
     _loaded = false;
     _deleting = true;
-    await _repo.delete(id);
+    try {
+      await _inflight; // 等进行中的保存结束，删除之后不能再写入
+      await _repo.delete(id);
+    } on Object catch (e) {
+      debugPrint('删除备忘失败: $e');
+      _loaded = true;
+      _deleting = false;
+      if (mounted) showJkToast(context, '删除失败，请重试', kind: JkToastKind.error);
+      return;
+    }
     if (mounted) _close();
   }
 
@@ -268,7 +334,7 @@ class _MemoEditorPageState extends ConsumerState<MemoEditorPage> {
               icon: Icon(
                 m.done ? Icons.check_circle : Icons.check_circle_outline,
               ),
-              onPressed: () => _repo.update(m.id, done: !m.done),
+              onPressed: () => _toggleDone(m),
             ),
             IconButton(
               key: const Key('memo-revisions'),

@@ -11,15 +11,18 @@ const maxPlannedAlarms = 64;
 /// 通知标题的最大字数。
 const _maxTitle = 60;
 
-/// 一条备忘的某个提醒对应的通知 ID：由备忘 ID 与提前量稳定地算出（FNV-1a，31 位）。
-int alarmId(String memoId, int offset) {
+/// 字符串的稳定哈希（FNV-1a，31 位）：每次运行结果相同（Object.hash 不保证）。
+int stableHash(String s) {
   var h = 0x811c9dc5;
-  for (final c in '$memoId:$offset'.codeUnits) {
+  for (final c in s.codeUnits) {
     h ^= c;
     h = (h * 0x01000193) & 0xffffffff;
   }
   return h & 0x7fffffff;
 }
+
+/// 一条备忘的某个提醒对应的通知 ID：由备忘 ID 与提前量稳定地算出。
+int alarmId(String memoId, int offset) => stableHash('$memoId:$offset');
 
 /// 通知 payload 中的备忘 ID（payload 格式见 [planAlarms]）。
 String? memoIdOfPayload(String payload) {
@@ -51,7 +54,7 @@ List<PlannedAlarm> planAlarms(
           body: alarmBody(m, offset),
           payload:
               '${m.id}|$offset|${at.millisecondsSinceEpoch}|'
-              '${Object.hash(title, m.allDay, m.at)}',
+              '${stableHash('$title|${m.allDay}|${m.at.millisecondsSinceEpoch}')}',
         ),
       );
     }
@@ -72,6 +75,11 @@ String alarmBody(Memo m, int offset) {
       : '$when · ${reminderLabel(offset, allDay: m.allDay)}';
 }
 
+/// 本地闹钟覆盖到的时刻：排满 [maxPlannedAlarms] 条时为最后一条的时刻（更晚的提醒由服务端推送），
+/// 否则为 null（全部覆盖）。
+DateTime? coverageOf(List<PlannedAlarm> plan, {int limit = maxPlannedAlarms}) =>
+    plan.length >= limit ? plan.last.at : null;
+
 /// 让本机已排定的通知与备忘录保持一致：多删少补，未变化的不动。
 class ReminderScheduler {
   ReminderScheduler(this.notifier, {DateTime Function()? now})
@@ -80,6 +88,9 @@ class ReminderScheduler {
   final LocalNotifier notifier;
   final DateTime Function() _now;
   Future<void> _queue = Future.value();
+
+  /// 最近一次排定后本地闹钟覆盖到的时刻（见 [coverageOf]）。
+  DateTime? coverage;
 
   /// 按最新的备忘录重新排定。多次调用按顺序执行。
   Future<void> reconcile(List<Memo> memos) =>
@@ -95,11 +106,21 @@ class ReminderScheduler {
     for (final id in pending.keys) {
       if (!wanted.contains(id)) await notifier.cancel(id);
     }
+    var failed = false;
     for (final a in plan) {
-      if (pending[a.id] != a.payload) {
+      if (pending[a.id] == a.payload) continue;
+      try {
         await notifier.schedule(a, exact: perms.exact);
+      } on Object catch (e) {
+        // 一条失败不影响其他提醒；失败的那条下次排定时重试
+        failed = true;
+        debugPrint('排定提醒 ${a.id} 失败: $e');
       }
     }
+    // 有提醒没排上时，不能再声称本地全部覆盖：服务端会照常推送
+    coverage = failed
+        ? (plan.isEmpty ? null : plan.first.at)
+        : coverageOf(plan);
   }
 
   /// 取消全部提醒（退出登录时）。

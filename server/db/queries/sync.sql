@@ -108,12 +108,19 @@ SELECT id, object_key FROM attachments WHERE status = 'deleted' ORDER BY created
 -- name: PurgeAttachment :exec
 DELETE FROM attachments WHERE id = @id AND status = 'deleted';
 
--- name: DeleteMemoReminders :exec
-DELETE FROM memo_reminders WHERE memo_id = @memo_id;
+-- name: ListMemoReminders :many
+SELECT offset_min, fire_at FROM memo_reminders WHERE memo_id = @memo_id;
 
--- name: InsertMemoReminder :exec
+-- name: DeleteMemoReminder :exec
+DELETE FROM memo_reminders WHERE memo_id = @memo_id AND offset_min = @offset_min;
+
+-- name: UpsertMemoReminder :exec
+-- 时刻变化的提醒重新开始计数；时刻未变的保持原样（可能正在发送）。
 INSERT INTO memo_reminders (memo_id, user_id, offset_min, fire_at)
-VALUES (@memo_id, @user_id, @offset_min, @fire_at);
+VALUES (@memo_id, @user_id, @offset_min, @fire_at)
+ON CONFLICT (memo_id, offset_min) DO UPDATE
+SET fire_at = EXCLUDED.fire_at, attempts = 0, lease_until = NULL
+WHERE memo_reminders.fire_at <> EXCLUDED.fire_at;
 
 -- name: ClaimDueReminders :many
 -- 领取到期且未被其他实例领取的提醒，并把领取期限写回（调用方在事务内执行）。
@@ -136,7 +143,10 @@ WHERE memo_id = @memo_id AND offset_min = @offset_min AND fire_at = @fire_at;
 
 -- name: ListReminderTargets :many
 -- 需要服务端推送的设备：有推送标识，且不能确定它已在本地按时提醒
--- （没有本地提醒能力，或尚未同步到这一版备忘录）。
+-- （没有本地提醒能力、尚未同步到这一版备忘录，或提醒时刻超出了本地闹钟覆盖的范围）。
 SELECT id, push_provider, push_token, time_zone FROM devices
 WHERE user_id = @user_id AND revoked_at IS NULL AND push_token IS NOT NULL
-  AND NOT (local_reminders AND last_ack_seq >= @memo_seq::bigint);
+  AND NOT (
+    local_reminders AND last_ack_seq >= @memo_seq::bigint
+    AND (local_until IS NULL OR local_until >= @fire_at::timestamptz)
+  );

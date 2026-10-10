@@ -124,5 +124,46 @@ void main() {
       await s.reconcile([memo('a', at: DateTime(2026, 10, 12, 9))]);
       expect(n.scheduled, hasLength(1));
     });
+
+    test('一条排定失败不影响其他提醒，并不再声称全部覆盖', () async {
+      final n = _FailingNotifier(alarmId('a', 0));
+      final s = ReminderScheduler(n, now: () => now);
+      await s.reconcile([
+        memo('a', at: DateTime(2026, 10, 12, 9)),
+        memo('b', at: DateTime(2026, 10, 12, 10)),
+      ]);
+      expect(n.scheduled.keys, [alarmId('b', 0)]);
+      expect(s.coverage, DateTime(2026, 10, 12, 9));
+
+      n.failId = null;
+      await s.reconcile([memo('a', at: DateTime(2026, 10, 12, 9))]);
+      expect(s.coverage, isNull);
+      expect(n.scheduled.keys, [alarmId('a', 0)]);
+    });
+
+    test('排满上限时覆盖范围为最后一条的时刻', () {
+      final plan = planAlarms(
+        [
+          for (var i = 0; i < 5; i++)
+            memo('m$i', at: now.add(Duration(hours: i + 1))),
+        ],
+        now,
+        limit: 3,
+      );
+      expect(coverageOf(plan, limit: 3), now.add(const Duration(hours: 3)));
+      expect(coverageOf(plan.sublist(0, 2), limit: 3), isNull);
+    });
   });
+}
+
+class _FailingNotifier extends FakeLocalNotifier {
+  _FailingNotifier(this.failId);
+
+  int? failId;
+
+  @override
+  Future<void> schedule(PlannedAlarm alarm, {required bool exact}) async {
+    if (alarm.id == failId) throw StateError('alarm failed');
+    await super.schedule(alarm, exact: exact);
+  }
 }
