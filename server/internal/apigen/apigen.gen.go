@@ -115,6 +115,21 @@ func (e HealthCheckStatus) Valid() bool {
 	}
 }
 
+// Defines values for PushRegistrationProvider.
+const (
+	PushRegistrationProviderJpush PushRegistrationProvider = "jpush"
+)
+
+// Valid indicates whether the value is a known member of the PushRegistrationProvider enum.
+func (e PushRegistrationProvider) Valid() bool {
+	switch e {
+	case PushRegistrationProviderJpush:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PushResultStatus.
 const (
 	PushResultStatusApplied  PushResultStatus = "applied"
@@ -693,6 +708,24 @@ type PushEnvelope struct {
 	Success   bool   `json:"success"`
 }
 
+// PushRegistration defines model for PushRegistration.
+type PushRegistration struct {
+	// LocalReminders 设备能否自己按时弹出提醒（已授予通知与精确闹钟权限）
+	LocalReminders bool `json:"localReminders"`
+
+	// Provider 推送通道；为空表示该设备不接收服务端推送
+	Provider *PushRegistrationProvider `json:"provider,omitempty"`
+
+	// TimeZone 设备时区（IANA 名称，如 Asia/Shanghai），推送文案中的时间按它显示
+	TimeZone string `json:"timeZone"`
+
+	// Token 推送通道分配的设备标识（极光 Registration ID），与 provider 同时为空或同时非空
+	Token *string `json:"token,omitempty"`
+}
+
+// PushRegistrationProvider 推送通道；为空表示该设备不接收服务端推送
+type PushRegistrationProvider string
+
 // PushRequest defines model for PushRequest.
 type PushRequest struct {
 	Changes []SyncChange `json:"changes"`
@@ -1122,6 +1155,9 @@ type ChangePasswordJSONRequestBody = ChangePasswordRequest
 // BindPhoneJSONRequestBody defines body for BindPhone for application/json ContentType.
 type BindPhoneJSONRequestBody = BindPhoneRequest
 
+// UpdatePushJSONRequestBody defines body for UpdatePush for application/json ContentType.
+type UpdatePushJSONRequestBody = PushRegistration
+
 // UpdateSettingsJSONRequestBody defines body for UpdateSettings for application/json ContentType.
 type UpdateSettingsJSONRequestBody = SettingsInput
 
@@ -1196,6 +1232,9 @@ type ServerInterface interface {
 	// BindPhone 绑定或换绑手机号
 	// (PUT /api/v1/me/phone)
 	BindPhone(c *gin.Context)
+	// UpdatePush 登记当前设备的推送
+	// (PUT /api/v1/me/push)
+	UpdatePush(c *gin.Context)
 	// GetSettings 用户设置
 	// (GET /api/v1/me/settings)
 	GetSettings(c *gin.Context)
@@ -1553,6 +1592,19 @@ func (siw *ServerInterfaceWrapper) BindPhone(c *gin.Context) {
 	siw.Handler.BindPhone(c)
 }
 
+// UpdatePush operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePush(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.UpdatePush(c)
+}
+
 // GetSettings operation middleware
 func (siw *ServerInterfaceWrapper) GetSettings(c *gin.Context) {
 
@@ -1873,6 +1925,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/api/v1/me/deletion", wrapper.DeleteAccount)
 	router.GET(options.BaseURL+"/api/v1/me/devices", wrapper.ListDevices)
 	router.DELETE(options.BaseURL+"/api/v1/me/devices/:deviceId", wrapper.RevokeDevice)
+	router.PUT(options.BaseURL+"/api/v1/me/push", wrapper.UpdatePush)
 	router.GET(options.BaseURL+"/api/v1/me/settings", wrapper.GetSettings)
 	router.PUT(options.BaseURL+"/api/v1/me/settings", wrapper.UpdateSettings)
 	router.POST(options.BaseURL+"/api/v1/sync/e2e/session", wrapper.CreateE2ESession)
@@ -2627,6 +2680,45 @@ func (response BindPhonedefaultJSONResponse) VisitBindPhoneResponse(w http.Respo
 	return err
 }
 
+type UpdatePushRequestObject struct {
+	Body *UpdatePushJSONRequestBody
+}
+
+type UpdatePushResponseObject interface {
+	VisitUpdatePushResponse(w http.ResponseWriter) error
+}
+
+type UpdatePush200JSONResponse AckEnvelope
+
+func (response UpdatePush200JSONResponse) VisitUpdatePushResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePushdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response UpdatePushdefaultJSONResponse) VisitUpdatePushResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetSettingsRequestObject struct {
 }
 
@@ -3166,6 +3258,9 @@ type StrictServerInterface interface {
 	// BindPhone 绑定或换绑手机号
 	// (PUT /api/v1/me/phone)
 	BindPhone(ctx context.Context, request BindPhoneRequestObject) (BindPhoneResponseObject, error)
+	// UpdatePush 登记当前设备的推送
+	// (PUT /api/v1/me/push)
+	UpdatePush(ctx context.Context, request UpdatePushRequestObject) (UpdatePushResponseObject, error)
 	// GetSettings 用户设置
 	// (GET /api/v1/me/settings)
 	GetSettings(ctx context.Context, request GetSettingsRequestObject) (GetSettingsResponseObject, error)
@@ -3802,6 +3897,37 @@ func (sh *strictHandler) BindPhone(ctx *gin.Context) {
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(BindPhoneResponseObject); ok {
 		if err := validResponse.VisitBindPhoneResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdatePush operation middleware
+func (sh *strictHandler) UpdatePush(ctx *gin.Context) {
+	var request UpdatePushRequestObject
+
+	var body UpdatePushJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdatePush(ctx, request.(UpdatePushRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdatePush")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(UpdatePushResponseObject); ok {
+		if err := validResponse.VisitUpdatePushResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {

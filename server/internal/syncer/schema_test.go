@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -167,5 +168,85 @@ func TestCheckValueFlagAndChoices(t *testing.T) {
 		if _, err := c.f.CheckValue(c.v); err == nil {
 			t.Errorf("%s：应当报错", name)
 		}
+	}
+}
+
+func TestMemoSchema(t *testing.T) {
+	memo := Registry[EntityMemo].Fields
+	if !memo["content"].Sensitive || !memo["content"].Required || memo["content"].Kind != KindText {
+		t.Error("memo.content 应为必填、可补丁合并的敏感字段")
+	}
+	// 服务端要按时推送提醒，时间与提醒设置不能是密文
+	for _, f := range []string{"at", "allDay", "reminders", "done"} {
+		if memo[f].Sensitive {
+			t.Errorf("memo.%s 不应加密", f)
+		}
+	}
+	if !memo["at"].Required {
+		t.Error("memo.at 必填")
+	}
+
+	ok := []struct {
+		name string
+		f    Field
+		raw  string
+		want Value
+	}{
+		{"时间", memo["at"], `1791374400000`, int64(1791374400000)},
+		{"准时提醒", memo["reminders"], `"0"`, "0"},
+		{"多个提醒", memo["reminders"], `"0,15,1440"`, "0,15,1440"},
+		{"最长提前 30 天", memo["reminders"], `"43200"`, "43200"},
+		{"不提醒", memo["reminders"], `""`, ""},
+		{"清空提醒", memo["reminders"], `null`, nil},
+		{"全天", memo["allDay"], `1`, int64(1)},
+		{"已完成", memo["done"], `1`, int64(1)},
+	}
+	for _, c := range ok {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := c.f.DecodeValue(json.RawMessage(c.raw))
+			if err != nil || got != c.want {
+				t.Fatalf("got=%v err=%v", got, err)
+			}
+		})
+	}
+	bad := []struct {
+		name string
+		f    Field
+		raw  string
+	}{
+		{"时间不是整数", memo["at"], `"2026-10-10"`},
+		{"时间早于 2000 年", memo["at"], `946684799999`},
+		{"时间晚于 2200 年", memo["at"], `7258118400000`},
+		{"时间为空", memo["at"], `null`},
+		{"提醒为负数", memo["reminders"], `"-5"`},
+		{"提醒超过 30 天", memo["reminders"], `"43201"`},
+		{"提醒不是数字", memo["reminders"], `"soon"`},
+		{"提醒未排序", memo["reminders"], `"15,0"`},
+		{"提醒重复", memo["reminders"], `"5,5"`},
+		{"提醒超过 5 个", memo["reminders"], `"0,5,10,15,30,60"`},
+		{"提醒有空项", memo["reminders"], `"0,,5"`},
+		{"提醒有前导零", memo["reminders"], `"05"`},
+		{"提醒有空格", memo["reminders"], `"0, 5"`},
+		{"内容为空", memo["content"], `""`},
+		{"内容超长", memo["content"], `"` + strings.Repeat("备", maxMemoLen+1) + `"`},
+	}
+	for _, c := range bad {
+		t.Run(c.name, func(t *testing.T) {
+			if _, err := c.f.DecodeValue(json.RawMessage(c.raw)); err == nil {
+				t.Fatal("应当报错")
+			}
+		})
+	}
+	if _, err := memo["at"].CheckValue(int64(1)); err == nil {
+		t.Error("CheckValue 也应校验时间范围")
+	}
+}
+
+func TestParseOffsets(t *testing.T) {
+	if got := ParseOffsets("0,15,1440"); !slices.Equal(got, []int{0, 15, 1440}) {
+		t.Fatalf("got %v", got)
+	}
+	if got := ParseOffsets(""); len(got) != 0 {
+		t.Fatalf("got %v", got)
 	}
 }

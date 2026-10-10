@@ -21,8 +21,10 @@ import (
 	"github.com/vvangz/JikeLog/server/internal/platform/config"
 	"github.com/vvangz/JikeLog/server/internal/platform/crypto"
 	"github.com/vvangz/JikeLog/server/internal/platform/db"
+	"github.com/vvangz/JikeLog/server/internal/platform/pusher"
 	"github.com/vvangz/JikeLog/server/internal/platform/ratelimit"
 	"github.com/vvangz/JikeLog/server/internal/realtime"
+	"github.com/vvangz/JikeLog/server/internal/reminder"
 	"github.com/vvangz/JikeLog/server/internal/syncer"
 	"github.com/vvangz/JikeLog/server/internal/system"
 	"github.com/vvangz/JikeLog/server/internal/vault"
@@ -36,6 +38,8 @@ type App struct {
 	Handler http.Handler
 	// SMS 为当前使用的短信通道；开发与测试环境为 *auth.MockSender，可读取最近发出的验证码。
 	SMS auth.SMSSender
+	// Reminders 发送到期的备忘录提醒（测试可直接调用 Tick）。
+	Reminders *reminder.Dispatcher
 
 	hub         *realtime.Hub
 	attachments *attachment.Service
@@ -55,6 +59,8 @@ type Options struct {
 	Argon2 *auth.Argon2Params
 	// Now 为空时使用 time.Now（测试可注入可控时钟）。
 	Now func() time.Time
+	// Pusher 为空时按配置创建（测试可注入记录推送的实现）。
+	Pusher pusher.Pusher
 }
 
 // NewApp 用已建立的数据库、Redis 与对象存储连接组装全部模块和路由。
@@ -100,12 +106,18 @@ func NewApp(ctx context.Context, o Options) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &App{Handler: router, SMS: sender, hub: hub, attachments: attSvc, logger: o.Logger}, nil
+	push := o.Pusher
+	if push == nil {
+		push = newPusher(o.Config.Push, o.Logger)
+	}
+	reminders := reminder.NewDispatcher(reminder.Deps{Tx: tx, Pusher: push, Logger: o.Logger, Now: o.Now})
+	return &App{Handler: router, SMS: sender, Reminders: reminders, hub: hub, attachments: attSvc, logger: o.Logger}, nil
 }
 
-// RunBackground 运行后台任务（跨实例通知订阅、附件对象清理），ctx 取消时关闭全部 WebSocket 连接后返回。
+// RunBackground 运行后台任务（跨实例通知订阅、备忘录提醒、附件对象清理），ctx 取消时关闭全部 WebSocket 连接后返回。
 func (a *App) RunBackground(ctx context.Context) {
 	go a.hub.Run(ctx)
+	go a.Reminders.Run(ctx)
 	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
 	for {
@@ -157,6 +169,13 @@ func newSystemHandler(o Options) *system.Handler {
 		system.NewCheck("postgres", o.Pool.Ping),
 		system.NewCheck("redis", func(ctx context.Context) error { return o.Redis.Ping(ctx).Err() }),
 	}})
+}
+
+func newPusher(cfg config.Push, logger *slog.Logger) pusher.Pusher {
+	if cfg.Provider == config.PushProviderJPush {
+		return pusher.NewJPush(pusher.JPushConfig{AppKey: cfg.JPushAppKey, MasterSecret: cfg.JPushMasterSecret, Endpoint: cfg.JPushEndpoint}, nil)
+	}
+	return pusher.Log{Logger: logger}
 }
 
 func newKeyWrapper(cfg config.KMS) (crypto.KeyWrapper, error) {

@@ -23,6 +23,7 @@ var (
 	validSMSProviders = []string{SMSProviderMock, SMSProviderAliyun}
 	validCaptchas     = []string{CaptchaProviderNone, CaptchaProviderAliyun}
 	validKMS          = []string{KMSProviderLocal, KMSProviderAliyun}
+	validPush         = []string{PushProviderLog, PushProviderJPush}
 )
 
 // Validate 校验配置取值，返回所有错误的合并结果。错误信息不包含密钥、密码等敏感值。
@@ -42,7 +43,24 @@ func (c Config) Validate() error {
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.validateCrypto()...)
 	errs = append(errs, c.validateStorage()...)
+	errs = append(errs, c.validatePush()...)
 	return errors.Join(errs...)
+}
+
+func (c Config) validatePush() []error {
+	var errs []error
+	if !slices.Contains(validPush, c.Push.Provider) {
+		errs = append(errs, fmt.Errorf("JIKELOG_PUSH_PROVIDER=%q 不合法，可选 %v", c.Push.Provider, validPush))
+	}
+	if c.Push.Provider == PushProviderJPush {
+		if c.Push.JPushAppKey == "" || c.Push.JPushMasterSecret == "" {
+			errs = append(errs, errors.New("使用极光推送时必须设置 JIKELOG_PUSH_JPUSH_APP_KEY 与 JIKELOG_PUSH_JPUSH_MASTER_SECRET"))
+		}
+		if !strings.HasPrefix(c.Push.JPushEndpoint, "https://") && c.Env != EnvTest {
+			errs = append(errs, errors.New("JIKELOG_PUSH_JPUSH_ENDPOINT 必须使用 https"))
+		}
+	}
+	return errs
 }
 
 func (c Config) validateHTTP() []error {

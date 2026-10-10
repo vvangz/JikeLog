@@ -203,6 +203,21 @@ func (h *Handler) RevokeDevice(ctx context.Context, req apigen.RevokeDeviceReque
 	return apigen.RevokeDevice200JSONResponse(auth.AckEnvelope(ctx)), nil
 }
 
+// UpdatePush 实现 PUT /api/v1/me/push。
+func (h *Handler) UpdatePush(ctx context.Context, req apigen.UpdatePushRequestObject) (apigen.UpdatePushResponseObject, error) {
+	p, err := auth.MustPrincipal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return nil, errEmptyBody
+	}
+	if err := h.svc.UpdatePush(ctx, p, *req.Body); err != nil {
+		return nil, err
+	}
+	return apigen.UpdatePush200JSONResponse(auth.AckEnvelope(ctx)), nil
+}
+
 // GetSettings 实现 GET /api/v1/me/settings。
 func (h *Handler) GetSettings(ctx context.Context, _ apigen.GetSettingsRequestObject) (apigen.GetSettingsResponseObject, error) {
 	p, err := auth.MustPrincipal(ctx)

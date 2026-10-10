@@ -31,6 +31,61 @@ func (q *Queries) AckDevice(ctx context.Context, arg AckDeviceParams) (int64, er
 	return result.RowsAffected(), nil
 }
 
+const claimDueReminders = `-- name: ClaimDueReminders :many
+UPDATE memo_reminders AS m
+SET lease_until = $1::timestamptz, attempts = m.attempts + 1
+FROM (
+    SELECT r.memo_id, r.offset_min FROM memo_reminders AS r
+    WHERE r.fire_at <= $2::timestamptz AND (r.lease_until IS NULL OR r.lease_until <= $2::timestamptz)
+    ORDER BY r.fire_at
+    LIMIT $3
+    FOR UPDATE SKIP LOCKED
+) AS due
+WHERE m.memo_id = due.memo_id AND m.offset_min = due.offset_min
+RETURNING m.memo_id, m.user_id, m.offset_min, m.fire_at, m.attempts
+`
+
+type ClaimDueRemindersParams struct {
+	LeaseUntil time.Time
+	Now        time.Time
+	MaxRows    int32
+}
+
+type ClaimDueRemindersRow struct {
+	MemoID    uuid.UUID
+	UserID    uuid.UUID
+	OffsetMin int32
+	FireAt    time.Time
+	Attempts  int32
+}
+
+// 领取到期且未被其他实例领取的提醒，并把领取期限写回（调用方在事务内执行）。
+func (q *Queries) ClaimDueReminders(ctx context.Context, arg ClaimDueRemindersParams) ([]ClaimDueRemindersRow, error) {
+	rows, err := q.db.Query(ctx, claimDueReminders, arg.LeaseUntil, arg.Now, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClaimDueRemindersRow{}
+	for rows.Next() {
+		var i ClaimDueRemindersRow
+		if err := rows.Scan(
+			&i.MemoID,
+			&i.UserID,
+			&i.OffsetMin,
+			&i.FireAt,
+			&i.Attempts,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countPendingAttachments = `-- name: CountPendingAttachments :one
 SELECT count(*)::bigint AS n FROM attachments WHERE user_id = $1 AND status = 'pending'
 `
@@ -40,6 +95,15 @@ func (q *Queries) CountPendingAttachments(ctx context.Context, userID uuid.UUID)
 	var n int64
 	err := row.Scan(&n)
 	return n, err
+}
+
+const deleteMemoReminders = `-- name: DeleteMemoReminders :exec
+DELETE FROM memo_reminders WHERE memo_id = $1
+`
+
+func (q *Queries) DeleteMemoReminders(ctx context.Context, memoID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteMemoReminders, memoID)
+	return err
 }
 
 const expirePendingAttachments = `-- name: ExpirePendingAttachments :execrows
@@ -53,6 +117,23 @@ func (q *Queries) ExpirePendingAttachments(ctx context.Context, before time.Time
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const finishReminder = `-- name: FinishReminder :exec
+DELETE FROM memo_reminders
+WHERE memo_id = $1 AND offset_min = $2 AND fire_at = $3
+`
+
+type FinishReminderParams struct {
+	MemoID    uuid.UUID
+	OffsetMin int32
+	FireAt    time.Time
+}
+
+// 只删除本次领取的那一条：期间备忘录被修改时，提醒已被替换（fire_at 不同），保留新的。
+func (q *Queries) FinishReminder(ctx context.Context, arg FinishReminderParams) error {
+	_, err := q.db.Exec(ctx, finishReminder, arg.MemoID, arg.OffsetMin, arg.FireAt)
+	return err
 }
 
 const getAttachment = `-- name: GetAttachment :one
@@ -257,6 +338,28 @@ func (q *Queries) InsertAttachment(ctx context.Context, arg InsertAttachmentPara
 	return err
 }
 
+const insertMemoReminder = `-- name: InsertMemoReminder :exec
+INSERT INTO memo_reminders (memo_id, user_id, offset_min, fire_at)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertMemoReminderParams struct {
+	MemoID    uuid.UUID
+	UserID    uuid.UUID
+	OffsetMin int32
+	FireAt    time.Time
+}
+
+func (q *Queries) InsertMemoReminder(ctx context.Context, arg InsertMemoReminderParams) error {
+	_, err := q.db.Exec(ctx, insertMemoReminder,
+		arg.MemoID,
+		arg.UserID,
+		arg.OffsetMin,
+		arg.FireAt,
+	)
+	return err
+}
+
 const insertRecord = `-- name: InsertRecord :execrows
 INSERT INTO records (id, user_id, entity, version, server_seq, fields, clocks, absorbed, deleted, device_id)
 VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9)
@@ -405,6 +508,51 @@ func (q *Queries) ListRecordsSince(ctx context.Context, arg ListRecordsSincePara
 			&i.DeviceID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReminderTargets = `-- name: ListReminderTargets :many
+SELECT id, push_provider, push_token, time_zone FROM devices
+WHERE user_id = $1 AND revoked_at IS NULL AND push_token IS NOT NULL
+  AND NOT (local_reminders AND last_ack_seq >= $2::bigint)
+`
+
+type ListReminderTargetsParams struct {
+	UserID  uuid.UUID
+	MemoSeq int64
+}
+
+type ListReminderTargetsRow struct {
+	ID           uuid.UUID
+	PushProvider *string
+	PushToken    *string
+	TimeZone     string
+}
+
+// 需要服务端推送的设备：有推送标识，且不能确定它已在本地按时提醒
+// （没有本地提醒能力，或尚未同步到这一版备忘录）。
+func (q *Queries) ListReminderTargets(ctx context.Context, arg ListReminderTargetsParams) ([]ListReminderTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listReminderTargets, arg.UserID, arg.MemoSeq)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListReminderTargetsRow{}
+	for rows.Next() {
+		var i ListReminderTargetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PushProvider,
+			&i.PushToken,
+			&i.TimeZone,
 		); err != nil {
 			return nil, err
 		}

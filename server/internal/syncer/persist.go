@@ -80,6 +80,11 @@ func (w *writer) write(ctx context.Context, e Entity, id uuid.UUID, exists bool,
 	if err != nil {
 		return fmt.Errorf("写入记录失败: %w", err)
 	}
+	if e.Name == EntityMemo {
+		if err := w.scheduleMemo(ctx, id, out.Next); err != nil {
+			return err
+		}
+	}
 	if out.DeletedNow && e.Name == EntityAttachment {
 		if err := w.q.MarkAttachmentDeleted(ctx, dbgen.MarkAttachmentDeletedParams{ID: id, UserID: w.p.UserID}); err != nil {
 			return fmt.Errorf("标记附件删除失败: %w", err)

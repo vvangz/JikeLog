@@ -89,19 +89,22 @@ ORDER BY last_active_at DESC;
 
 -- name: RevokeDevice :many
 UPDATE devices
-SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
+SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL,
+    push_provider = NULL, push_token = NULL
 WHERE id = @id AND user_id = @user_id AND revoked_at IS NULL
 RETURNING id;
 
 -- name: RevokeOtherDevices :many
 UPDATE devices
-SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
+SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL,
+    push_provider = NULL, push_token = NULL
 WHERE user_id = @user_id AND id <> @keep_id AND revoked_at IS NULL
 RETURNING id;
 
 -- name: RevokeAllDevices :many
 UPDATE devices
-SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL
+SET revoked_at = @now::timestamptz, tokens_valid_after = @now::timestamptz, refresh_hash = NULL, refresh_prev_hash = NULL,
+    push_provider = NULL, push_token = NULL
 WHERE user_id = @user_id AND revoked_at IS NULL
 RETURNING id;
 
@@ -120,3 +123,21 @@ UPDATE user_settings SET
     updated_at        = now()
 WHERE user_id = @user_id
 RETURNING *;
+
+-- name: ReleasePushToken :exec
+-- 推送标识换到另一台设备（或另一个账号）时，从原设备上摘除。
+UPDATE devices SET push_provider = NULL, push_token = NULL
+WHERE push_provider = @push_provider AND push_token = @push_token AND id <> @id;
+
+-- name: SetDevicePush :execrows
+UPDATE devices SET
+    push_provider   = sqlc.narg(push_provider),
+    push_token      = sqlc.narg(push_token),
+    time_zone       = @time_zone,
+    local_reminders = @local_reminders
+WHERE id = @id AND user_id = @user_id AND revoked_at IS NULL;
+
+-- name: ClearPushByToken :exec
+-- 推送通道报告标识已失效（App 被卸载等）。
+UPDATE devices SET push_provider = NULL, push_token = NULL
+WHERE push_provider = @push_provider AND push_token = @push_token;
