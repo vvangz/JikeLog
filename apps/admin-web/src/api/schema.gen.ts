@@ -363,6 +363,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 登记当前设备的推送
+         * @description App 同意隐私政策并取得推送标识后调用，退出登录时设备上的登记随之清除（ADR-008）。
+         *     服务端在备忘录提醒时刻，对尚未同步到该备忘录、或不能在本地按时提醒的设备发送推送。
+         *     推送标识正被其他账号仍在使用的设备占用时返回 409（PUSH_TOKEN_IN_USE）；每台设备每小时最多调用 30 次。
+         */
+        put: operations["updatePush"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/settings": {
         parameters: {
             query?: never;
@@ -841,6 +863,24 @@ export interface components {
         };
         /** @enum {string} */
         ThemeMode: "system" | "light" | "dark";
+        PushRegistration: {
+            /**
+             * @description 推送通道；为空表示该设备不接收服务端推送
+             * @enum {string|null}
+             */
+            provider?: "jpush" | null;
+            /** @description 推送通道分配的设备标识（极光 Registration ID），与 provider 同时为空或同时非空 */
+            token?: string | null;
+            /** @description 设备时区（IANA 名称，如 Asia/Shanghai），推送文案中的时间按它显示 */
+            timeZone: string;
+            /** @description 设备能否自己按时弹出提醒（已授予通知与精确闹钟权限） */
+            localReminders: boolean;
+            /**
+             * Format: date-time
+             * @description 本地闹钟覆盖到的时刻（设备只排定最近若干条提醒），晚于此刻的提醒仍由服务端推送；为空表示全部覆盖
+             */
+            localUntil?: string | null;
+        };
         SettingsInput: {
             themeMode: components["schemas"]["ThemeMode"];
             /**
@@ -1532,6 +1572,31 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description 已下线 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AckEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    updatePush: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushRegistration"];
+            };
+        };
+        responses: {
+            /** @description 已保存 */
             200: {
                 headers: {
                     [name: string]: unknown;
