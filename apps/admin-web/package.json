@@ -1,6 +1,6 @@
 {
   "name": "@jikelog/admin-web",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "即刻日志 Web 管理后台（只读查看用户配置信息）",
