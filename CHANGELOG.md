@@ -2,6 +2,30 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [0.3.0](https://github.com/vvangz/JikeLog/compare/v0.2.0...v0.3.0) (2026-10-10)
+
+
+### 新功能
+
+* **mobile:** 工作日志模块、附件、实时通知与同步生命周期 ([7439ad2](https://github.com/vvangz/JikeLog/commit/7439ad2d0d48bee60d271384e6ab597162b856c1))
+* **mobile:** 本地数据库、HLC、传输加密、文本补丁与同步引擎 ([220bbee](https://github.com/vvangz/JikeLog/commit/220bbee12ee0f1c5b142cd40c63b62b2e50c5af0))
+* **server:** 同步、传输加密、落库加密、附件与实时通知（M2 服务端） ([e3548ba](https://github.com/vvangz/JikeLog/commit/e3548ba2e6636bd9ff02b083ba08fbda1ffa0e61))
+
+
+### 问题修复
+
+* **mobile:** 处理 M2 审查意见 ([f3462e1](https://github.com/vvangz/JikeLog/commit/f3462e179169fca9ba9441e106a6e7e3e3f90f83))
+* **server:** 修复 CI 中的数据竞争、密钥扫描与 TS 类型 ([77a78e4](https://github.com/vvangz/JikeLog/commit/77a78e4d38e2259e4f4390c4a0bc50242f4987ca))
+* **server:** 合并结果使用新的服务端时钟 ([12f9164](https://github.com/vvangz/JikeLog/commit/12f91642e1acbf1eafcea69f828b3b473a4632ec))
+* **server:** 处理 M2 审查意见 ([84c2c38](https://github.com/vvangz/JikeLog/commit/84c2c382076e551606c26651f90d369bc8346d01))
+
+
+### 文档
+
+* ADR 索引与本地开发环境补充 M2 配置 ([1cc075b](https://github.com/vvangz/JikeLog/commit/1cc075b309c65f36165616beade1963e8f2f3c10))
+* v0.3.0 开发日志与审查记录；登录失效保留本机数据的说明 ([abe3f17](https://github.com/vvangz/JikeLog/commit/abe3f17e3ca55a6b30a3871a87813e67a822b97b))
+* 使用说明 03 工作日志、04 多设备同步 ([0390a73](https://github.com/vvangz/JikeLog/commit/0390a7399ba7165ff92ed42fe1c2f6b68d122fe4))
+
 ## [0.2.0](https://github.com/vvangz/JikeLog/compare/v0.1.0...v0.2.0) (2026-10-09)
 
 
