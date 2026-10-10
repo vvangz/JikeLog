@@ -62,11 +62,16 @@ class _EntryEditorPageState extends ConsumerState<EntryEditorPage> {
   bool _saving = false;
   String? _error;
 
+  /// 修改时流水原来的类型。
+  EntryType? _origType;
+
+  /// 读取失败或流水已不存在时的提示。
+  String? _loadError;
+
   bool get _isNew => widget.id == newEntryId;
 
-  /// 修改已有的借出/借入流水时，借贷与对方不能更换。
-  bool get _loanFixed =>
-      !_isNew && (_type == EntryType.lend || _type == EntryType.borrow);
+  /// 修改已有的借贷类流水时，类型与所属借贷不能更换（按原来的类型判断）。
+  bool get _loanFixed => !_isNew && (_origType?.isLoan ?? false);
 
   @override
   void initState() {
@@ -75,10 +80,18 @@ class _EntryEditorPageState extends ConsumerState<EntryEditorPage> {
   }
 
   Future<void> _load() async {
-    if (!_isNew) {
-      final e = await ref.read(ledgerRepositoryProvider).getEntry(widget.id);
-      if (!mounted) return;
-      if (e != null) {
+    try {
+      if (!_isNew) {
+        final e = await ref.read(ledgerRepositoryProvider).getEntry(widget.id);
+        if (!mounted) return;
+        if (e == null) {
+          setState(() {
+            _loadError = '这条流水不存在，可能已在其他设备上删除';
+            _loading = false;
+          });
+          return;
+        }
+        _origType = e.type;
         _type = e.type;
         _amount.text = editableYuan(e.amount);
         _fee.text = e.fee > 0 ? editableYuan(e.fee) : '';
@@ -88,11 +101,14 @@ class _EntryEditorPageState extends ConsumerState<EntryEditorPage> {
         _toAccountId = e.toAccountId;
         _categoryId = e.categoryId;
         _loanId = e.loanId;
+      } else {
+        _accountId = ref.read(keyValueStoreProvider).getString(_lastAccountKey);
       }
-    } else {
-      _accountId = ref.read(keyValueStoreProvider).getString(_lastAccountKey);
+    } on Object catch (e) {
+      debugPrint('读取流水失败: $e');
+      if (mounted) setState(() => _loadError = '读取流水失败');
     }
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
   }
 
   @override
@@ -112,7 +128,11 @@ class _EntryEditorPageState extends ConsumerState<EntryEditorPage> {
       _Group.transfer => EntryType.transfer,
       _Group.loan => EntryType.lend,
     };
+    // 换了类型：清掉只属于原类型的字段，避免看不见的值挡住保存或被一起保存
     _categoryId = null;
+    _toAccountId = null;
+    _loanId = null;
+    _fee.clear();
   });
 
   Future<void> _pickDate() async {
@@ -135,63 +155,112 @@ class _EntryEditorPageState extends ConsumerState<EntryEditorPage> {
     if (d != null) setState(() => _dueDate = d);
   }
 
-  Future<void> _save(List<Account> accounts) async {
+  /// 校验输入的问题；没有问题时为 null。
+  String? _problemOf(
+    EntryDraft draft,
+    List<Account> accounts, {
+    required int? amount,
+    required int? fee,
+    required bool newLoan,
+  }) {
+    final categories = ref.read(categoriesProvider).value ?? const [];
+    if (amount == null || amount <= 0) return '请输入正确的金额，最多两位小数';
+    if (fee == null) return '手续费格式不正确';
+    if (!accounts.any((a) => a.id == draft.accountId)) return '请选择账户';
+    if (_type == EntryType.transfer &&
+        _toAccountId != null &&
+        !accounts.any((a) => a.id == _toAccountId)) {
+      return '请选择转入账户';
+    }
+    if (_type.hasCategory &&
+        _categoryId != null &&
+        !categories.any((c) => c.id == _categoryId)) {
+      return '请选择分类';
+    }
+    if (newLoan && _counterparty.text.trim().isEmpty) return '请填写对方';
+    return draft.problem;
+  }
+
+  /// 校验输入，返回草稿；有问题时显示原因并返回 null。
+  EntryDraft? _validate(List<Account> accounts) {
     final amount = parseYuan(_amount.text);
     final feeText = _fee.text.trim();
-    final fee = feeText.isEmpty ? 0 : parseYuan(feeText);
-    final account = _accountId;
-    String? problem;
-    if (amount == null || amount <= 0) {
-      problem = '请输入正确的金额，最多两位小数';
-    } else if (fee == null) {
-      problem = '手续费格式不正确';
-    } else if (account == null || !accounts.any((a) => a.id == account)) {
-      problem = '请选择账户';
-    }
+    // 只有转账有手续费：其他类型下隐藏的手续费输入不参与校验
+    final fee = _type == EntryType.transfer && feeText.isNotEmpty
+        ? parseYuan(feeText)
+        : 0;
     final newLoan =
         _isNew && (_type == EntryType.lend || _type == EntryType.borrow);
-    if (problem == null && newLoan && _counterparty.text.trim().isEmpty) {
-      problem = '请填写对方';
-    }
     final draft = EntryDraft(
       type: _type,
       amount: amount ?? 0,
       fee: fee ?? 0,
       date: _date,
-      accountId: account ?? '',
+      accountId: _accountId ?? '',
       toAccountId: _toAccountId,
       categoryId: _categoryId,
       loanId: newLoan ? 'new' : _loanId,
       note: _note.text.trim(),
     );
-    problem ??= draft.problem;
+    final problem = _problemOf(
+      draft,
+      accounts,
+      amount: amount,
+      fee: fee,
+      newLoan: newLoan,
+    );
     if (problem != null) {
       setState(() => _error = problem);
-      return;
+      return null;
     }
-    setState(() => _saving = true);
+    return draft;
+  }
+
+  Future<void> _persist(EntryDraft draft) async {
     final repo = ref.read(ledgerRepositoryProvider);
+    if (_isNew && (_type == EntryType.lend || _type == EntryType.borrow)) {
+      await repo.createLoan(
+        direction: _type == EntryType.lend
+            ? LoanDirection.lend
+            : LoanDirection.borrow,
+        counterparty: _counterparty.text,
+        amount: draft.amount,
+        accountId: draft.accountId,
+        date: _date,
+        dueDate: _dueDate,
+        note: draft.note,
+      );
+    } else if (_isNew) {
+      await repo.createEntry(draft);
+    } else {
+      await repo.updateEntry(widget.id, draft);
+    }
+  }
+
+  Future<void> _save(List<Account> accounts) async {
+    final draft = _validate(accounts);
+    if (draft == null) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
-      if (newLoan) {
-        await repo.createLoan(
-          direction: _type == EntryType.lend
-              ? LoanDirection.lend
-              : LoanDirection.borrow,
-          counterparty: _counterparty.text,
-          amount: amount!,
-          accountId: account!,
-          date: _date,
-          dueDate: _dueDate,
-          note: draft.note,
-        );
-      } else if (_isNew) {
-        await repo.createEntry(draft);
-      } else {
-        await repo.updateEntry(widget.id, draft);
+      await _persist(draft);
+    } on ArgumentError catch (e) {
+      // 仓储的校验（例如收款超过待收）：在表单中说明原因
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = '${e.message}';
+        });
       }
-      await ref
-          .read(keyValueStoreProvider)
-          .setString(_lastAccountKey, account!);
+      return;
+    } on StateError {
+      if (mounted) {
+        showJkToast(context, '这条流水已在其他设备上删除', kind: JkToastKind.error);
+        _close();
+      }
+      return;
     } on Object catch (e) {
       debugPrint('保存流水失败: $e');
       if (mounted) {
@@ -200,10 +269,20 @@ class _EntryEditorPageState extends ConsumerState<EntryEditorPage> {
       }
       return;
     }
+    // 已保存：记住账户只是方便下次，失败不影响结果（不能让用户以为没保存而重复记）
+    try {
+      await ref
+          .read(keyValueStoreProvider)
+          .setString(_lastAccountKey, draft.accountId);
+    } on Object catch (e) {
+      debugPrint('记住账户失败: $e');
+    }
     if (!mounted) return;
     showJkToast(context, '已保存', kind: JkToastKind.success);
-    context.canPop() ? context.pop() : context.go('/ledger');
+    _close();
   }
+
+  void _close() => context.canPop() ? context.pop() : context.go('/ledger');
 
   Future<void> _delete() async {
     final ok = await showJkConfirm(
@@ -221,7 +300,7 @@ class _EntryEditorPageState extends ConsumerState<EntryEditorPage> {
       if (mounted) showJkToast(context, '删除失败，请重试', kind: JkToastKind.error);
       return;
     }
-    if (mounted) context.canPop() ? context.pop() : context.go('/ledger');
+    if (mounted) _close();
   }
 
   @override
@@ -248,6 +327,12 @@ class _EntryEditorPageState extends ConsumerState<EntryEditorPage> {
               padding: EdgeInsets.all(JkTokens.spacingLg),
               child: JkSkeleton(lines: 6),
             )
+          : _loadError != null
+          ? JkEmptyState(
+              icon: const Icon(Icons.inventory_2_outlined),
+              title: _loadError!,
+              message: '返回流水列表查看最新内容',
+            )
           : accounts.isEmpty
           ? JkEmptyState(
               icon: const Icon(Icons.account_balance_wallet_outlined),
@@ -257,7 +342,7 @@ class _EntryEditorPageState extends ConsumerState<EntryEditorPage> {
               onAction: () => showAccountEditor(context, ref),
             )
           : _form(active),
-      bottomNavigationBar: _loading || accounts.isEmpty
+      bottomNavigationBar: _loading || _loadError != null || accounts.isEmpty
           ? null
           : SafeArea(
               child: Padding(
@@ -288,18 +373,30 @@ class _EntryEditorPageState extends ConsumerState<EntryEditorPage> {
                   SegmentedButton<_Group>(
                     key: const Key('entry-group'),
                     showSelectedIcon: false,
-                    segments: const [
-                      ButtonSegment(value: _Group.expense, label: Text('支出')),
-                      ButtonSegment(value: _Group.income, label: Text('收入')),
-                      ButtonSegment(value: _Group.transfer, label: Text('转账')),
-                      ButtonSegment(value: _Group.loan, label: Text('借贷')),
+                    segments: [
+                      const ButtonSegment(
+                        value: _Group.expense,
+                        label: Text('支出'),
+                      ),
+                      const ButtonSegment(
+                        value: _Group.income,
+                        label: Text('收入'),
+                      ),
+                      const ButtonSegment(
+                        value: _Group.transfer,
+                        label: Text('转账'),
+                      ),
+                      // 已有的收支、转账不能改成借贷（借贷要关联一笔借贷）
+                      if (_isNew)
+                        const ButtonSegment(
+                          value: _Group.loan,
+                          label: Text('借贷'),
+                        ),
                     ],
                     selected: {group},
                     onSelectionChanged: (v) => _setGroup(v.first),
                   ),
-                if (group == _Group.loan &&
-                    !_loanFixed &&
-                    widget.type == null) ...[
+                if (group == _Group.loan && _isNew && widget.type == null) ...[
                   const SizedBox(height: JkTokens.spacingSm),
                   Wrap(
                     spacing: JkTokens.spacingSm,
@@ -479,8 +576,22 @@ class _EntryEditorPageState extends ConsumerState<EntryEditorPage> {
         ),
       );
     }
-    return DropdownButtonFormField<String>(
+    return KeyedSubtree(
       key: const Key('entry-loan'),
+      child: _loanDropdown(options, direction, byLoan),
+    );
+  }
+
+  Widget _loanDropdown(
+    List<Loan> options,
+    LoanDirection direction,
+    Map<String, LoanBalance> byLoan,
+  ) {
+    return DropdownButtonFormField<String>(
+      // 类型、可选的借贷或当前值变化时重建：FormField 只在创建时读取 initialValue
+      key: ValueKey(
+        '${_type.name}|${options.map((l) => l.id).join(',')}|$_loanId',
+      ),
       initialValue: options.any((l) => l.id == _loanId) ? _loanId : null,
       isExpanded: true,
       decoration: InputDecoration(
@@ -519,6 +630,8 @@ class _AccountField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => DropdownButtonFormField<String>(
+    // 账户列表或当前值变化时重建：FormField 只在创建时读取 initialValue
+    key: ValueKey('$label|${accounts.map((a) => a.id).join(',')}|$value'),
     initialValue: accounts.any((a) => a.id == value) ? value : null,
     isExpanded: true,
     decoration: InputDecoration(labelText: label),

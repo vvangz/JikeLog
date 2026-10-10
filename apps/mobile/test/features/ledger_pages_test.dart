@@ -284,6 +284,7 @@ void main() {
     await tapAndSettle(tester, find.text('已隐藏的账户 1'));
     await tapAndSettle(tester, find.byKey(Key('account-${acc.id}')));
     await tapAndSettle(tester, find.byKey(const Key('account-delete')));
+    await _tapText(tester, '删除');
     expect(
       (await tester.runAsync(() => _repo(tester).watchAccounts().first))!,
       isEmpty,
@@ -323,6 +324,7 @@ void main() {
     );
     await tapAndSettle(tester, find.byKey(Key('category-row-${pet.id}')));
     await tapAndSettle(tester, find.byKey(const Key('category-delete')));
+    await _tapText(tester, '删除');
     expect(
       (await tester.runAsync(() => _repo(tester).watchCategories().first))!
           .where((c) => c.name == '宠物'),
@@ -448,5 +450,117 @@ void main() {
     await _go(tester, '/ledger');
     await _push(tester, '/ledger/loans/0192a000-0000-7000-8000-00000000ffff');
     expect(find.text('借贷不存在'), findsOneWidget);
+  });
+
+  testWidgets('记一笔：切换类型后隐藏的手续费不挡住保存；收款与还款切换时借贷重新选择', (tester) async {
+    await pumpApp(tester);
+    await _go(tester, '/ledger');
+    final acc = await _account(tester, balance: 100000);
+    await _run(
+      tester,
+      () => _repo(tester).createLoan(
+        direction: LoanDirection.lend,
+        counterparty: '李四',
+        amount: 5000,
+        accountId: acc,
+        date: DateTime.now(),
+      ),
+    );
+    await _run(
+      tester,
+      () => _repo(tester).createLoan(
+        direction: LoanDirection.borrow,
+        counterparty: '王五',
+        amount: 3000,
+        accountId: acc,
+        date: DateTime.now(),
+      ),
+    );
+    await _push(tester, '/ledger/entry/new');
+    await _tapText(tester, '转账');
+    await tester.enterText(find.byKey(const Key('entry-fee')), '1..');
+    await _tapText(tester, '支出');
+    await tester.enterText(find.byKey(const Key('entry-amount')), '10');
+    await tapAndSettle(tester, find.byKey(const Key('entry-account')));
+    await _tapText(tester, '现金（现金）');
+    await tapAndSettle(
+      tester,
+      find.byKey(Key('category-${_preset('expense.fun')}')),
+    );
+    await tapAndSettle(tester, find.byKey(const Key('entry-save')));
+    expect(find.text('手续费格式不正确'), findsNothing);
+    expect(
+      (await _entries(tester)).where((e) => e.type == EntryType.expense),
+      hasLength(1),
+    );
+
+    await _push(tester, '/ledger/entry/new');
+    await _tapText(tester, '借贷');
+    await tapAndSettle(tester, find.byKey(const Key('entry-type-collect')));
+    await tapAndSettle(tester, find.byKey(const Key('entry-loan')));
+    await _tapText(tester, '李四 · 待收 50.00');
+    await tapAndSettle(tester, find.byKey(const Key('entry-type-repay')));
+    expect(tester.takeException(), isNull);
+    await tapAndSettle(tester, find.byKey(const Key('entry-loan')));
+    await _tapText(tester, '王五 · 待还 30.00');
+    await tester.enterText(find.byKey(const Key('entry-amount')), '40');
+    await tapAndSettle(tester, find.byKey(const Key('entry-account')));
+    await _tapText(tester, '现金（现金）');
+    await tapAndSettle(tester, find.byKey(const Key('entry-save')));
+    expect(find.text('还款不能超过待还 30.00 元'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('entry-amount')), '30');
+    await tapAndSettle(tester, find.byKey(const Key('entry-save')));
+    expect(
+      (await _entries(tester)).where((e) => e.type == EntryType.repay),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('修改已有流水：不能改成借贷；流水不存在时提示', (tester) async {
+    await pumpApp(tester);
+    await _go(tester, '/ledger');
+    final acc = await _account(tester);
+    final id = await _run(
+      tester,
+      () => _repo(tester).createEntry(
+        EntryDraft(
+          type: EntryType.expense,
+          amount: 100,
+          date: DateTime.now(),
+          accountId: acc,
+          categoryId: _preset('expense.fun'),
+        ),
+      ),
+    );
+    await _push(tester, '/ledger/entry/$id');
+    expect(find.text('借贷'), findsNothing);
+    expect(find.text('转账'), findsOneWidget);
+    await tester.pageBack();
+    await settleApp(tester);
+    await _push(tester, '/ledger/entry/0192a000-0000-7000-8000-00000000eeee');
+    expect(find.text('这条流水不存在，可能已在其他设备上删除'), findsOneWidget);
+    expect(find.byKey(const Key('entry-save')), findsNothing);
+  });
+
+  testWidgets('到期当天的借贷不算逾期', (tester) async {
+    await pumpApp(tester);
+    await _go(tester, '/ledger');
+    final acc = await _account(tester);
+    final today = DateTime.now();
+    await _run(
+      tester,
+      () => _repo(tester).createLoan(
+        direction: LoanDirection.lend,
+        counterparty: '赵六',
+        amount: 100,
+        accountId: acc,
+        date: today,
+        dueDate: DateTime(today.year, today.month, today.day),
+      ),
+    );
+    await tapAndSettle(tester, find.byKey(const Key('ledger-tab')));
+    await _tapText(tester, '账户');
+    expect(find.textContaining('到期'), findsOneWidget);
+    expect(find.textContaining('已逾期'), findsNothing);
   });
 }

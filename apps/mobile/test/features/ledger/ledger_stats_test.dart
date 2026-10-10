@@ -36,6 +36,10 @@ void main() {
       expect(editableYuan(1205), '12.05');
       expect(parseCents('3850'), 3850);
       expect(parseCents(3850), isNull);
+      for (final bad in ['+5', '007', '-0', '1000000000000000', '1.5', '']) {
+        expect(parseCents(bad), isNull, reason: bad);
+      }
+      expect(parseCents('-999999999999999'), -999999999999999);
       expect(encodeCents(-12), '-12');
     });
   });
@@ -160,6 +164,17 @@ void main() {
     expect(w.receivable, 40000);
     expect(w.payable, 0);
     expect(w.total, 737900 - 35000 + 40000);
+    // 已结清的借贷不再计入待收（剩余视为减免）
+    const settled = Loan(
+      id: 'l1',
+      direction: LoanDirection.lend,
+      counterparty: '李四',
+      settled: true,
+    );
+    expect(
+      netWorth([cash, card], [settled, borrowLoan], entries).receivable,
+      0,
+    );
   });
 
   test('月度收支：支出含转账手续费', () {

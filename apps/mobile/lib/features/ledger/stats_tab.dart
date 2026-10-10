@@ -56,6 +56,56 @@ class StatsQueryController extends Notifier<StatsQuery> {
   void set(StatsQuery q) => state = q;
 }
 
+/// 统计结果：只在流水、分类或查看条件变化时重新计算。
+@immutable
+class StatsData {
+  const StatsData({
+    required this.totals,
+    required this.shares,
+    required this.points,
+    required this.parents,
+  });
+
+  final Totals totals;
+  final List<CategoryShare> shares;
+  final List<TrendPoint> points;
+
+  /// 有二级分类的一级分类。
+  final Set<String> parents;
+}
+
+final statsDataProvider = Provider<StatsData>((ref) {
+  final q = ref.watch(statsQueryProvider);
+  final entries = ref.watch(entriesProvider).value ?? const <Entry>[];
+  final cats = {
+    for (final c
+        in ref.watch(categoriesProvider).value ?? const <LedgerCategory>[])
+      c.id: c,
+  };
+  // 展开的一级分类已被删除（例如在其他设备上）：回到一级分类
+  final parentId = cats.containsKey(q.parentId) ? q.parentId : null;
+  return StatsData(
+    totals: periodTotals(entries, q.period),
+    shares: categoryShares(
+      entries,
+      cats,
+      q.kind,
+      q.period,
+      parentId: parentId,
+      feeCategoryId: ref.watch(feeCategoryIdProvider),
+    ),
+    points: trend(
+      entries,
+      q.period,
+      q.yearly ? TrendUnit.month : TrendUnit.day,
+    ),
+    parents: {
+      for (final c in cats.values)
+        if (c.parentId != null) c.parentId!,
+    },
+  );
+});
+
 /// 饼图配色：咖色系与互补色，依次使用。
 const _palette = [
   Color(0xFF6F4E37),
@@ -79,26 +129,15 @@ class StatsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final q = ref.watch(statsQueryProvider);
     final ctl = ref.read(statsQueryProvider.notifier);
-    final entries = ref.watch(entriesProvider).value ?? const <Entry>[];
     final cats = {
       for (final c
           in ref.watch(categoriesProvider).value ?? const <LedgerCategory>[])
         c.id: c,
     };
-    final totals = periodTotals(entries, q.period);
-    final shares = categoryShares(
-      entries,
-      cats,
-      q.kind,
-      q.period,
-      parentId: q.parentId,
-      feeCategoryId: ref.watch(feeCategoryIdProvider),
-    );
-    final points = trend(
-      entries,
-      q.period,
-      q.yearly ? TrendUnit.month : TrendUnit.day,
-    );
+    final data = ref.watch(statsDataProvider);
+    final totals = data.totals;
+    final shares = data.shares;
+    final points = data.points;
     final parent = cats[q.parentId];
     return ListView(
       key: const Key('ledger-stats'),
@@ -166,23 +205,30 @@ class StatsTab extends ConsumerWidget {
             ),
           )
         else ...[
-          _Pie(shares: shares, categories: cats),
+          _Pie(shares: shares),
           for (final (i, s) in shares.indexed)
             _ShareRow(
               share: s,
               category: cats[s.categoryId],
               color: _palette[i < _maxSlices ? i : _palette.length - 1],
-              canDrill:
-                  q.parentId == null &&
-                  s.categoryId != null &&
-                  cats.values.any((c) => c.parentId == s.categoryId),
+              canDrill: parent == null && data.parents.contains(s.categoryId),
               onDrill: () => ctl.set(q.copyWith(parentId: () => s.categoryId)),
             ),
         ],
         const SizedBox(height: JkTokens.spacingLg),
-        Text('收支趋势', style: Theme.of(context).textTheme.titleSmall),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '收支趋势',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            const _Legend(),
+          ],
+        ),
         const SizedBox(height: JkTokens.spacingSm),
-        _Trend(points: points, yearly: q.yearly),
+        _Trend(points: points, yearly: q.yearly, totals: totals),
       ],
     );
   }
@@ -220,11 +266,14 @@ class _TotalsRow extends StatelessWidget {
   }
 }
 
+/// 浅色扇区上用深色文字，保证对比度。
+Color _labelColor(Color bg) =>
+    bg.computeLuminance() > 0.35 ? const Color(0xFF171311) : Colors.white;
+
 class _Pie extends StatelessWidget {
-  const _Pie({required this.shares, required this.categories});
+  const _Pie({required this.shares});
 
   final List<CategoryShare> shares;
-  final Map<String, LedgerCategory> categories;
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +288,7 @@ class _Pie extends StatelessWidget {
           radius: 48,
           showTitle: s.ratio >= 0.08,
           title: '${(s.ratio * 100).round()}%',
-          titleStyle: const TextStyle(color: Colors.white, fontSize: 12),
+          titleStyle: TextStyle(color: _labelColor(_palette[i]), fontSize: 12),
         ),
       if (rest > 0)
         PieChartSectionData(
@@ -249,7 +298,10 @@ class _Pie extends StatelessWidget {
           showTitle: false,
         ),
     ];
+    // 占比的明细在下方的排行中逐项朗读，图本身只读一次合计
     return Semantics(
+      container: true,
+      excludeSemantics: true,
       label: '分类占比图，合计 ${formatYuan(total)} 元',
       child: SizedBox(
         height: 220,
@@ -341,11 +393,38 @@ class _ShareRow extends StatelessWidget {
   }
 }
 
+/// 趋势图的图例：颜色之外再用文字说明。
+class _Legend extends StatelessWidget {
+  const _Legend();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.jkColors;
+    Widget item(Color color, String label) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 10, height: 10, color: color),
+        const SizedBox(width: JkTokens.spacingXxs),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+      ],
+    );
+    return Wrap(
+      spacing: JkTokens.spacingSm,
+      children: [item(c.success, '收入'), item(c.primary, '支出')],
+    );
+  }
+}
+
 class _Trend extends StatelessWidget {
-  const _Trend({required this.points, required this.yearly});
+  const _Trend({
+    required this.points,
+    required this.yearly,
+    required this.totals,
+  });
 
   final List<TrendPoint> points;
   final bool yearly;
+  final Totals totals;
 
   @override
   Widget build(BuildContext context) {
@@ -377,7 +456,11 @@ class _Trend extends StatelessWidget {
     }
 
     return Semantics(
-      label: '收支趋势图，绿色为收入，咖色为支出',
+      container: true,
+      excludeSemantics: true,
+      label:
+          '${yearly ? '各月' : '每日'}收支趋势图，合计收入 ${formatYuan(totals.income)} 元，'
+          '支出 ${formatYuan(totals.expense)} 元',
       child: SizedBox(
         height: 180,
         child: BarChart(

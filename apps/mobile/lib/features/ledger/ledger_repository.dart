@@ -12,6 +12,7 @@ import '../worklog/worklog_repository.dart' show formatDate;
 import '../auth/auth_controller.dart';
 import 'ledger_models.dart';
 import 'ledger_presets.dart';
+import 'ledger_stats.dart';
 import 'money.dart';
 
 /// 记账字段长度上限（与服务端一致）。
@@ -197,15 +198,27 @@ class LedgerRepository {
     engine.schedule();
   }
 
+  // 注意：事务内不能调用 engine.schedule()。drift 用 Zone 追踪事务，在事务中启动的
+  // 定时器回调仍处于该 Zone，同步时会使用已经结束的事务。所以事务结束后再安排同步。
+
   /// 删除账户；已有流水引用时改为隐藏（历史流水仍显示它）。返回是否真的删除了。
+  /// 引用按原始字段判断（包括字段不完整、不计入统计的流水），不会留下指向已删除账户的流水。
   Future<bool> deleteAccount(String id) async {
-    if (await _entryRefs((e) => e.accountId == id || e.toAccountId == id)) {
-      await updateAccount(id, archived: true);
-      return false;
-    }
-    await store.remove(id);
+    final deleted = await db.transaction(() async {
+      final used = (await _entryFields()).any(
+        (f) => f['accountId'] == id || f['toAccountId'] == id,
+      );
+      if (used) {
+        await store.write(Entities.ledgerAccount, id, create: false, {
+          'archived': 1,
+        });
+        return false;
+      }
+      await store.remove(id);
+      return true;
+    });
     engine.schedule();
-    return true;
+    return deleted;
   }
 
   // ───────────── 分类 ─────────────
@@ -244,47 +257,87 @@ class LedgerRepository {
     engine.schedule();
   }
 
-  /// 删除分类；它或它的二级分类已有流水，或者它是预置分类时改为隐藏。返回是否真的删除了。
+  /// 删除分类；它或它的二级分类已有流水，或者它是预置分类时改为隐藏（二级分类一并隐藏）。
+  /// 返回是否真的删除了。
   Future<bool> deleteCategory(String id, {required bool preset}) async {
-    final children =
-        await (db.select(db.records)..where(
-              (t) => t.entity.equals(Entities.ledgerCategory) & t.deleted.not(),
-            ))
-            .get();
-    final ids = {
-      id,
-      for (final r in children)
-        if (LocalRecord.fromRow(r).fields['parentId'] == id) r.id,
-    };
-    if (preset || await _entryRefs((e) => ids.contains(e.categoryId))) {
+    final deleted = await db.transaction(() async {
+      final rows =
+          await (db.select(db.records)..where(
+                (t) =>
+                    t.entity.equals(Entities.ledgerCategory) & t.deleted.not(),
+              ))
+              .get();
+      final ids = {
+        id,
+        for (final r in rows)
+          if (LocalRecord.fromRow(r).fields['parentId'] == id) r.id,
+      };
+      final used = (await _entryFields()).any(
+        (f) => ids.contains(f['categoryId']),
+      );
       for (final c in ids) {
-        await updateCategory(c, archived: true);
+        if (preset || used) {
+          await store.write(Entities.ledgerCategory, c, create: false, {
+            'archived': 1,
+          });
+        } else {
+          await store.remove(c);
+        }
       }
-      return false;
-    }
-    for (final c in ids) {
-      await store.remove(c);
-    }
+      return !(preset || used);
+    });
     engine.schedule();
-    return true;
+    return deleted;
   }
 
   // ───────────── 流水与借贷 ─────────────
 
   Future<String> createEntry(EntryDraft d) async {
-    final problem = d.problem;
-    if (problem != null) throw ArgumentError(problem);
-    final id = const Uuid().v7();
-    await store.write(Entities.ledgerEntry, id, d.toFields());
+    final id = await db.transaction(() async {
+      await _check(d);
+      final id = const Uuid().v7();
+      await store.write(Entities.ledgerEntry, id, d.toFields());
+      return id;
+    });
     engine.schedule();
     return id;
   }
 
+  /// 修改流水；流水已不存在（例如在其他设备上删除）时抛出 [StateError]。
   Future<void> updateEntry(String id, EntryDraft d) async {
+    await db.transaction(() async {
+      if (await getEntry(id) == null) throw StateError('流水不存在');
+      await _check(d, editing: id);
+      await store.write(Entities.ledgerEntry, id, d.toFields(), create: false);
+    });
+    engine.schedule();
+  }
+
+  /// 校验流水：字段约束，以及收款、还款与借贷的方向一致、不超过待收（待还）。
+  Future<void> _check(EntryDraft d, {String? editing}) async {
     final problem = d.problem;
     if (problem != null) throw ArgumentError(problem);
-    await store.write(Entities.ledgerEntry, id, d.toFields(), create: false);
-    engine.schedule();
+    if (d.type != EntryType.collect && d.type != EntryType.repay) return;
+    final loan = await store.get(d.loanId!);
+    if (loan == null || loan.deleted || loan.entity != Entities.ledgerLoan) {
+      throw ArgumentError('借贷不存在');
+    }
+    final direction = Loan.fromRecord(loan).direction;
+    final expected = d.type == EntryType.collect
+        ? LoanDirection.lend
+        : LoanDirection.borrow;
+    if (direction != expected) throw ArgumentError('借贷方向不符');
+    final others = [
+      for (final e in await _entries())
+        if (e.loanId == d.loanId && e.id != editing) e,
+    ];
+    final outstanding = loanBalances(others)[d.loanId]?.outstanding ?? 0;
+    if (d.amount > outstanding) {
+      throw ArgumentError(
+        '${d.type == EntryType.collect ? '收款' : '还款'}不能超过'
+        '${d.type == EntryType.collect ? '待收' : '待还'} ${formatYuan(outstanding)} 元',
+      );
+    }
   }
 
   Future<void> deleteEntry(String id) async {
@@ -314,26 +367,30 @@ class LedgerRepository {
     );
     final problem = draft.problem;
     if (problem != null) throw ArgumentError(problem);
-    final id = const Uuid().v7();
-    await store.write(Entities.ledgerLoan, id, {
-      'direction': direction.name,
-      'counterparty': who,
-      'dueDate': dueDate == null ? null : formatDate(dueDate),
-      'note': '',
-      'settled': 0,
+    // 借贷与借出（借入）流水一起写入：不会只留下没有金额的借贷
+    final id = await db.transaction(() async {
+      final id = const Uuid().v7();
+      await store.write(Entities.ledgerLoan, id, {
+        'direction': direction.name,
+        'counterparty': who,
+        'dueDate': dueDate == null ? null : formatDate(dueDate),
+        'note': '',
+        'settled': 0,
+      });
+      await store.write(
+        Entities.ledgerEntry,
+        const Uuid().v7(),
+        EntryDraft(
+          type: draft.type,
+          amount: amount,
+          date: date,
+          accountId: accountId,
+          loanId: id,
+          note: note,
+        ).toFields(),
+      );
+      return id;
     });
-    await store.write(
-      Entities.ledgerEntry,
-      const Uuid().v7(),
-      EntryDraft(
-        type: draft.type,
-        amount: amount,
-        date: date,
-        accountId: accountId,
-        loanId: id,
-        note: note,
-      ).toFields(),
-    );
     engine.schedule();
     return id;
   }
@@ -358,27 +415,34 @@ class LedgerRepository {
     engine.schedule();
   }
 
-  /// 删除借贷及其全部借贷流水。
+  /// 删除借贷及其全部借贷流水（同一事务，不会留下影响余额的孤立流水）。
   Future<void> deleteLoan(String id) async {
-    final entries = await _entries();
-    for (final e in entries.where((e) => e.loanId == id)) {
-      await store.remove(e.id);
-    }
-    await store.remove(id);
+    await db.transaction(() async {
+      for (final r in await _entryRows()) {
+        if (LocalRecord.fromRow(r).fields['loanId'] == id) {
+          await store.remove(r.id);
+        }
+      }
+      await store.remove(id);
+    });
     engine.schedule();
   }
 
-  Future<List<Entry>> _entries() async {
-    final rows =
-        await (db.select(db.records)..where(
-              (t) => t.entity.equals(Entities.ledgerEntry) & t.deleted.not(),
-            ))
-            .get();
-    return [for (final r in rows) ?Entry.fromRecord(LocalRecord.fromRow(r))];
-  }
+  Future<List<RecordRow>> _entryRows() =>
+      (db.select(db.records)..where(
+            (t) => t.entity.equals(Entities.ledgerEntry) & t.deleted.not(),
+          ))
+          .get();
 
-  Future<bool> _entryRefs(bool Function(Entry) test) async =>
-      (await _entries()).any(test);
+  Future<List<Entry>> _entries() async => [
+    for (final r in await _entryRows())
+      ?Entry.fromRecord(LocalRecord.fromRow(r)),
+  ];
+
+  /// 全部流水的原始字段（包括字段不完整的）。
+  Future<List<Map<String, Object?>>> _entryFields() async => [
+    for (final r in await _entryRows()) LocalRecord.fromRow(r).fields,
+  ];
 }
 
 final ledgerRepositoryProvider = Provider<LedgerRepository>(

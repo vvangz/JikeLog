@@ -55,6 +55,14 @@ class _CategoriesPageState extends ConsumerState<CategoriesPage> {
         case _CategoryAction.toggleHidden:
           await repo.updateCategory(category!.id, archived: !category.archived);
         case _CategoryAction.delete:
+          final ok = await showJkConfirm(
+            context,
+            title: '删除分类',
+            message: '它的二级分类一并删除；已有流水的分类只会隐藏。',
+            confirmLabel: '删除',
+            destructive: true,
+          );
+          if (!ok || !mounted) return;
           final deleted = await repo.deleteCategory(
             category!.id,
             preset: _isPreset(category.id),
@@ -223,13 +231,24 @@ class _CategoryDialogState extends State<_CategoryDialog> {
               runSpacing: JkTokens.spacingXs,
               children: [
                 for (final name in categoryIcons.keys)
-                  InkWell(
-                    key: Key('icon-$name'),
-                    customBorder: const CircleBorder(),
-                    onTap: () => setState(() => _icon = name),
-                    child: LedgerAvatar(
-                      icon: categoryIcon(name),
-                      highlight: name == _icon,
+                  Semantics(
+                    button: true,
+                    selected: name == _icon,
+                    label: '图标 $name',
+                    child: InkWell(
+                      key: Key('icon-$name'),
+                      customBorder: const CircleBorder(),
+                      onTap: () => setState(() => _icon = name),
+                      // 点按区域不小于 48dp
+                      child: SizedBox.square(
+                        dimension: 48,
+                        child: Center(
+                          child: LedgerAvatar(
+                            icon: categoryIcon(name),
+                            highlight: name == _icon,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
               ],

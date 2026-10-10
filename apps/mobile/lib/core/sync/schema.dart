@@ -69,7 +69,7 @@ abstract final class Entities {
       'name': FieldSpec(sensitive: true),
       'kind': FieldSpec(),
       'parentId': FieldSpec(),
-      'icon': FieldSpec(),
+      'icon': FieldSpec(sensitive: true),
       'archived': FieldSpec(),
       'sortOrder': FieldSpec(),
     },

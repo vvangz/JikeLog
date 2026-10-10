@@ -227,14 +227,20 @@ class Entry {
     final amount = parseCents(r.fields['amount']);
     final date = DateTime.tryParse(r.fields['date'] as String? ?? '');
     final account = _str(r.fields['accountId']);
-    if (type == null || amount == null || date == null || account == null) {
+    // 金额必须为正（其他设备或损坏的数据可能不满足，此时不计入）
+    if (type == null ||
+        amount == null ||
+        amount <= 0 ||
+        date == null ||
+        account == null) {
       return null;
     }
+    final fee = parseCents(r.fields['fee']) ?? 0;
     return Entry(
       id: r.id,
       type: type,
       amount: amount,
-      fee: parseCents(r.fields['fee']) ?? 0,
+      fee: fee < 0 ? 0 : fee,
       date: date,
       accountId: account,
       toAccountId: _str(r.fields['toAccountId']),

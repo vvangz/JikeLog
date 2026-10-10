@@ -202,7 +202,7 @@ var Registry = map[string]Entity{
 			"name":      {Kind: KindString, MaxLen: maxCategoryNameLen, Required: true, Sensitive: true},
 			"kind":      {Kind: KindString, Required: true, Choices: categoryKinds},
 			"parentId":  {Kind: KindUUID},
-			"icon":      {Kind: KindString, MaxLen: maxIconLen},
+			"icon":      {Kind: KindString, MaxLen: maxIconLen, Sensitive: true},
 			"archived":  {Kind: KindFlag},
 			"sortOrder": {Kind: KindInt},
 		},

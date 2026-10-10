@@ -186,8 +186,12 @@ class _LoanTile extends StatelessWidget {
     final c = context.jkColors;
     final out = balance?.outstanding ?? 0;
     final due = loan.dueDate;
+    // 到期当天不算逾期：按日期比较
     final overdue =
-        due != null && !loan.settled && out > 0 && due.isBefore(DateTime.now());
+        due != null &&
+        !loan.settled &&
+        out > 0 &&
+        due.isBefore(DateUtils.dateOnly(DateTime.now()));
     final label = loan.direction == LoanDirection.lend ? '待收' : '待还';
     return ListTile(
       key: Key('loan-${loan.id}'),
@@ -232,7 +236,7 @@ Future<void> showAccountEditor(
     context: context,
     builder: (_) => _AccountDialog(account: account),
   );
-  if (result == null) return;
+  if (result == null || !context.mounted) return;
   final repo = ref.read(ledgerRepositoryProvider);
   try {
     switch (result.action) {
@@ -254,6 +258,14 @@ Future<void> showAccountEditor(
       case _AccountAction.toggleHidden:
         await repo.updateAccount(account!.id, archived: !account.archived);
       case _AccountAction.delete:
+        final ok = await showJkConfirm(
+          context,
+          title: '删除账户',
+          message: '已有流水的账户只会隐藏；没有流水的账户将被删除，其他设备上也会删除。',
+          confirmLabel: '删除',
+          destructive: true,
+        );
+        if (!ok || !context.mounted) return;
         final deleted = await repo.deleteAccount(account!.id);
         if (!deleted && context.mounted) {
           showJkToast(context, '这个账户已有流水，已改为隐藏');

@@ -4,10 +4,12 @@ library;
 /// 金额（分）的绝对值上限，与服务端一致：10^15 分。
 const maxMoneyCents = 999999999999999;
 
-/// 解析服务端的金额字符串（分）。格式不对时为 null。
+final _cents = RegExp(r'^-?(0|[1-9][0-9]{0,14})$');
+
+/// 解析服务端的金额字符串（分）：只接受与服务端相同的规范写法和范围，格式不对时为 null。
 int? parseCents(Object? v) {
-  if (v is! String) return null;
-  return int.tryParse(v);
+  if (v is! String || v == '-0' || !_cents.hasMatch(v)) return null;
+  return int.parse(v);
 }
 
 /// 金额（分）编码为服务端格式。

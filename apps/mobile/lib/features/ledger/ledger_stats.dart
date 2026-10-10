@@ -118,7 +118,8 @@ NetWorth netWorth(
   var receivable = 0;
   var payable = 0;
   for (final l in loans) {
-    final out = byLoan[l.id]?.outstanding ?? 0;
+    // 已结清的借贷不再计入（剩余部分视为减免或坏账）
+    final out = l.settled ? 0 : byLoan[l.id]?.outstanding ?? 0;
     if (out <= 0) continue;
     if (l.direction == LoanDirection.lend) {
       receivable += out;

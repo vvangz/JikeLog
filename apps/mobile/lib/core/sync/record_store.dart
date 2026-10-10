@@ -172,18 +172,21 @@ class RecordStore {
     await db.setMeta(_clockKey, clock.last);
   });
 
-  /// 写入预置记录（如默认分类）：本机还没有这条记录时才写入，字段时钟取最早的时刻。
+  /// 预置记录的字段时钟：最早的时刻、与设备无关的节点。各设备写出的时钟逐字相同，
+  /// 服务端视为同一次修改，不会产生冲突；用户的任何修改都比它新。
+  static const seedClock = '0000000000000-0000-0000000000000000';
+
+  /// 写入预置记录（如默认分类）：本机还没有这条记录时才写入，字段时钟为 [seedClock]。
   /// 多台设备各自写入同一 ID 的预置记录时自然合并；用户在任何设备上的修改都比它新，
   /// 不会被尚未同步的设备用默认值覆盖（ADR-009）。返回是否写入。
   Future<bool> seed(String entity, String id, Map<String, Object?> fields) =>
       db.transaction(() async {
         if (await get(id) != null) return false;
-        final oldest = '${'0' * 13}-0000-${clock.node}';
         await _save(
           id: id,
           entity: entity,
           fields: fields,
-          clocks: {for (final f in fields.keys) f: oldest},
+          clocks: {for (final f in fields.keys) f: seedClock},
           baseFields: const {},
           baseClocks: const {},
           version: 0,

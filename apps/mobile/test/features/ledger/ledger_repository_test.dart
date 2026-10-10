@@ -52,10 +52,7 @@ void main() {
     final lunch = cats.firstWhere((c) => c.name == '午餐');
     expect(lunch.parentId, food.id);
     final rec = (await store.get(food.id))!;
-    expect(
-      rec.clocks.values.every((c) => c.startsWith('0000000000000-')),
-      isTrue,
-    );
+    expect(rec.clocks.values.toSet(), {RecordStore.seedClock});
     expect(rec.dirty, isTrue);
 
     // 用户改名后再初始化不会覆盖
@@ -318,5 +315,69 @@ void main() {
       ),
     );
     expect((await repo.watchEntries().first).map((e) => e.id), [recent, old]);
+  });
+
+  test('收款还款：方向必须一致、不能超过待收待还；修改不存在的流水报错', () async {
+    final cash = await repo.createAccount(name: '现金', type: AccountType.cash);
+    final lent = await repo.createLoan(
+      direction: LoanDirection.lend,
+      counterparty: '李四',
+      amount: 1000,
+      accountId: cash,
+      date: day,
+    );
+    EntryDraft back(EntryType t, int amount) => EntryDraft(
+      type: t,
+      amount: amount,
+      date: day,
+      accountId: cash,
+      loanId: lent,
+    );
+    expect(
+      () => repo.createEntry(back(EntryType.repay, 100)),
+      throwsArgumentError,
+    );
+    expect(
+      () => repo.createEntry(back(EntryType.collect, 1001)),
+      throwsArgumentError,
+    );
+    final first = await repo.createEntry(back(EntryType.collect, 600));
+    expect(
+      () => repo.createEntry(back(EntryType.collect, 500)),
+      throwsArgumentError,
+    );
+    // 修改自己时不把自己算进已收
+    await repo.updateEntry(first, back(EntryType.collect, 1000));
+    expect((await repo.getEntry(first))!.amount, 1000);
+    expect(
+      () => repo.createEntry(
+        EntryDraft(
+          type: EntryType.collect,
+          amount: 1,
+          date: day,
+          accountId: cash,
+          loanId: 'missing',
+        ),
+      ),
+      throwsArgumentError,
+    );
+    await repo.deleteEntry(first);
+    expect(
+      () => repo.updateEntry(first, back(EntryType.collect, 1)),
+      throwsStateError,
+    );
+  });
+
+  test('字段不完整的流水也阻止删除账户；金额不为正的流水不计入', () async {
+    final cash = await repo.createAccount(name: '现金', type: AccountType.cash);
+    await store.write('ledger_entry', 'broken', {
+      'type': 'expense',
+      'amount': '-5',
+      'date': '2026-10-11',
+      'accountId': cash,
+    });
+    expect(await repo.watchEntries().first, isEmpty);
+    expect(await repo.deleteAccount(cash), isFalse);
+    expect((await repo.watchAccounts().first).single.archived, isTrue);
   });
 }

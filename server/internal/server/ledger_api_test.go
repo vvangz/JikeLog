@@ -90,3 +90,31 @@ func TestLedgerRejectsInvalidAmounts(t *testing.T) {
 		}
 	}
 }
+
+// 两台设备各自写入同一 ID 的预置分类（时钟逐字相同）：合并为同一条，不产生冲突。
+func TestLedgerPresetSeededOnTwoDevicesDoesNotConflict(t *testing.T) {
+	a := newTestApp(t)
+	d1, d2 := a.twoDevices("ledger03")
+	c1, c2 := a.handshake(d1), a.handshake(d2)
+	id := newID()
+	const seed = "0000000000000-0000-0000000000000000"
+	fields := map[string]any{"name": "餐饮", "kind": "expense", "icon": "restaurant", "archived": 0, "sortOrder": 0}
+	clocks := map[string]string{}
+	for f := range fields {
+		clocks[f] = seed
+	}
+	for _, d := range []struct {
+		s session
+		c e2eClient
+	}{{d1, c1}, {d2, c2}} {
+		r := a.push(d.s, d.c, d.c.encode(worklogChange{entity: "ledger_category", id: id, fields: fields, clocks: clocks}))
+		a.expect(r, http.StatusOK, "")
+		if st := r.results()[0]["status"]; st == "conflict" || st == "rejected" {
+			t.Fatalf("预置记录不应冲突：%v", r.results()[0])
+		}
+	}
+	var revisions int
+	if err := a.pool.QueryRow(context.Background(), "SELECT count(*) FROM record_revisions WHERE record_id = $1", id).Scan(&revisions); err != nil || revisions != 0 {
+		t.Fatalf("不应保存冲突版本：%d %v", revisions, err)
+	}
+}
