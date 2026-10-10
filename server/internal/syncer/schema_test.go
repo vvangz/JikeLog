@@ -250,3 +250,72 @@ func TestParseOffsets(t *testing.T) {
 		t.Fatalf("got %v", got)
 	}
 }
+
+func TestLedgerSchema(t *testing.T) {
+	acc := Registry[EntityLedgerAccount].Fields
+	cat := Registry[EntityLedgerCategory].Fields
+	loan := Registry[EntityLedgerLoan].Fields
+	entry := Registry[EntityLedgerEntry].Fields
+	// 金额、账户名、对方、备注都是敏感字段（ADR-009）
+	for name, f := range map[string]Field{
+		"account.name": acc["name"], "account.initialBalance": acc["initialBalance"],
+		"category.name": cat["name"], "loan.counterparty": loan["counterparty"], "loan.note": loan["note"],
+		"entry.amount": entry["amount"], "entry.fee": entry["fee"], "entry.note": entry["note"],
+	} {
+		if !f.Sensitive {
+			t.Errorf("%s 应为敏感字段", name)
+		}
+	}
+	ok := []struct {
+		name string
+		f    Field
+		raw  string
+		want Value
+	}{
+		{"金额（分）", entry["amount"], `"12345"`, "12345"},
+		{"手续费为 0", entry["fee"], `"0"`, "0"},
+		{"初始余额为负（信用卡欠款）", acc["initialBalance"], `"-50000"`, "-50000"},
+		{"转账", entry["type"], `"transfer"`, "transfer"},
+		{"收款", entry["type"], `"collect"`, "collect"},
+		{"信用卡", acc["type"], `"credit"`, "credit"},
+		{"支出分类", cat["kind"], `"expense"`, "expense"},
+		{"借出", loan["direction"], `"lend"`, "lend"},
+		{"日期", entry["date"], `"2026-10-11"`, "2026-10-11"},
+	}
+	for _, c := range ok {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := c.f.DecodeValue(json.RawMessage(c.raw))
+			if err != nil || got != c.want {
+				t.Fatalf("got=%v err=%v", got, err)
+			}
+		})
+	}
+	bad := []struct {
+		name string
+		f    Field
+		raw  string
+	}{
+		{"金额为 0", entry["amount"], `"0"`},
+		{"金额为负", entry["amount"], `"-5"`},
+		{"金额不是数字", entry["amount"], `"12.5"`},
+		{"金额有前导零", entry["amount"], `"012"`},
+		{"金额超出范围", entry["amount"], `"10000000000000000"`},
+		{"金额为整数类型", entry["amount"], `12`},
+		{"手续费为负", entry["fee"], `"-1"`},
+		{"负零", acc["initialBalance"], `"-0"`},
+		{"未知流水类型", entry["type"], `"refund"`},
+		{"未知账户类型", acc["type"], `"bank"`},
+		{"账户名为空", acc["name"], `""`},
+		{"对方为空", loan["counterparty"], `""`},
+	}
+	for _, c := range bad {
+		t.Run(c.name, func(t *testing.T) {
+			if _, err := c.f.DecodeValue(json.RawMessage(c.raw)); err == nil {
+				t.Fatal("应当报错")
+			}
+		})
+	}
+	if _, err := entry["amount"].CheckValue("0"); err == nil {
+		t.Error("解密后的金额同样要校验")
+	}
+}

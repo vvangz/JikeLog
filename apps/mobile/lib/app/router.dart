@@ -11,6 +11,11 @@ import '../features/auth/login_page.dart';
 import '../features/auth/register_pages.dart';
 import '../features/consent/consent_controller.dart';
 import '../features/consent/consent_page.dart';
+import '../features/ledger/categories_page.dart';
+import '../features/ledger/entry_editor_page.dart';
+import '../features/ledger/ledger_models.dart';
+import '../features/ledger/ledger_page.dart';
+import '../features/ledger/loan_page.dart';
 import '../features/memos/memo_editor_page.dart';
 import '../features/memos/memos_page.dart';
 import '../features/modules/module_page.dart';
@@ -110,6 +115,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   '/worklog' => const WorklogListPage(),
                   '/notes' => const NotesListPage(),
                   '/memos' => const MemosPage(),
+                  '/ledger' => const LedgerPage(),
                   _ => ModulePage(destination: d),
                 },
               ),
@@ -156,6 +162,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/memos/:id/revisions',
         builder: (_, state) =>
             RevisionsPage(entity: 'memo', id: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/ledger/entry/:id',
+        builder: (_, state) => EntryEditorPage(
+          id: state.pathParameters['id']!,
+          type: EntryType.parse(state.uri.queryParameters['type']),
+          loanId: state.uri.queryParameters['loan'],
+        ),
+      ),
+      GoRoute(
+        path: '/ledger/loans/:id',
+        builder: (_, state) => LoanPage(id: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/ledger/categories',
+        builder: (_, _) => const CategoriesPage(),
       ),
       GoRoute(path: '/settings/about', builder: (_, _) => const AboutPage()),
       GoRoute(path: '/account/phone', builder: (_, _) => const PhonePage()),

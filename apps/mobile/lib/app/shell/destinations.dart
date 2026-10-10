@@ -41,7 +41,7 @@ const moduleDestinations = [
     path: '/ledger',
     label: '记账',
     icon: JkIcons.ledger,
-    description: '记录收入、支出、转账与借贷，查看分类占比和账户余额。将在 v0.6.0 开放。',
+    description: '记录收入、支出、转账与借贷，查看分类占比和账户余额。',
   ),
 ];
 
