@@ -22,3 +22,4 @@
 **/gen/**             linguist-generated=true
 **/*.gen.go           linguist-generated=true
 **/*.gen.ts           linguist-generated=true
+apps/mobile/assets/editor/** linguist-generated=true

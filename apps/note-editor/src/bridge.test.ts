@@ -1,0 +1,132 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { CHANGE_DEBOUNCE_MS, createBridge, type Bridge } from './bridge';
+import { cspScriptHashes } from './csp';
+import { fontFaceCss, installFonts } from './fonts';
+import type { Outbound } from './protocol';
+
+const ID = '0190a1b2-0000-7000-8000-000000000001';
+const theme = { dark: true, colors: { text: '#f5efe8', primary: '#c8a27c' } };
+
+let sent: Outbound[];
+let bridge: Bridge;
+let root: HTMLElement;
+
+const send = (m: object) => bridge.receive(JSON.stringify(m));
+const last = (type: Outbound['type']) => sent.filter((m) => m.type === type).at(-1);
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  sent = [];
+  root = document.createElement('div');
+  const element = document.createElement('div');
+  document.body.append(element);
+  bridge = createBridge({ element, post: (json) => sent.push(JSON.parse(json) as Outbound), root });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  document.body.innerHTML = '';
+});
+
+describe('bridge', () => {
+  it('加载后通知 Flutter 已就绪', () => {
+    expect(sent[0]).toEqual({ type: 'ready' });
+  });
+
+  it('初始化：应用主题并上报格式状态', () => {
+    send({ type: 'init', markdown: '# 标题', placeholder: '写点什么', theme });
+    expect(root.dataset.theme).toBe('dark');
+    expect(root.style.getPropertyValue('--jk-primary')).toBe('#c8a27c');
+    expect(last('state')).toMatchObject({ state: { heading: 1, canUndo: false } });
+  });
+
+  it('切换主题', () => {
+    send({ type: 'theme', theme: { dark: false, colors: { text: '#000000' } } });
+    expect(root.dataset.theme).toBe('light');
+  });
+
+  it('用户编辑后防抖发送 Markdown', () => {
+    send({ type: 'init', markdown: '内容', placeholder: '', theme });
+    send({ type: 'command', name: 'heading2' });
+    send({ type: 'command', name: 'bold' });
+    expect(last('change')).toBeUndefined();
+    vi.advanceTimersByTime(CHANGE_DEBOUNCE_MS);
+    expect(sent.filter((m) => m.type === 'change')).toEqual([{ type: 'change', markdown: '## 内容' }]);
+  });
+
+  it('flush 立即返回尚未发送的修改；没有修改时返回 null', () => {
+    send({ type: 'init', markdown: '内容', placeholder: '', theme });
+    expect(bridge.flush()).toBeNull();
+    send({ type: 'command', name: 'blockquote' });
+    expect(bridge.flush()).toBe('> 内容');
+    vi.advanceTimersByTime(CHANGE_DEBOUNCE_MS);
+    expect(last('change')).toBeUndefined();
+  });
+
+  it('远端内容到达前先发出本地尚未发送的修改', () => {
+    send({ type: 'init', markdown: '内容', placeholder: '', theme });
+    send({ type: 'command', name: 'bulletList' });
+    send({ type: 'setMarkdown', markdown: '其他设备的内容' });
+    expect(last('change')).toEqual({ type: 'change', markdown: '- 内容' });
+    vi.advanceTimersByTime(CHANGE_DEBOUNCE_MS);
+    expect(sent.filter((m) => m.type === 'change')).toHaveLength(1);
+  });
+
+  it('插入图片，并显示 Flutter 返回的图片', () => {
+    send({ type: 'init', markdown: '', placeholder: '', theme });
+    send({ type: 'insertImage', id: ID, alt: '图' });
+    expect(last('requestImage')).toEqual({ type: 'requestImage', id: ID });
+    send({ type: 'image', id: ID, dataUrl: 'data:image/png;base64,AAAA' });
+    expect(document.querySelector('.jk-image img')?.getAttribute('src')).toBe('data:image/png;base64,AAAA');
+    vi.advanceTimersByTime(CHANGE_DEBOUNCE_MS);
+    expect(last('change')).toEqual({ type: 'change', markdown: `![图](attachment:${ID})` });
+  });
+
+  it('聚焦后在光标处插入链接', () => {
+    send({ type: 'init', markdown: '见', placeholder: '', theme });
+    send({ type: 'focus' });
+    send({ type: 'setLink', href: 'https://example.com' });
+    vi.advanceTimersByTime(CHANGE_DEBOUNCE_MS);
+    expect(last('change')).toEqual({ type: 'change', markdown: '见[https://example.com](https://example.com)' });
+  });
+
+  it('非法消息与未初始化时的命令回报错误，不执行', () => {
+    bridge.receive('not json');
+    expect(last('error')).toMatchObject({ message: '无法识别的消息' });
+    send({ type: 'command', name: 'bold' });
+    expect(last('error')).toMatchObject({ message: '编辑器尚未初始化' });
+    expect(bridge.flush()).toBeNull();
+  });
+
+  it('重新初始化替换编辑器', () => {
+    send({ type: 'init', markdown: '第一篇', placeholder: '', theme });
+    send({ type: 'init', markdown: '第二篇', placeholder: '', theme });
+    expect(document.querySelectorAll('.ProseMirror')).toHaveLength(1);
+    send({ type: 'command', name: 'heading1' });
+    expect(bridge.flush()).toBe('# 第二篇');
+  });
+});
+
+describe('cspScriptHashes', () => {
+  it('把每段内联脚本的哈希写入 CSP', () => {
+    const html = `<meta content="script-src __CSP_SCRIPT_HASHES__"><script type="module">alert(1)</script>`;
+    expect(cspScriptHashes(html)).toBe(
+      `<meta content="script-src 'sha256-bhHHL3z2vDgxUt0W3dWQOrprscmda2Y5pLsLg4GF+pI='"><script type="module">alert(1)</script>`,
+    );
+  });
+
+  it('没有内联脚本或缺少占位符时构建失败', () => {
+    expect(() => cspScriptHashes('<meta content="__CSP_SCRIPT_HASHES__">')).toThrow();
+    expect(() => cspScriptHashes('<script>x</script>')).toThrow();
+  });
+});
+
+describe('fonts', () => {
+  it('从 App 自带的字体目录加载', () => {
+    expect(fontFaceCss()).toContain("url('../fonts/MiSans-Regular.ttf')");
+    installFonts();
+    const css = [...document.head.querySelectorAll('style')].map((s) => s.textContent).join('');
+    expect(css).toContain("font-family:'Space Grotesk'");
+  });
+});
