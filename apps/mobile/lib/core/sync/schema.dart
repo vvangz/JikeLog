@@ -18,6 +18,10 @@ abstract final class Entities {
   static const note = 'note';
   static const noteFolder = 'note_folder';
   static const memo = 'memo';
+  static const ledgerAccount = 'ledger_account';
+  static const ledgerCategory = 'ledger_category';
+  static const ledgerLoan = 'ledger_loan';
+  static const ledgerEntry = 'ledger_entry';
 
   static const specs = <String, Map<String, FieldSpec>>{
     worklog: {
@@ -52,6 +56,40 @@ abstract final class Entities {
       'allDay': FieldSpec(),
       'reminders': FieldSpec(),
       'done': FieldSpec(),
+    },
+    // 记账（ADR-009）：金额、名称、对方与备注加密
+    ledgerAccount: {
+      'name': FieldSpec(sensitive: true),
+      'type': FieldSpec(),
+      'initialBalance': FieldSpec(sensitive: true),
+      'archived': FieldSpec(),
+      'sortOrder': FieldSpec(),
+    },
+    ledgerCategory: {
+      'name': FieldSpec(sensitive: true),
+      'kind': FieldSpec(),
+      'parentId': FieldSpec(),
+      'icon': FieldSpec(),
+      'archived': FieldSpec(),
+      'sortOrder': FieldSpec(),
+    },
+    ledgerLoan: {
+      'direction': FieldSpec(),
+      'counterparty': FieldSpec(sensitive: true),
+      'dueDate': FieldSpec(),
+      'note': FieldSpec(sensitive: true, text: true),
+      'settled': FieldSpec(),
+    },
+    ledgerEntry: {
+      'type': FieldSpec(),
+      'amount': FieldSpec(sensitive: true),
+      'fee': FieldSpec(sensitive: true),
+      'date': FieldSpec(),
+      'accountId': FieldSpec(),
+      'toAccountId': FieldSpec(),
+      'categoryId': FieldSpec(),
+      'loanId': FieldSpec(),
+      'note': FieldSpec(sensitive: true, text: true),
     },
   };
 

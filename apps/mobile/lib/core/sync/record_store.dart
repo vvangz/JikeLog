@@ -172,6 +172,29 @@ class RecordStore {
     await db.setMeta(_clockKey, clock.last);
   });
 
+  /// 写入预置记录（如默认分类）：本机还没有这条记录时才写入，字段时钟取最早的时刻。
+  /// 多台设备各自写入同一 ID 的预置记录时自然合并；用户在任何设备上的修改都比它新，
+  /// 不会被尚未同步的设备用默认值覆盖（ADR-009）。返回是否写入。
+  Future<bool> seed(String entity, String id, Map<String, Object?> fields) =>
+      db.transaction(() async {
+        if (await get(id) != null) return false;
+        final oldest = '${'0' * 13}-0000-${clock.node}';
+        await _save(
+          id: id,
+          entity: entity,
+          fields: fields,
+          clocks: {for (final f in fields.keys) f: oldest},
+          baseFields: const {},
+          baseClocks: const {},
+          version: 0,
+          serverSeq: 0,
+          deleted: false,
+          dirty: true,
+          hasConflict: false,
+        );
+        return true;
+      });
+
   /// 删除记录：从未同步过的直接删除，否则留下墓碑待推送。
   Future<void> remove(String id) => db.transaction(() async {
     final cur = await get(id);
@@ -459,6 +482,10 @@ class RecordStore {
       '${fields['pinned'] == 1 ? 1 : 0}|'
           '${clocks.values.fold('', (a, b) => b.compareTo(a) > 0 ? b : a)}',
     Entities.memo => memoSortKey(fields['at'] as int? ?? 0),
+    // 流水按日期，同一天内按最后修改先后
+    Entities.ledgerEntry =>
+      '${fields['date'] as String? ?? ''}|'
+          '${clocks.values.fold('', (a, b) => b.compareTo(a) > 0 ? b : a)}',
     _ => '',
   };
 
