@@ -106,12 +106,12 @@ void main() {
   testWidgets('读屏可通过语义动作激活侧栏入口', (tester) async {
     final handle = tester.ensureSemantics();
     await pumpApp(tester, width: 1000);
-    final node = tester.getSemantics(find.byKey(const Key('nav-/notes')));
-    expect(node.label, '笔记');
+    final node = tester.getSemantics(find.byKey(const Key('nav-/memos')));
+    expect(node.label, '备忘录');
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
     node.owner!.performAction(node.id, SemanticsAction.tap);
     await settleApp(tester);
-    expect(find.textContaining('v0.4.0'), findsOneWidget);
+    expect(find.textContaining('v0.5.0'), findsOneWidget);
     handle.dispose();
   });
 

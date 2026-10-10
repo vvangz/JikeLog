@@ -74,7 +74,7 @@ jobs:
         run: docker build --build-arg COMMIT=${GITHUB_SHA::7} -t jikelog-api:ci .
 
   web:
-    name: 设计令牌与管理后台
+    name: 设计令牌、管理后台与笔记编辑器
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -90,11 +90,17 @@ jobs:
         run: pnpm audit --audit-level=high
       - name: 设计令牌测试（含 WCAG 对比度）
         run: pnpm --filter @jikelog/design-tokens test
+      - name: 笔记编辑器 类型检查 / 测试 / 构建
+        working-directory: apps/note-editor
+        run: |
+          pnpm typecheck
+          pnpm test:coverage
+          pnpm build
       - name: 生成文件与源一致
         run: |
           pnpm tokens
           bash scripts/gen-api.sh ts
-          git diff --exit-code -- apps/mobile/lib/app/theme apps/admin-web/src/theme apps/admin-web/src/api
+          git diff --exit-code -- apps/mobile/lib/app/theme apps/admin-web/src/theme apps/admin-web/src/api apps/mobile/assets/editor
       - name: 管理后台 lint / 类型检查 / 测试 / 构建
         working-directory: apps/admin-web
         run: |

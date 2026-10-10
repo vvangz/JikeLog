@@ -1673,12 +1673,276 @@ class LocalFilesCompanion extends UpdateCompanion<LocalFileRow> {
   }
 }
 
+class $RecordRefsTable extends RecordRefs
+    with TableInfo<$RecordRefsTable, RefRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RecordRefsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _recordIdMeta = const VerificationMeta(
+    'recordId',
+  );
+  @override
+  late final GeneratedColumn<String> recordId = GeneratedColumn<String>(
+    'record_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<String> value = GeneratedColumn<String>(
+    'value',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [recordId, kind, value];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'record_refs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RefRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('record_id')) {
+      context.handle(
+        _recordIdMeta,
+        recordId.isAcceptableOrUnknown(data['record_id']!, _recordIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_recordIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+        _valueMeta,
+        value.isAcceptableOrUnknown(data['value']!, _valueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_valueMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {recordId, kind, value};
+  @override
+  RefRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RefRow(
+      recordId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}record_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      value: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}value'],
+      )!,
+    );
+  }
+
+  @override
+  $RecordRefsTable createAlias(String alias) {
+    return $RecordRefsTable(attachedDatabase, alias);
+  }
+}
+
+class RefRow extends DataClass implements Insertable<RefRow> {
+  final String recordId;
+
+  /// tag / worklog / folder。
+  final String kind;
+  final String value;
+  const RefRow({
+    required this.recordId,
+    required this.kind,
+    required this.value,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['record_id'] = Variable<String>(recordId);
+    map['kind'] = Variable<String>(kind);
+    map['value'] = Variable<String>(value);
+    return map;
+  }
+
+  RecordRefsCompanion toCompanion(bool nullToAbsent) {
+    return RecordRefsCompanion(
+      recordId: Value(recordId),
+      kind: Value(kind),
+      value: Value(value),
+    );
+  }
+
+  factory RefRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RefRow(
+      recordId: serializer.fromJson<String>(json['recordId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      value: serializer.fromJson<String>(json['value']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'recordId': serializer.toJson<String>(recordId),
+      'kind': serializer.toJson<String>(kind),
+      'value': serializer.toJson<String>(value),
+    };
+  }
+
+  RefRow copyWith({String? recordId, String? kind, String? value}) => RefRow(
+    recordId: recordId ?? this.recordId,
+    kind: kind ?? this.kind,
+    value: value ?? this.value,
+  );
+  RefRow copyWithCompanion(RecordRefsCompanion data) {
+    return RefRow(
+      recordId: data.recordId.present ? data.recordId.value : this.recordId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      value: data.value.present ? data.value.value : this.value,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RefRow(')
+          ..write('recordId: $recordId, ')
+          ..write('kind: $kind, ')
+          ..write('value: $value')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(recordId, kind, value);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RefRow &&
+          other.recordId == this.recordId &&
+          other.kind == this.kind &&
+          other.value == this.value);
+}
+
+class RecordRefsCompanion extends UpdateCompanion<RefRow> {
+  final Value<String> recordId;
+  final Value<String> kind;
+  final Value<String> value;
+  final Value<int> rowid;
+  const RecordRefsCompanion({
+    this.recordId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.value = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RecordRefsCompanion.insert({
+    required String recordId,
+    required String kind,
+    required String value,
+    this.rowid = const Value.absent(),
+  }) : recordId = Value(recordId),
+       kind = Value(kind),
+       value = Value(value);
+  static Insertable<RefRow> custom({
+    Expression<String>? recordId,
+    Expression<String>? kind,
+    Expression<String>? value,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (recordId != null) 'record_id': recordId,
+      if (kind != null) 'kind': kind,
+      if (value != null) 'value': value,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RecordRefsCompanion copyWith({
+    Value<String>? recordId,
+    Value<String>? kind,
+    Value<String>? value,
+    Value<int>? rowid,
+  }) {
+    return RecordRefsCompanion(
+      recordId: recordId ?? this.recordId,
+      kind: kind ?? this.kind,
+      value: value ?? this.value,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (recordId.present) {
+      map['record_id'] = Variable<String>(recordId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (value.present) {
+      map['value'] = Variable<String>(value.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RecordRefsCompanion(')
+          ..write('recordId: $recordId, ')
+          ..write('kind: $kind, ')
+          ..write('value: $value, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $RecordsTable records = $RecordsTable(this);
   late final $SyncMetaTable syncMeta = $SyncMetaTable(this);
   late final $LocalFilesTable localFiles = $LocalFilesTable(this);
+  late final $RecordRefsTable recordRefs = $RecordRefsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1687,6 +1951,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     records,
     syncMeta,
     localFiles,
+    recordRefs,
   ];
 }
 
@@ -2525,6 +2790,169 @@ typedef $$LocalFilesTableProcessedTableManager =
       LocalFileRow,
       PrefetchHooks Function()
     >;
+typedef $$RecordRefsTableCreateCompanionBuilder = RecordRefsCompanion Function({
+  required String recordId,
+  required String kind,
+  required String value,
+  Value<int> rowid,
+});
+typedef $$RecordRefsTableUpdateCompanionBuilder = RecordRefsCompanion Function({
+  Value<String> recordId,
+  Value<String> kind,
+  Value<String> value,
+  Value<int> rowid,
+});
+
+class $$RecordRefsTableFilterComposer
+    extends Composer<_$AppDatabase, $RecordRefsTable> {
+  $$RecordRefsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get recordId => $composableBuilder(
+    column: $table.recordId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RecordRefsTableOrderingComposer
+    extends Composer<_$AppDatabase, $RecordRefsTable> {
+  $$RecordRefsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get recordId => $composableBuilder(
+    column: $table.recordId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RecordRefsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RecordRefsTable> {
+  $$RecordRefsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get recordId =>
+      $composableBuilder(column: $table.recordId, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get value =>
+      $composableBuilder(column: $table.value, builder: (column) => column);
+}
+
+class $$RecordRefsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RecordRefsTable,
+          RefRow,
+          $$RecordRefsTableFilterComposer,
+          $$RecordRefsTableOrderingComposer,
+          $$RecordRefsTableAnnotationComposer,
+          $$RecordRefsTableCreateCompanionBuilder,
+          $$RecordRefsTableUpdateCompanionBuilder,
+          (RefRow, BaseReferences<_$AppDatabase, $RecordRefsTable, RefRow>),
+          RefRow,
+          PrefetchHooks Function()
+        > {
+  $$RecordRefsTableTableManager(_$AppDatabase db, $RecordRefsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RecordRefsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RecordRefsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RecordRefsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> recordId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> value = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RecordRefsCompanion(
+                recordId: recordId,
+                kind: kind,
+                value: value,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String recordId,
+                required String kind,
+                required String value,
+                Value<int> rowid = const Value.absent(),
+              }) => RecordRefsCompanion.insert(
+                recordId: recordId,
+                kind: kind,
+                value: value,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$RecordRefsTable, RefRow>(table),
+                  BaseReferences<_$AppDatabase, $RecordRefsTable, RefRow>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RecordRefsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RecordRefsTable,
+      RefRow,
+      $$RecordRefsTableFilterComposer,
+      $$RecordRefsTableOrderingComposer,
+      $$RecordRefsTableAnnotationComposer,
+      $$RecordRefsTableCreateCompanionBuilder,
+      $$RecordRefsTableUpdateCompanionBuilder,
+      (RefRow, BaseReferences<_$AppDatabase, $RecordRefsTable, RefRow>),
+      RefRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2535,4 +2963,6 @@ class $AppDatabaseManager {
       $$SyncMetaTableTableManager(_db, _db.syncMeta);
   $$LocalFilesTableTableManager get localFiles =>
       $$LocalFilesTableTableManager(_db, _db.localFiles);
+  $$RecordRefsTableTableManager get recordRefs =>
+      $$RecordRefsTableTableManager(_db, _db.recordRefs);
 }

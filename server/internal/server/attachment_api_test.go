@@ -32,9 +32,14 @@ func (a *testApp) newWorklog(s session, c e2eClient) string {
 
 func (a *testApp) requestUpload(s session, c e2eClient, owner, id, name string, body []byte) apiResp {
 	a.t.Helper()
+	return a.requestUploadFor(s, c, "worklog", owner, id, name, body)
+}
+
+func (a *testApp) requestUploadFor(s session, c e2eClient, ownerEntity, owner, id, name string, body []byte) apiResp {
+	a.t.Helper()
 	sum := sha256.Sum256(body)
 	return a.callWith(http.MethodPost, "/api/v1/attachments", map[string]any{
-		"id": id, "ownerEntity": "worklog", "ownerId": owner,
+		"id": id, "ownerEntity": ownerEntity, "ownerId": owner,
 		"fileName": c.seal("attachment", id, "fileName", e2e.KindValue, name),
 		"mime":     "text/plain", "size": len(body), "sha256": hex.EncodeToString(sum[:]),
 	}, s.access, c.headers())

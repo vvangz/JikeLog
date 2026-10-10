@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jikelog/core/sync/record_store.dart';
 import 'package:jikelog/core/sync/sync_providers.dart';
 import 'package:jikelog/features/worklog/worklog_list_page.dart';
+import 'package:jikelog/shared/text/markdown_text.dart';
 import 'package:jikelog/features/worklog/worklog_repository.dart';
 
 import '../support/app_harness.dart';

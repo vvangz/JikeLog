@@ -120,7 +120,7 @@ class WorklogRepository {
     String? location,
     String? content,
   }) async {
-    await store.write(Entities.worklog, id, {
+    await store.write(Entities.worklog, id, create: false, {
       'date': ?(date == null ? null : formatDate(date)),
       'location': ?location,
       'content': ?content,

@@ -14,7 +14,9 @@ import '../features/consent/consent_page.dart';
 import '../features/modules/module_page.dart';
 import '../features/settings/about_page.dart';
 import '../features/settings/settings_page.dart';
-import '../features/worklog/revisions_page.dart';
+import '../features/notes/note_editor_page.dart';
+import '../features/notes/notes_list_page.dart';
+import '../features/revisions/revisions_page.dart';
 import '../features/worklog/worklog_editor_page.dart';
 import '../features/worklog/worklog_list_page.dart';
 import '../shared/ui/jk_logo.dart';
@@ -102,9 +104,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             GoRoute(
               path: d.path,
               pageBuilder: (_, _) => NoTransitionPage(
-                child: d.path == '/worklog'
-                    ? const WorklogListPage()
-                    : ModulePage(destination: d),
+                child: switch (d.path) {
+                  '/worklog' => const WorklogListPage(),
+                  '/notes' => const NotesListPage(),
+                  _ => ModulePage(destination: d),
+                },
               ),
             ),
           GoRoute(
@@ -126,7 +130,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/worklog/:id/revisions',
-        builder: (_, state) => RevisionsPage(id: state.pathParameters['id']!),
+        builder: (_, state) =>
+            RevisionsPage(entity: 'worklog', id: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/notes/:id',
+        builder: (_, state) => NoteEditorPage(id: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/notes/:id/revisions',
+        builder: (_, state) =>
+            RevisionsPage(entity: 'note', id: state.pathParameters['id']!),
       ),
       GoRoute(path: '/settings/about', builder: (_, _) => const AboutPage()),
       GoRoute(path: '/account/phone', builder: (_, _) => const PhonePage()),

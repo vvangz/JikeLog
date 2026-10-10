@@ -13,6 +13,7 @@ import (
 
 	"github.com/vvangz/JikeLog/server/internal/e2e"
 	"github.com/vvangz/JikeLog/server/internal/platform/crypto"
+	"github.com/vvangz/JikeLog/server/internal/syncer"
 )
 
 // e2eClient 模拟 App 端的传输加密会话。
@@ -69,8 +70,9 @@ const (
 	nodeB = "bbbbbbbbbbbbbbbb"
 )
 
-// worklogChange 构造工作日志变更：location、content 为敏感字段，自动加密。
+// worklogChange 构造一条变更（默认为工作日志）：schema 中的敏感字段自动加密。
 type worklogChange struct {
+	entity     string // 为空时为 worklog
 	id         string
 	fields     map[string]any // 明文；nil 值表示清空
 	clocks     map[string]string
@@ -79,22 +81,28 @@ type worklogChange struct {
 	deleted    bool
 }
 
-var sensitive = map[string]bool{"location": true, "content": true}
-
 func (c e2eClient) encode(ch worklogChange) map[string]any {
+	entity := ch.entity
+	if entity == "" {
+		entity = syncer.EntityWorklog
+	}
+	spec := syncer.Registry[entity].Fields
 	fields := map[string]any{}
 	for f, v := range ch.fields {
-		if s, ok := v.(string); ok && sensitive[f] {
-			fields[f] = c.seal("worklog", ch.id, f, e2e.KindValue, s)
+		if s, ok := v.(string); ok && spec[f].Sensitive {
+			fields[f] = c.seal(entity, ch.id, f, e2e.KindValue, s)
 			continue
 		}
 		fields[f] = v
 	}
 	patches := map[string]any{}
 	for f, p := range ch.patches {
-		patches[f] = c.seal("worklog", ch.id, f, e2e.KindPatch, p)
+		if spec[f].Sensitive {
+			p = c.seal(entity, ch.id, f, e2e.KindPatch, p)
+		}
+		patches[f] = p
 	}
-	out := map[string]any{"entity": "worklog", "id": ch.id, "fields": fields, "clocks": ch.clocks, "patches": patches}
+	out := map[string]any{"entity": entity, "id": ch.id, "fields": fields, "clocks": ch.clocks, "patches": patches}
 	if ch.baseClocks != nil {
 		out["baseClocks"] = ch.baseClocks
 	}

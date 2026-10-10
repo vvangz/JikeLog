@@ -878,7 +878,7 @@ export interface components {
             data: components["schemas"]["E2ESession"];
         };
         SyncChange: {
-            /** @description 实体类型，如 worklog */
+            /** @description 实体类型：worklog（工作日志）、note（笔记）、note_folder（笔记文件夹）、attachment（附件，只能删除）。字段定义见 ADR-005、ADR-007 */
             entity: string;
             /**
              * Format: uuid
@@ -1011,7 +1011,7 @@ export interface components {
              * @description 客户端生成的 UUIDv7，同时作为 attachment 同步记录的 ID
              */
             id: string;
-            /** @description 所属记录的实体类型，如 worklog */
+            /** @description 所属记录的实体类型，只能是 worklog 或 note */
             ownerEntity: string;
             /** Format: uuid */
             ownerId: string;
