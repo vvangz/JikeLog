@@ -2,12 +2,16 @@ package syncer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 
 	"github.com/vvangz/JikeLog/server/internal/dbgen"
 )
+
+// errIDTaken 表示插入时该 ID 已被其他账号并发占用。
+var errIDTaken = errors.New("记录 ID 已被占用")
 
 // persist 写入合并结果：分配序号、加密落库、保存修订，并生成该条变更的结果。
 func (w *writer) persist(ctx context.Context, e Entity, id uuid.UUID, row dbgen.Record, exists bool, out Outcome) (Result, error) {
@@ -58,10 +62,15 @@ func (w *writer) write(ctx context.Context, e Entity, id uuid.UUID, exists bool,
 	w.seq++
 	device := w.p.DeviceID
 	if !exists {
-		err = w.q.InsertRecord(ctx, dbgen.InsertRecordParams{
+		var n int64
+		n, err = w.q.InsertRecord(ctx, dbgen.InsertRecordParams{
 			ID: id, UserID: w.p.UserID, Entity: e.Name, ServerSeq: w.seq,
 			Fields: fields, Clocks: clocks, Absorbed: absorbed, Deleted: out.Next.Deleted, DeviceID: &device,
 		})
+		if err == nil && n == 0 {
+			w.seq-- // 未写入，序号不前进
+			return errIDTaken
+		}
 	} else {
 		err = w.q.UpdateRecord(ctx, dbgen.UpdateRecordParams{
 			ID: id, ServerSeq: w.seq, Fields: fields, Clocks: clocks, Absorbed: absorbed,

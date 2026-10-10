@@ -229,3 +229,28 @@ func TestWebSocketNotifiesOtherDevices(t *testing.T) {
 		t.Fatalf("changed=%+v", ev)
 	}
 }
+
+// 未完成的上传数有上限；超过 1 小时未完成的由清理任务释放，不再占用配额和名额。
+func TestAttachmentPendingLimitAndExpiry(t *testing.T) {
+	a := newTestApp(t)
+	d1, _ := a.twoDevices("attach04")
+	c1 := a.handshake(d1)
+	owner := a.newWorklog(d1, c1)
+	for range 20 {
+		a.expect(a.requestUpload(d1, c1, owner, newID(), "a.txt", []byte("x")), http.StatusCreated, "")
+	}
+	a.expect(a.requestUpload(d1, c1, owner, newID(), "a.txt", []byte("x")), http.StatusTooManyRequests, "RATE_LIMITED")
+
+	ctx := context.Background()
+	if _, err := a.pool.Exec(ctx, `UPDATE attachments SET created_at = now() - interval '2 hours'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.app.attachments.Cleanup(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	var left int
+	if err := a.pool.QueryRow(ctx, "SELECT count(*) FROM attachments").Scan(&left); err != nil || left != 0 {
+		t.Fatalf("过期的上传应被清理：left=%d err=%v", left, err)
+	}
+	a.expect(a.requestUpload(d1, c1, owner, newID(), "a.txt", []byte("x")), http.StatusCreated, "")
+}

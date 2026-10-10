@@ -31,6 +31,8 @@ type Change struct {
 	// BaseClocks 为客户端修改前最后一次从服务端拿到的字段时钟。
 	BaseClocks map[string]Clock
 	Patches    map[string][]textpatch.Hunk
+	// Budget 为补丁应用的计算量预算，同一请求内的变更共享；为 nil 时每次使用默认预算。
+	Budget *textpatch.Budget
 }
 
 // Status 为一条变更的处理结果。
@@ -122,20 +124,22 @@ func mergeFields(e Entity, cur *State, ch Change) Outcome {
 		cv, cc := ch.Fields[f], ch.Clocks[f]
 		sc := cur.Clocks[f]
 		switch {
-		case cc == sc || slices.Contains(cur.Absorbed[f], cc):
-			continue // 已处理过（重试）
-		case sc == ch.BaseClocks[f]:
-			// 服务端在此期间没改过这个字段：快进
-			next.Fields[f], next.Clocks[f] = cv, cc
-			delete(next.Absorbed, f)
+		case cc == sc:
+			continue // 已应用过（重试），客户端的值就是当前值
+		case slices.Contains(cur.Absorbed[f], cc):
+			// 曾被合并或在冲突中落败（重试）：返回服务端记录，让客户端以服务端为准
+			status = maxStatus(status, StatusMerged)
+			continue
+		case sc == ch.BaseClocks[f] && cc > sc:
+			// 服务端在此期间没改过这个字段：快进（时钟不能倒退）
+			overwrite(&next, f, cv, cc, sc)
 			edited = true
 		case e.Fields[f].Kind == KindText && len(ch.Patches[f]) > 0 && tryPatch(&next, e.Fields[f], f, cur, ch):
 			status = maxStatus(status, StatusMerged)
 			edited = true
 		case cc > sc:
 			// 最后修改覆盖：客户端胜出，服务端原值进入冲突快照
-			next.Fields[f], next.Clocks[f] = cv, cc
-			delete(next.Absorbed, f)
+			overwrite(&next, f, cv, cc, sc)
 			serverLost = true
 			edited = true
 			status = StatusConflict
@@ -160,7 +164,7 @@ func mergeFields(e Entity, cur *State, ch Change) Outcome {
 // tryPatch 把客户端补丁应用到服务端当前文本，成功时写入 next 并返回 true。
 func tryPatch(next *State, spec Field, f string, cur *State, ch Change) bool {
 	text, _ := cur.Fields[f].(string)
-	merged, ok := textpatch.Apply(text, ch.Patches[f])
+	merged, ok := textpatch.Apply(text, ch.Patches[f], ch.Budget)
 	if !ok || (spec.MaxLen > 0 && utf8.RuneCountInString(merged) > spec.MaxLen) {
 		return false
 	}
@@ -197,6 +201,13 @@ func validate(e Entity, cur *State, ch Change) error {
 			errs[f] = "不能为空"
 		}
 	}
+	for _, clocks := range []map[string]Clock{ch.Clocks, ch.BaseClocks} {
+		for f := range clocks {
+			if _, ok := e.Fields[f]; !ok {
+				errs[f] = "未知字段"
+			}
+		}
+	}
 	for f := range ch.Patches {
 		if spec, ok := e.Fields[f]; !ok || spec.Kind != KindText {
 			errs[f] = "该字段不支持补丁"
@@ -215,6 +226,14 @@ func validate(e Entity, cur *State, ch Change) error {
 		return errs
 	}
 	return nil
+}
+
+// overwrite 用客户端的值覆盖字段，并记住被覆盖值的时钟：写入那个值的设备重试推送时能被识别。
+func overwrite(s *State, f string, v Value, c, replaced Clock) {
+	s.Fields[f], s.Clocks[f] = v, c
+	if replaced != "" {
+		absorb(s, f, replaced)
+	}
 }
 
 func absorb(s *State, f string, c Clock) {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/dbgen"
+	"github.com/vvangz/JikeLog/server/internal/e2e"
 	"github.com/vvangz/JikeLog/server/internal/platform/db"
 	"github.com/vvangz/JikeLog/server/internal/platform/httpx"
 	"github.com/vvangz/JikeLog/server/internal/vault"
@@ -24,6 +25,8 @@ const (
 	MaxPullLimit = 500
 	// maxPullBytes 为单页记录字段的近似总字节数（存储格式），超过后提前结束本页。
 	maxPullBytes = 2 << 20
+	// pullBatchRows 为单次从数据库读取的最大行数。
+	pullBatchRows = 100
 )
 
 // 错误码。
@@ -51,19 +54,26 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, tr Transport, sinc
 	if since < 0 {
 		return Page{}, httpx.Validation(map[string]string{"since": "不能为负数"})
 	}
-	if limit <= 0 || limit > MaxPullLimit {
+	switch {
+	case limit <= 0:
 		limit = DefaultPullLimit
+	case limit > MaxPullLimit:
+		limit = MaxPullLimit
 	}
 	q := s.d.Tx.Queries()
-	rows, err := q.ListRecordsSince(ctx, dbgen.ListRecordsSinceParams{UserID: p.UserID, Since: since, MaxRows: int32(limit + 1)})
+	// 每次最多读取 pullBatchRows 行，避免长文本记录一次占用过多内存；剩余部分由 hasMore 继续拉取
+	rows, err := q.ListRecordsSince(ctx, dbgen.ListRecordsSinceParams{
+		UserID: p.UserID, Since: since, MaxRows: int32(min(limit, pullBatchRows) + 1),
+	})
 	if err != nil {
 		return Page{}, fmt.Errorf("拉取记录失败: %w", err)
 	}
 	page := Page{NextSince: since}
-	if len(rows) > limit {
-		rows, page.HasMore = rows[:limit], true
+	if len(rows) > min(limit, pullBatchRows) {
+		rows, page.HasMore = rows[:min(limit, pullBatchRows)], true
 	}
 	var key []byte
+	keyLoaded := false
 	bytes := 0
 	for i, row := range rows {
 		if i > 0 && bytes+len(row.Fields) > maxPullBytes {
@@ -71,22 +81,26 @@ func (s *Service) Pull(ctx context.Context, p auth.Principal, tr Transport, sinc
 			break
 		}
 		bytes += len(row.Fields)
+		page.NextSince = row.ServerSeq // 无论能否下发都推进游标，避免一条坏记录卡住同步
 		e, ok := Registry[row.Entity]
 		if !ok {
-			page.NextSince = row.ServerSeq // 已下线的实体类型：跳过但推进游标
-			continue
+			continue // 已下线的实体类型
 		}
-		if key == nil && !row.Deleted && hasSensitive(e) {
+		if !keyLoaded && !row.Deleted && hasSensitive(e) {
+			keyLoaded = true
 			if key, err = s.d.Keys.DataKey(ctx, q, p.UserID, false); err != nil && !errors.Is(err, vault.ErrNoKey) {
 				return Page{}, err
 			}
 		}
 		rec, err := s.recordFromRow(e, row, key, tr)
-		if err != nil {
+		if errors.Is(err, e2e.ErrSessionInvalid) {
 			return Page{}, err
 		}
+		if err != nil {
+			s.d.Logger.ErrorContext(ctx, "skip corrupt record in pull", "record_id", row.ID, "error", err)
+			continue
+		}
 		page.Records = append(page.Records, *rec)
-		page.NextSince = row.ServerSeq
 	}
 	return page, nil
 }

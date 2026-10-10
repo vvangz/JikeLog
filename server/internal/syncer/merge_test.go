@@ -304,3 +304,48 @@ func TestCloneDoesNotAlias(t *testing.T) {
 		t.Fatal("返回的状态不能与输入共享 map")
 	}
 }
+
+// A 推送成功但没收到响应，随后 B 快进覆盖了该字段；A 重试时应识别为已处理，而不是冲突或重复应用补丁。
+func TestRetryAfterAnotherDeviceOverwrote(t *testing.T) {
+	cur := serverState()
+	pushA := Change{
+		Fields: map[string]Value{"location": "A 的地点"}, Clocks: map[string]Clock{"location": c2},
+		BaseClocks: map[string]Clock{"location": c1},
+	}
+	afterA, _ := Merge(worklog, cur, pushA)
+	afterB, _ := Merge(worklog, &afterA.Next, Change{
+		Fields: map[string]Value{"location": "B 的地点"}, Clocks: map[string]Clock{"location": c3},
+		BaseClocks: map[string]Clock{"location": c2},
+	})
+	retry, err := Merge(worklog, &afterB.Next, pushA)
+	if err != nil || retry.Changed || len(retry.Losers) != 0 {
+		t.Fatalf("重试应为空操作：%+v err=%v", retry, err)
+	}
+	if retry.Status != StatusMerged || retry.Next.Fields["location"] != "B 的地点" {
+		t.Fatalf("应返回服务端记录让客户端以服务端为准：%+v", retry)
+	}
+}
+
+func TestFastForwardRejectsBackwardClock(t *testing.T) {
+	cur := serverState()
+	cur.Clocks["location"] = c3
+	out, err := Merge(worklog, cur, Change{
+		Fields: map[string]Value{"location": "旧时钟"}, Clocks: map[string]Clock{"location": c2},
+		BaseClocks: map[string]Clock{"location": c3},
+	})
+	if err != nil || out.Status != StatusConflict || out.Next.Fields["location"] != "公司" || out.Next.Clocks["location"] != c3 {
+		t.Fatalf("时钟倒退时不能快进：%+v err=%v", out, err)
+	}
+}
+
+func TestRejectsUnknownClockKeys(t *testing.T) {
+	cur := serverState()
+	cur.Deleted = true
+	_, err := Merge(worklog, cur, Change{
+		Fields: map[string]Value{}, Clocks: map[string]Clock{"x1": c2}, BaseClocks: map[string]Clock{"x2": c1},
+	})
+	var fe FieldErrors
+	if !errors.As(err, &fe) || fe["x1"] == "" || fe["x2"] == "" {
+		t.Fatalf("err=%v", err)
+	}
+}

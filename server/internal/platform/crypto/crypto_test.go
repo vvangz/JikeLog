@@ -71,16 +71,19 @@ func TestLocalKeyWrapper(t *testing.T) {
 		t.Fatal(err)
 	}
 	dek, _ := NewDataKey()
-	id, wrapped, err := w.Wrap(context.Background(), dek)
+	id, wrapped, err := w.Wrap(context.Background(), "user-1", dek)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := w.Unwrap(context.Background(), id, wrapped)
+	got, err := w.Unwrap(context.Background(), "user-1", id, wrapped)
 	if err != nil || !bytes.Equal(got, dek) {
 		t.Fatalf("err=%v", err)
 	}
-	if _, err := w.Unwrap(context.Background(), "local:other", wrapped); err == nil {
+	if _, err := w.Unwrap(context.Background(), "user-1", "local:other", wrapped); err == nil {
 		t.Fatal("主密钥标识不符应当报错")
+	}
+	if _, err := w.Unwrap(context.Background(), "user-2", id, wrapped); err == nil {
+		t.Fatal("挪到其他账号的数据密钥应当无法解开")
 	}
 	for _, bad := range []string{"not-base64!", base64.StdEncoding.EncodeToString([]byte("short"))} {
 		if _, err := NewLocalKeyWrapper(bad); err == nil {

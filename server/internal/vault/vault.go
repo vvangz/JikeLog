@@ -62,6 +62,7 @@ func (k *Keyring) DataKey(ctx context.Context, store KeyStore, userID uuid.UUID,
 		return key, nil
 	}
 	row, err := store.GetUserKey(ctx, userID)
+	created := false
 	if db.IsNotFound(err) {
 		if !create {
 			return nil, ErrNoKey
@@ -69,14 +70,19 @@ func (k *Keyring) DataKey(ctx context.Context, store KeyStore, userID uuid.UUID,
 		if row, err = k.create(ctx, store, userID); err != nil {
 			return nil, err
 		}
+		created = true
 	} else if err != nil {
 		return nil, fmt.Errorf("查询数据密钥失败: %w", err)
 	}
-	key, err := k.wrapper.Unwrap(ctx, row.KmsKeyID, row.Wrapped)
+	key, err := k.wrapper.Unwrap(ctx, userID.String(), row.KmsKeyID, row.Wrapped)
 	if err != nil {
 		return nil, fmt.Errorf("解包数据密钥失败: %w", err)
 	}
-	k.store(userID, key)
+	// 刚在事务内创建的密钥不缓存：事务若回滚，缓存中会留下一把从未保存的密钥，
+	// 之后用它加密的数据将永久无法解开。下次读取（事务已提交）时再缓存。
+	if !created {
+		k.store(userID, key)
+	}
 	return key, nil
 }
 
@@ -85,7 +91,7 @@ func (k *Keyring) create(ctx context.Context, store KeyStore, userID uuid.UUID) 
 	if err != nil {
 		return dbgen.UserKey{}, err
 	}
-	keyID, wrapped, err := k.wrapper.Wrap(ctx, dek)
+	keyID, wrapped, err := k.wrapper.Wrap(ctx, userID.String(), dek)
 	if err != nil {
 		return dbgen.UserKey{}, fmt.Errorf("包裹数据密钥失败: %w", err)
 	}

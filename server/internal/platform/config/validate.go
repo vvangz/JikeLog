@@ -169,8 +169,12 @@ func (c Config) validateCrypto() []error {
 	case c.IsDeployed() && c.E2E.PrivateKey == DevE2EPrivateKey:
 		errs = append(errs, errors.New("staging / production 环境不能使用示例中的 JIKELOG_E2E_PRIVATE_KEY"))
 	}
-	if c.E2E.PreviousPrivateKey != "" && !isKey32(c.E2E.PreviousPrivateKey) {
+	switch {
+	case c.E2E.PreviousPrivateKey == "":
+	case !isKey32(c.E2E.PreviousPrivateKey):
 		errs = append(errs, errors.New("JIKELOG_E2E_PREVIOUS_PRIVATE_KEY 必须是 base64 编码的 32 字节"))
+	case c.IsDeployed() && c.E2E.PreviousPrivateKey == DevE2EPrivateKey:
+		errs = append(errs, errors.New("staging / production 环境不能使用示例中的私钥作为 JIKELOG_E2E_PREVIOUS_PRIVATE_KEY"))
 	}
 	if !slices.Contains(validKMS, c.KMS.Provider) {
 		errs = append(errs, fmt.Errorf("JIKELOG_KMS_PROVIDER=%q 不合法，可选 %v", c.KMS.Provider, validKMS))

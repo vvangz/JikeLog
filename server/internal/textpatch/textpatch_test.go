@@ -34,7 +34,7 @@ func TestApplySharedCases(t *testing.T) {
 	}
 	for _, c := range file.Cases {
 		t.Run(c.Name, func(t *testing.T) {
-			got, ok := Apply(c.Current, c.Hunks)
+			got, ok := Apply(c.Current, c.Hunks, nil)
 			if c.Expected == nil {
 				if ok {
 					t.Fatalf("应当失败，却得到 %q", got)
@@ -51,7 +51,7 @@ func TestApplySharedCases(t *testing.T) {
 				t.Fatalf("得到 %q，期望 %q", got, *c.Expected)
 			}
 			// 应用到基准文本本身也必须成功（补丁自洽）
-			if _, ok := Apply(c.Base, c.Hunks); !ok && c.Name != "后一个片段不能落在前一个片段的修改之前" {
+			if _, ok := Apply(c.Base, c.Hunks, nil); !ok && c.Name != "后一个片段不能落在前一个片段的修改之前" {
 				t.Fatal("补丁无法应用到自己的基准文本")
 			}
 		})
@@ -59,7 +59,7 @@ func TestApplySharedCases(t *testing.T) {
 }
 
 func TestApplyEmptyPatchReturnsText(t *testing.T) {
-	got, ok := Apply("不变", nil)
+	got, ok := Apply("不变", nil, nil)
 	if !ok || got != "不变" {
 		t.Fatalf("got %q ok=%v", got, ok)
 	}
@@ -106,7 +106,7 @@ func TestApplyPathologicalInputIsFast(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if _, ok := Apply(text, hunks); ok {
+		if _, ok := Apply(text, hunks, nil); ok {
 			t.Error("不应匹配")
 		}
 	}()
@@ -121,5 +121,35 @@ func TestParseRejectsLongContext(t *testing.T) {
 	in := `[{"p":0,"b":"` + strings.Repeat("a", maxContext+1) + `","d":"","i":"x","a":""}]`
 	if _, err := Parse(in, 1<<20); err == nil {
 		t.Fatal("上下文过长应当报错")
+	}
+}
+
+// 只在提示位置前后 searchWindow 之内查找；更远的匹配视为对方改动过大，按冲突处理。
+func TestApplySearchesOnlyNearHint(t *testing.T) {
+	text := "目标" + strings.Repeat("x", searchWindow+10)
+	far := []Hunk{{Pos: searchWindow + 5, Del: "目标", Ins: "改"}}
+	if _, ok := Apply(text, far, nil); ok {
+		t.Fatal("超出搜索范围不应匹配")
+	}
+	near := []Hunk{{Pos: 3, Del: "目标", Ins: "改"}}
+	if got, ok := Apply(text, near, nil); !ok || !strings.HasPrefix(got, "改x") {
+		t.Fatalf("附近的匹配应成功：ok=%v", ok)
+	}
+}
+
+// 同一请求内的多次 Apply 共享预算，耗尽后一律失败。
+func TestApplyStopsWhenBudgetExhausted(t *testing.T) {
+	text := strings.Repeat("a", 1000) + "b"
+	hunks := []Hunk{{Pos: 1000, Del: "b", Ins: "c"}}
+	budget := NewBudget(5000)
+	_, ok1 := Apply(text, hunks, budget)
+	ok2 := true
+	for range 10 {
+		if _, ok2 = Apply(text, hunks, budget); !ok2 {
+			break
+		}
+	}
+	if !ok1 || ok2 {
+		t.Fatalf("第一次应成功、预算耗尽后应失败：ok1=%v ok2=%v", ok1, ok2)
 	}
 }

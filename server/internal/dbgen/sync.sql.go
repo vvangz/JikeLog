@@ -31,6 +31,30 @@ func (q *Queries) AckDevice(ctx context.Context, arg AckDeviceParams) (int64, er
 	return result.RowsAffected(), nil
 }
 
+const countPendingAttachments = `-- name: CountPendingAttachments :one
+SELECT count(*)::bigint AS n FROM attachments WHERE user_id = $1 AND status = 'pending'
+`
+
+func (q *Queries) CountPendingAttachments(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingAttachments, userID)
+	var n int64
+	err := row.Scan(&n)
+	return n, err
+}
+
+const expirePendingAttachments = `-- name: ExpirePendingAttachments :execrows
+UPDATE attachments SET status = 'deleted' WHERE status = 'pending' AND created_at < $1
+`
+
+// 申请后一直未完成的上传视为放弃，交给清理任务删除对象并释放配额。
+func (q *Queries) ExpirePendingAttachments(ctx context.Context, before time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, expirePendingAttachments, before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getAttachment = `-- name: GetAttachment :one
 SELECT id, user_id, owner_entity, owner_id, object_key, file_name, mime, size, sha256, status, created_at, completed_at FROM attachments WHERE id = $1 AND user_id = $2
 `
@@ -119,11 +143,17 @@ func (q *Queries) GetRecord(ctx context.Context, arg GetRecordParams) (Record, e
 }
 
 const getRecordForUpdate = `-- name: GetRecordForUpdate :one
-SELECT id, user_id, entity, version, server_seq, fields, clocks, absorbed, deleted, device_id, created_at, updated_at FROM records WHERE id = $1 FOR UPDATE
+SELECT id, user_id, entity, version, server_seq, fields, clocks, absorbed, deleted, device_id, created_at, updated_at FROM records WHERE id = $1 AND user_id = $2 FOR UPDATE
 `
 
-func (q *Queries) GetRecordForUpdate(ctx context.Context, id uuid.UUID) (Record, error) {
-	row := q.db.QueryRow(ctx, getRecordForUpdate, id)
+type GetRecordForUpdateParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+// 只锁当前账号的行，避免与其他账号产生锁等待。
+func (q *Queries) GetRecordForUpdate(ctx context.Context, arg GetRecordForUpdateParams) (Record, error) {
+	row := q.db.QueryRow(ctx, getRecordForUpdate, arg.ID, arg.UserID)
 	var i Record
 	err := row.Scan(
 		&i.ID,
@@ -227,9 +257,10 @@ func (q *Queries) InsertAttachment(ctx context.Context, arg InsertAttachmentPara
 	return err
 }
 
-const insertRecord = `-- name: InsertRecord :exec
+const insertRecord = `-- name: InsertRecord :execrows
 INSERT INTO records (id, user_id, entity, version, server_seq, fields, clocks, absorbed, deleted, device_id)
 VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (id) DO NOTHING
 `
 
 type InsertRecordParams struct {
@@ -244,8 +275,9 @@ type InsertRecordParams struct {
 	DeviceID  *uuid.UUID
 }
 
-func (q *Queries) InsertRecord(ctx context.Context, arg InsertRecordParams) error {
-	_, err := q.db.Exec(ctx, insertRecord,
+// 两个账号并发插入同一 ID 时，后到者影响 0 行，由调用方报告 ID 冲突。
+func (q *Queries) InsertRecord(ctx context.Context, arg InsertRecordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertRecord,
 		arg.ID,
 		arg.UserID,
 		arg.Entity,
@@ -256,7 +288,10 @@ func (q *Queries) InsertRecord(ctx context.Context, arg InsertRecordParams) erro
 		arg.Deleted,
 		arg.DeviceID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertRevision = `-- name: InsertRevision :exec
@@ -496,6 +531,18 @@ DELETE FROM attachments WHERE id = $1 AND status = 'deleted'
 func (q *Queries) PurgeAttachment(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, purgeAttachment, id)
 	return err
+}
+
+const recordIDTaken = `-- name: RecordIDTaken :one
+SELECT EXISTS (SELECT 1 FROM records WHERE id = $1)::boolean AS taken
+`
+
+// ID 是否已被使用（任意账号）。不加锁，只用于判断 ID 冲突。
+func (q *Queries) RecordIDTaken(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, recordIDTaken, id)
+	var taken bool
+	err := row.Scan(&taken)
+	return taken, err
 }
 
 const setSyncCursor = `-- name: SetSyncCursor :exec

@@ -38,8 +38,12 @@ const (
 )
 
 const (
-	uploadTTL   = 15 * time.Minute
-	downloadTTL = 10 * time.Minute
+	// maxPending 为每个账号同时存在的未完成上传数上限。
+	maxPending = 20
+	// pendingExpiry 后仍未完成的上传视为放弃，由清理任务删除并释放配额。
+	pendingExpiry = time.Hour
+	uploadTTL     = 15 * time.Minute
+	downloadTTL   = 10 * time.Minute
 	// 文件名字段的落库 AAD 与 attachment 同步记录一致，便于复用同一密文。
 	fieldFileName = "fileName"
 )
@@ -167,10 +171,21 @@ func (s *Service) register(ctx context.Context, q *dbgen.Queries, p auth.Princip
 	if err != nil {
 		return fmt.Errorf("查询所属记录失败: %w", err)
 	}
-	if _, err := q.GetRecordForUpdate(ctx, r.ID); err == nil {
-		return errIDConflict // 已被其他记录或其他账号占用
-	} else if !db.IsNotFound(err) {
+	if taken, err := q.RecordIDTaken(ctx, r.ID); err != nil {
 		return fmt.Errorf("查询记录失败: %w", err)
+	} else if taken {
+		return errIDConflict // 已被其他记录或其他账号占用
+	}
+	// 锁住账号的同步游标：同一账号的并发申请串行检查配额，不能合计超出
+	if _, err := q.LockSyncCursor(ctx, p.UserID); err != nil {
+		return fmt.Errorf("锁定账号失败: %w", err)
+	}
+	pending, err := q.CountPendingAttachments(ctx, p.UserID)
+	if err != nil {
+		return fmt.Errorf("统计待上传附件失败: %w", err)
+	}
+	if pending >= maxPending {
+		return httpx.TooManyRequests(httpx.CodeRateLimited, "待上传的附件过多，请等上传完成后再添加", uploadTTL)
 	}
 	used, err := q.SumAttachmentBytes(ctx, p.UserID)
 	if err != nil {
@@ -198,9 +213,27 @@ func (s *Service) register(ctx context.Context, q *dbgen.Queries, p auth.Princip
 
 // Complete 核对对象大小，标记为可用并生成 attachment 同步记录，返回同步序号。重复调用是幂等的。
 func (s *Service) Complete(ctx context.Context, p auth.Principal, id uuid.UUID) (int64, error) {
+	// 先在事务外查询对象大小：访问对象存储较慢，不能在持有账号锁时进行
+	pre, err := s.d.Tx.Queries().GetAttachment(ctx, dbgen.GetAttachmentParams{ID: id, UserID: p.UserID})
+	if db.IsNotFound(err) || (err == nil && pre.Status == "deleted") {
+		return 0, errNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("查询附件失败: %w", err)
+	}
+	uploaded := pre.Status == "ready"
+	if !uploaded {
+		size, err := s.d.Store.Size(ctx, pre.ObjectKey)
+		if err != nil && !errors.Is(err, storage.ErrNotFound) {
+			return 0, err
+		}
+		if err != nil || size != pre.Size {
+			return 0, errIncomplete
+		}
+	}
 	var seq int64
 	created := false
-	err := s.d.Tx.InTx(ctx, func(q *dbgen.Queries) error {
+	err = s.d.Tx.InTx(ctx, func(q *dbgen.Queries) error {
 		a, err := q.GetAttachmentForUpdate(ctx, dbgen.GetAttachmentForUpdateParams{ID: id, UserID: p.UserID})
 		if db.IsNotFound(err) || (err == nil && a.Status == "deleted") {
 			return errNotFound
@@ -211,13 +244,6 @@ func (s *Service) Complete(ctx context.Context, p auth.Principal, id uuid.UUID) 
 		if a.Status == "ready" {
 			seq, err = q.GetSyncCursor(ctx, p.UserID)
 			return err
-		}
-		size, err := s.d.Store.Size(ctx, a.ObjectKey)
-		if err != nil || size != a.Size {
-			if err != nil && !errors.Is(err, storage.ErrNotFound) {
-				return err
-			}
-			return errIncomplete
 		}
 		if seq, err = s.writeRecord(ctx, q, p, a); err != nil {
 			return err
@@ -273,6 +299,9 @@ func (s *Service) Usage(ctx context.Context, p auth.Principal) (used, quota, max
 // Cleanup 删除已标记删除的附件对象，返回清理数量。由后台定时调用。
 func (s *Service) Cleanup(ctx context.Context, batch int32) (int, error) {
 	q := s.d.Tx.Queries()
+	if _, err := q.ExpirePendingAttachments(ctx, time.Now().Add(-pendingExpiry)); err != nil {
+		return 0, fmt.Errorf("清理过期的未完成上传失败: %w", err)
+	}
 	rows, err := q.ListDeletedAttachments(ctx, batch)
 	if err != nil {
 		return 0, fmt.Errorf("查询待清理附件失败: %w", err)

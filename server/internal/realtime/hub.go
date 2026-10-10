@@ -22,6 +22,9 @@ import (
 
 const channelPrefix = cache.KeyPrefix + "sync:user:"
 
+// publishTimeout 为发布通知的超时：写入已提交，Redis 卡住时不能拖住请求的响应。
+const publishTimeout = 2 * time.Second
+
 // Event 为下发给客户端的消息。
 type Event struct {
 	Type string `json:"type"`
@@ -37,7 +40,8 @@ const (
 )
 
 type message struct {
-	Seq    int64     `json:"seq"`
+	Seq int64 `json:"seq"`
+	// Origin 为 uuid.Nil 时表示来源不确定（合并了多台设备的通知，或订阅断线后补发），所有设备都应拉取。
 	Origin uuid.UUID `json:"origin"`
 }
 
@@ -61,15 +65,17 @@ func NewHub(rdb *redis.Client, logger *slog.Logger) *Hub {
 // Publish 实现 syncer.Notifier：发布失败只记录日志（客户端会在其他时机拉取）。
 func (h *Hub) Publish(ctx context.Context, userID uuid.UUID, seq int64, origin uuid.UUID) {
 	raw, _ := json.Marshal(message{Seq: seq, Origin: origin})
-	if err := h.rdb.Publish(context.WithoutCancel(ctx), channelPrefix+userID.String(), raw).Err(); err != nil {
+	pctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), publishTimeout)
+	defer cancel()
+	if err := h.rdb.Publish(pctx, channelPrefix+userID.String(), raw).Err(); err != nil {
 		h.logger.WarnContext(ctx, "publish sync notification failed", "error", err)
 	}
 }
 
 // Run 订阅所有账号的通知并分发给本实例的连接，直到 ctx 取消。断线后自动重连。
 func (h *Hub) Run(ctx context.Context) {
-	for ctx.Err() == nil {
-		h.subscribe(ctx)
+	for first := true; ctx.Err() == nil; first = false {
+		h.subscribe(ctx, !first)
 		select {
 		case <-ctx.Done():
 		case <-time.After(time.Second):
@@ -77,7 +83,9 @@ func (h *Hub) Run(ctx context.Context) {
 	}
 }
 
-func (h *Hub) subscribe(ctx context.Context) {
+// subscribe 订阅直到断线。resync 为 true 时（重新订阅），订阅成功后通知所有连接拉取一次，
+// 补上断线期间可能漏掉的通知。
+func (h *Hub) subscribe(ctx context.Context, resync bool) {
 	ps := h.rdb.PSubscribe(ctx, channelPrefix+"*")
 	defer func() { _ = ps.Close() }()
 	if _, err := ps.Receive(ctx); err != nil {
@@ -86,7 +94,11 @@ func (h *Hub) subscribe(ctx context.Context) {
 		}
 		return
 	}
-	ch := ps.Channel()
+	if resync {
+		h.notifyAll()
+	}
+	// go-redis 断线后会自动重新订阅，并送出新的订阅确认：此时同样补发一次
+	ch := ps.ChannelWithSubscriptions()
 	for {
 		select {
 		case <-ctx.Done():
@@ -95,7 +107,12 @@ func (h *Hub) subscribe(ctx context.Context) {
 			if !ok {
 				return
 			}
-			h.dispatch(m.Channel, m.Payload)
+			switch m := m.(type) {
+			case *redis.Message:
+				h.dispatch(m.Channel, m.Payload)
+			case *redis.Subscription:
+				h.notifyAll()
+			}
 		}
 	}
 }
@@ -113,6 +130,17 @@ func (h *Hub) dispatch(channel, payload string) {
 	defer h.mu.RUnlock()
 	for sub := range h.conns[userID] {
 		sub.notify(m)
+	}
+}
+
+// notifyAll 通知本实例的所有连接拉取（来源不确定）。
+func (h *Hub) notifyAll() {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, set := range h.conns {
+		for sub := range set {
+			sub.notify(message{})
+		}
 	}
 }
 
@@ -147,6 +175,7 @@ func (h *Hub) remove(userID uuid.UUID, sub *subscriber) {
 }
 
 // subscriber 为一个连接的待发送状态：只保留最新的序号，连续的通知自动合并。
+// 合并了不同设备的通知时清除来源，否则其他设备的修改会被当成本设备的通知而忽略。
 type subscriber struct {
 	mu      sync.Mutex
 	pending *message
@@ -157,9 +186,13 @@ func newSubscriber() *subscriber { return &subscriber{signal: make(chan struct{}
 
 func (s *subscriber) notify(m message) {
 	s.mu.Lock()
-	if s.pending == nil || m.Seq >= s.pending.Seq {
-		s.pending = &m
+	if s.pending != nil {
+		if s.pending.Origin != m.Origin {
+			m.Origin = uuid.Nil
+		}
+		m.Seq = max(m.Seq, s.pending.Seq)
 	}
+	s.pending = &m
 	s.mu.Unlock()
 	select {
 	case s.signal <- struct{}{}:

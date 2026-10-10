@@ -21,6 +21,7 @@ import (
 
 	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/platform/httpx"
+	"github.com/vvangz/JikeLog/server/internal/platform/ratelimit"
 )
 
 type checker struct{ err atomic.Pointer[error] }
@@ -134,6 +135,80 @@ func TestSubscriberCoalesces(t *testing.T) {
 	}
 	if _, ok := s.take(); ok {
 		t.Fatal("取出后应为空")
+	}
+}
+
+// 合并了不同设备的通知时清除来源，否则设备 B 会把包含 A 修改的通知当成自己的而忽略。
+func TestSubscriberCoalescingClearsMixedOrigin(t *testing.T) {
+	a, b := uuid.New(), uuid.New()
+	s := newSubscriber()
+	s.notify(message{Seq: 5, Origin: a})
+	s.notify(message{Seq: 6, Origin: b})
+	if m, _ := s.take(); m.Seq != 6 || m.Origin != uuid.Nil {
+		t.Fatalf("m=%+v", m)
+	}
+	s.notify(message{Seq: 7, Origin: b})
+	s.notify(message{Seq: 8, Origin: b})
+	if m, _ := s.take(); m.Seq != 8 || m.Origin != b {
+		t.Fatalf("同一来源应保留：%+v", m)
+	}
+}
+
+func TestMergedNotificationHasNoOrigin(t *testing.T) {
+	f := newFixture(t, Options{})
+	conn := f.dial(t)
+	read(t, conn)
+	waitFor(t, func() bool { f.hub.mu.RLock(); defer f.hub.mu.RUnlock(); return len(f.hub.conns[f.user]) == 1 })
+	// 直接投递到订阅者，模拟连接写出前积压了两台设备的通知
+	f.hub.mu.RLock()
+	for sub := range f.hub.conns[f.user] {
+		sub.mu.Lock()
+		sub.pending = &message{Seq: 3, Origin: uuid.New()}
+		sub.mu.Unlock()
+		sub.notify(message{Seq: 4, Origin: uuid.New()})
+	}
+	f.hub.mu.RUnlock()
+	if ev := read(t, conn); ev.Type != EventChanged || ev.Seq != 4 || ev.Origin != nil {
+		t.Fatalf("ev=%+v", ev)
+	}
+}
+
+// Redis 断线重连后通知所有连接拉取一次，补上断线期间漏掉的通知。
+func TestResubscribeNotifiesAll(t *testing.T) {
+	f := newFixture(t, Options{})
+	conn := f.dial(t)
+	read(t, conn)
+	f.mr.Close()
+	if err := f.mr.Restart(); err != nil {
+		t.Fatal(err)
+	}
+	if ev := read(t, conn); ev.Type != EventChanged || ev.Origin != nil {
+		t.Fatalf("ev=%+v", ev)
+	}
+}
+
+func TestHandshakeRateLimited(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	f := newFixture(t, Options{Limiter: ratelimit.New(rdb)})
+	device := uuid.New()
+	r := gin.New()
+	r.GET("/ws", func(c *gin.Context) {
+		c.Request = c.Request.WithContext(auth.WithPrincipal(c.Request.Context(), auth.Principal{UserID: f.user, DeviceID: device}))
+	}, f.hub.Handler(Options{Check: f.check, Limiter: ratelimit.New(rdb), Cursor: func(context.Context, uuid.UUID) (int64, error) {
+		return 0, errors.New("db down") // 不升级，只看限流
+	}}))
+	for i := range handshakesPerHour + 1 {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/ws", nil))
+		want := http.StatusInternalServerError
+		if i == handshakesPerHour {
+			want = http.StatusTooManyRequests
+		}
+		if w.Code != want {
+			t.Fatalf("第 %d 次 code=%d", i+1, w.Code)
+		}
 	}
 }
 

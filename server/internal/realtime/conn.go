@@ -13,6 +13,7 @@ import (
 
 	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/platform/httpx"
+	"github.com/vvangz/JikeLog/server/internal/platform/ratelimit"
 )
 
 // 自定义关闭码。
@@ -36,12 +37,19 @@ type CursorFunc func(ctx context.Context, userID uuid.UUID) (int64, error)
 type Options struct {
 	Check  SessionChecker
 	Cursor CursorFunc
+	// Limiter 限制每台设备的握手频率；为空时不限制（测试）。
+	Limiter *ratelimit.Limiter
 	// PingInterval 与 CheckInterval 为空时分别使用 30 秒与 1 分钟。
 	PingInterval  time.Duration
 	CheckInterval time.Duration
 }
 
-const writeTimeout = 10 * time.Second
+const (
+	writeTimeout = 10 * time.Second
+	checkTimeout = 10 * time.Second
+	// handshakesPerHour 为每台设备每小时的握手次数上限（客户端断线重连有退避，回到前台才重新连接）。
+	handshakesPerHour = 120
+)
 
 // Handler 返回 WebSocket 处理器。路由需经过认证中间件。
 func (h *Hub) Handler(o Options) gin.HandlerFunc {
@@ -57,8 +65,7 @@ func (h *Hub) Handler(o Options) gin.HandlerFunc {
 			httpx.WriteError(c, err)
 			return
 		}
-		seq, err := o.Cursor(c, p.UserID)
-		if err != nil {
+		if err := limitHandshake(c.Request.Context(), o.Limiter, p); err != nil {
 			httpx.WriteError(c, err)
 			return
 		}
@@ -68,6 +75,12 @@ func (h *Hub) Handler(o Options) gin.HandlerFunc {
 			return
 		}
 		defer h.remove(p.UserID, sub)
+		// 先登记连接再读序号：两者之间提交的写入会作为通知送达，不会漏掉
+		seq, err := o.Cursor(c.Request.Context(), p.UserID)
+		if err != nil {
+			httpx.WriteError(c, err)
+			return
+		}
 		// 升级后的连接会沿用 HTTP 服务器的读写超时，长连接必须清除
 		rc := http.NewResponseController(c.Writer)
 		_ = rc.SetReadDeadline(time.Time{})
@@ -99,8 +112,11 @@ func (h *Hub) serve(ctx context.Context, conn *websocket.Conn, p auth.Principal,
 			return
 		case <-sub.signal:
 			if m, ok := sub.take(); ok {
-				origin := m.Origin
-				if !h.send(ctx, conn, Event{Type: EventChanged, Seq: m.Seq, Origin: &origin}) {
+				ev := Event{Type: EventChanged, Seq: m.Seq}
+				if m.Origin != uuid.Nil {
+					ev.Origin = &m.Origin
+				}
+				if !h.send(ctx, conn, ev) {
 					return
 				}
 			}
@@ -112,7 +128,10 @@ func (h *Hub) serve(ctx context.Context, conn *websocket.Conn, p auth.Principal,
 				return
 			}
 		case <-check.C:
-			if revoked(o.Check.CheckSession(ctx, p)) {
+			cctx, cancel := context.WithTimeout(ctx, checkTimeout)
+			err := o.Check.CheckSession(cctx, p)
+			cancel()
+			if revoked(err) {
 				_ = conn.Close(CloseSessionRevoked, "session revoked")
 				return
 			}
@@ -124,6 +143,20 @@ func (h *Hub) send(ctx context.Context, conn *websocket.Conn, ev Event) bool {
 	wctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
 	return wsjson.Write(wctx, conn, ev) == nil
+}
+
+func limitHandshake(ctx context.Context, l *ratelimit.Limiter, p auth.Principal) error {
+	if l == nil {
+		return nil
+	}
+	r, err := l.Hit(ctx, "ws:dev:"+p.DeviceID.String(), handshakesPerHour, time.Hour)
+	if err != nil {
+		return err
+	}
+	if !r.Allowed {
+		return httpx.TooManyRequests(httpx.CodeRateLimited, "连接过于频繁，请稍后再试", r.RetryAfter)
+	}
+	return nil
 }
 
 // revoked 只在会话确实失效（401）时断开；数据库暂时不可用时保持连接。

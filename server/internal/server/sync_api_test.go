@@ -285,3 +285,42 @@ func TestSyncAck(t *testing.T) {
 		t.Fatalf("acked=%d", acked)
 	}
 }
+
+// 一条无法解析的记录不能卡住整个账号的同步：拉取跳过它并推进游标，推送只拒绝这一条。
+func TestSyncCorruptRecordDoesNotBlockSync(t *testing.T) {
+	a := newTestApp(t)
+	d1, _ := a.twoDevices("syncer09")
+	c1 := a.handshake(d1)
+	bad, good := a.newWorklog(d1, c1), a.newWorklog(d1, c1)
+	if _, err := a.pool.Exec(context.Background(), `UPDATE records SET fields = '{"content":"not-ciphertext"}' WHERE id = $1`, bad); err != nil {
+		t.Fatal(err)
+	}
+	p := a.pull(d1, c1, 0)
+	a.expect(p, http.StatusOK, "")
+	if recs := p.records(); len(recs) != 1 || recs[0]["id"] != good || num(p.data(), "nextSince") != 2 {
+		t.Fatalf("应跳过损坏的记录并推进游标：%v", p.data())
+	}
+	r := a.push(d1, c1,
+		c1.encode(worklogChange{id: bad, fields: map[string]any{"content": "x"}, clocks: map[string]string{"content": a.hlc(1, nodeA)}}),
+		c1.encode(worklogChange{id: good, fields: map[string]any{"content": "y"}, clocks: map[string]string{"content": a.hlc(1, nodeA)}}),
+	)
+	a.expect(r, http.StatusOK, "")
+	res := r.results()
+	if res[0]["status"] != "rejected" || res[0]["error"].(map[string]any)["code"] != "RECORD_CORRUPT" || res[1]["status"] != "applied" {
+		t.Fatalf("results=%v", res)
+	}
+}
+
+func TestSyncPushRateLimited(t *testing.T) {
+	a := newTestApp(t)
+	d1, _ := a.twoDevices("syncer10")
+	c1 := a.handshake(d1)
+	for range 120 {
+		a.expect(a.push(d1, c1), http.StatusOK, "")
+	}
+	r := a.push(d1, c1)
+	a.expect(r, http.StatusTooManyRequests, "RATE_LIMITED")
+	if r.Header.Get("Retry-After") == "" {
+		t.Fatal("应返回 Retry-After")
+	}
+}

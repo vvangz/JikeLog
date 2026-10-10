@@ -64,10 +64,12 @@ func TestDataKeyCreatesOnceAndCaches(t *testing.T) {
 	if err != nil || len(k1) != crypto.KeySize {
 		t.Fatalf("err=%v", err)
 	}
-	gets := store.gets
+	// 新建的密钥不缓存（事务可能回滚），第二次从存储读取后才缓存
 	k2, _ := kr.DataKey(ctx, store, user, true)
-	if !bytes.Equal(k1, k2) || store.gets != gets || store.inserts != 1 {
-		t.Fatalf("第二次应命中缓存：gets=%d inserts=%d", store.gets, store.inserts)
+	gets := store.gets
+	k2b, _ := kr.DataKey(ctx, store, user, true)
+	if !bytes.Equal(k1, k2) || !bytes.Equal(k2, k2b) || store.gets != gets || store.inserts != 1 {
+		t.Fatalf("第三次应命中缓存：gets=%d inserts=%d", store.gets, store.inserts)
 	}
 
 	// 缓存过期后从存储读取，得到同一把密钥
@@ -85,6 +87,9 @@ func TestDataKeyCacheExpiresAndForget(t *testing.T) {
 	kr := newKeyring(t, func() time.Time { return now })
 	user := uuid.New()
 	if _, err := kr.DataKey(ctx, store, user, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := kr.DataKey(ctx, store, user, false); err != nil {
 		t.Fatal(err)
 	}
 	gets := store.gets

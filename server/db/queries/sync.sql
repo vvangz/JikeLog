@@ -13,11 +13,18 @@ UPDATE sync_cursors SET last_seq = @last_seq WHERE user_id = @user_id;
 SELECT COALESCE((SELECT last_seq FROM sync_cursors WHERE user_id = @user_id), 0)::bigint AS last_seq;
 
 -- name: GetRecordForUpdate :one
-SELECT * FROM records WHERE id = @id FOR UPDATE;
+-- 只锁当前账号的行，避免与其他账号产生锁等待。
+SELECT * FROM records WHERE id = @id AND user_id = @user_id FOR UPDATE;
 
--- name: InsertRecord :exec
+-- name: RecordIDTaken :one
+-- ID 是否已被使用（任意账号）。不加锁，只用于判断 ID 冲突。
+SELECT EXISTS (SELECT 1 FROM records WHERE id = @id)::boolean AS taken;
+
+-- name: InsertRecord :execrows
+-- 两个账号并发插入同一 ID 时，后到者影响 0 行，由调用方报告 ID 冲突。
 INSERT INTO records (id, user_id, entity, version, server_seq, fields, clocks, absorbed, deleted, device_id)
-VALUES (@id, @user_id, @entity, 1, @server_seq, @fields, @clocks, @absorbed, @deleted, sqlc.narg(device_id));
+VALUES (@id, @user_id, @entity, 1, @server_seq, @fields, @clocks, @absorbed, @deleted, sqlc.narg(device_id))
+ON CONFLICT (id) DO NOTHING;
 
 -- name: UpdateRecord :exec
 UPDATE records
@@ -87,6 +94,13 @@ UPDATE attachments SET status = 'deleted' WHERE id = @id AND user_id = @user_id;
 
 -- name: SumAttachmentBytes :one
 SELECT COALESCE(SUM(size), 0)::bigint AS total FROM attachments WHERE user_id = @user_id AND status <> 'deleted';
+
+-- name: CountPendingAttachments :one
+SELECT count(*)::bigint AS n FROM attachments WHERE user_id = @user_id AND status = 'pending';
+
+-- name: ExpirePendingAttachments :execrows
+-- 申请后一直未完成的上传视为放弃，交给清理任务删除对象并释放配额。
+UPDATE attachments SET status = 'deleted' WHERE status = 'pending' AND created_at < @before;
 
 -- name: ListDeletedAttachments :many
 SELECT id, object_key FROM attachments WHERE status = 'deleted' ORDER BY created_at LIMIT @max_rows;

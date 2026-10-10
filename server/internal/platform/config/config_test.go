@@ -165,6 +165,7 @@ func TestLoadFromRejectsInvalidValues(t *testing.T) {
 		{"缺少本地主密钥", map[string]string{"JIKELOG_KMS_LOCAL_MASTER_KEY": ""}},
 		{"本地主密钥格式错误", map[string]string{"JIKELOG_KMS_LOCAL_MASTER_KEY": "short"}},
 		{"生产环境使用示例传输私钥", prod(map[string]string{"JIKELOG_E2E_PRIVATE_KEY": DevE2EPrivateKey})},
+		{"生产环境以示例私钥作为旧传输私钥", prod(map[string]string{"JIKELOG_E2E_PREVIOUS_PRIVATE_KEY": DevE2EPrivateKey})},
 		{"生产环境使用示例主密钥", prod(map[string]string{"JIKELOG_KMS_LOCAL_MASTER_KEY": DevKMSMasterKey})},
 		{"缺少对象存储地址", map[string]string{"JIKELOG_STORAGE_ENDPOINT": ""}},
 		{"对象存储地址协议错误", map[string]string{"JIKELOG_STORAGE_ENDPOINT": "ftp://h:9000"}},

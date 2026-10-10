@@ -57,8 +57,33 @@ func Parse(s string, maxRunes int) ([]Hunk, error) {
 	return hunks, nil
 }
 
-// Apply 把补丁依次应用到 text 上。任一片段找不到匹配位置（对方改了同一处）时返回原文和 false。
-func Apply(text string, hunks []Hunk) (string, bool) {
+// 搜索范围与计算量限制：防止构造的补丁（大量重叠匹配、超长片段）消耗 CPU。
+const (
+	// searchWindow 为在提示位置前后查找匹配的范围（码点）。超出范围视为对方改动过大，按冲突处理。
+	searchWindow = 10_000
+	// maxCandidates 为每个片段最多检查的匹配位置数。
+	maxCandidates = 32
+	// DefaultBudget 为未指定预算时单次 Apply 可扫描的字节数。
+	DefaultBudget = 20 << 20
+)
+
+// Budget 为补丁应用的计算量预算（扫描的字节数），可在一次请求的多次 Apply 之间共享。
+type Budget struct{ left int }
+
+// NewBudget 创建预算。
+func NewBudget(bytes int) *Budget { return &Budget{left: bytes} }
+
+func (b *Budget) spend(n int) bool {
+	b.left -= n
+	return b.left >= 0
+}
+
+// Apply 把补丁依次应用到 text 上。任一片段找不到匹配位置（对方改了同一处）或计算量超出预算时，
+// 返回原文和 false（调用方按冲突处理）。budget 为 nil 时使用 DefaultBudget。
+func Apply(text string, hunks []Hunk, budget *Budget) (string, bool) {
+	if budget == nil {
+		budget = NewBudget(DefaultBudget)
+	}
 	out := text
 	delta := 0   // 已应用片段造成的长度变化（码点），用于修正后续片段的提示位置
 	minDel := 0  // 后续片段的删除起点不能早于上一个片段插入内容的末尾
@@ -69,13 +94,16 @@ func Apply(text string, hunks []Hunk) (string, bool) {
 		}
 		lastPos = h.Pos
 		nb := utf8.RuneCountInString(h.Before)
-		start := nearestMatch(out, h.Before+h.Del+h.After, h.Pos+delta-nb, minDel-nb)
+		start := nearestMatch(out, h.Before+h.Del+h.After, h.Pos+delta-nb, minDel-nb, budget)
 		if start < 0 {
 			return text, false
 		}
 		delStart := start + nb
 		nd, ni := utf8.RuneCountInString(h.Del), utf8.RuneCountInString(h.Ins)
 		bs := byteOffset(out, delStart)
+		if !budget.spend(len(out) + len(h.Ins)) { // 拼接新文本的代价
+			return text, false
+		}
 		out = out[:bs] + h.Ins + out[bs+len(h.Del):]
 		delta += ni - nd
 		minDel = delStart + ni
@@ -83,18 +111,30 @@ func Apply(text string, hunks []Hunk) (string, bool) {
 	return out, true
 }
 
-// nearestMatch 在 s 中查找 target，返回起点（码点）不小于 lowest 且离 expected 最近的位置；没有时返回 -1。
-// 用 strings.Index 逐个查找出现位置，总代价与文本长度线性相关。
-func nearestMatch(s, target string, expected, lowest int) int {
-	lowest = max(lowest, 0)
-	pos := byteOffset(s, lowest) // 当前搜索起点（字节）
+// nearestMatch 在 s 中查找 target，返回起点（码点）不小于 lowest、位于 expected 前后 searchWindow 之内、
+// 且离 expected 最近的位置；没有或超出预算时返回 -1。
+func nearestMatch(s, target string, expected, lowest int, budget *Budget) int {
+	from := max(lowest, expected-searchWindow, 0)
+	pos := byteOffset(s, from) // 当前搜索起点（字节）
 	if pos < 0 {
 		return -1
 	}
-	runeAt := lowest // pos 对应的码点位置
+	// 搜索区域的末尾：expected + searchWindow 之后再留出 target 的长度
+	limit := byteOffset(s, expected+searchWindow)
+	if limit < 0 {
+		limit = len(s)
+	}
+	limit = min(len(s), limit+len(target))
+	if !budget.spend(limit) { // 码点到字节的换算需要扫描到 limit
+		return -1
+	}
+	runeAt := from // pos 对应的码点位置
 	best := -1
-	for pos <= len(s) {
-		i := strings.Index(s[pos:], target)
+	for candidates := 0; pos <= limit && candidates < maxCandidates; candidates++ {
+		if !budget.spend(limit - pos + len(target)) {
+			return -1
+		}
+		i := strings.Index(s[pos:limit], target)
 		if i < 0 {
 			break
 		}

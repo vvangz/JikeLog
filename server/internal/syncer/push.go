@@ -14,6 +14,8 @@ import (
 	"github.com/vvangz/JikeLog/server/internal/dbgen"
 	"github.com/vvangz/JikeLog/server/internal/platform/db"
 	"github.com/vvangz/JikeLog/server/internal/platform/httpx"
+	"github.com/vvangz/JikeLog/server/internal/platform/ratelimit"
+	"github.com/vvangz/JikeLog/server/internal/textpatch"
 	"github.com/vvangz/JikeLog/server/internal/vault"
 )
 
@@ -24,7 +26,14 @@ const (
 	editRevisionGap = 10 * time.Minute
 	// maxRevisionsPerRecord 为每条记录保留的修订数。
 	maxRevisionsPerRecord = 50
+	// pushPerMinute 为每个账号每分钟的推送次数上限（正常客户端有 2 秒防抖）。
+	pushPerMinute = 120
+	// pushPatchBudget 为一次推送中应用文本补丁可扫描的总字节数，防止构造的补丁长时间占用账号锁。
+	pushPatchBudget = 64 << 20
 )
+
+// CodeRecordCorrupt 表示服务端存储的记录无法解析（已记录日志），该条变更被拒绝。
+const CodeRecordCorrupt = "RECORD_CORRUPT"
 
 // 修订原因。
 const (
@@ -43,7 +52,9 @@ type Deps struct {
 	Tx       db.TxRunner
 	Keys     *vault.Keyring
 	Notifier Notifier
-	Logger   *slog.Logger
+	// Limiter 为空时不限制推送频率（测试）。
+	Limiter *ratelimit.Limiter
+	Logger  *slog.Logger
 	// Now 为空时使用 time.Now。
 	Now func() time.Time
 }
@@ -84,9 +95,13 @@ func (s *Service) Push(ctx context.Context, p auth.Principal, tr Transport, in [
 	if len(in) > MaxPushChanges {
 		return nil, 0, httpx.Validation(map[string]string{"changes": fmt.Sprintf("单次最多推送 %d 条变更", MaxPushChanges)})
 	}
+	if err := s.limit(ctx, p); err != nil {
+		return nil, 0, err
+	}
 	results := make([]Result, len(in))
 	var valid []decoded
 	now := s.d.Now()
+	budget := textpatch.NewBudget(pushPatchBudget)
 	for i, c := range in {
 		results[i] = Result{ID: c.ID}
 		e, ch, cerr, err := decodeChange(c, tr, now)
@@ -97,6 +112,7 @@ func (s *Service) Push(ctx context.Context, p auth.Principal, tr Transport, in [
 			results[i].Status, results[i].Error = StatusRejected, cerr
 			continue
 		}
+		ch.Budget = budget
 		valid = append(valid, decoded{idx: i, id: c.ID, entity: e, change: ch})
 	}
 	var cursor int64
@@ -153,15 +169,22 @@ func (w *writer) dataKey(ctx context.Context) ([]byte, error) {
 func (w *writer) apply(ctx context.Context, d decoded) (Result, error) {
 	id := d.id
 	res := Result{ID: id}
-	row, err := w.q.GetRecordForUpdate(ctx, id)
+	row, err := w.q.GetRecordForUpdate(ctx, dbgen.GetRecordForUpdateParams{ID: id, UserID: w.p.UserID})
 	exists := err == nil
 	if err != nil && !db.IsNotFound(err) {
 		return res, fmt.Errorf("读取记录失败: %w", err)
 	}
-	if exists && (row.UserID != w.p.UserID || row.Entity != d.entity.Name) {
-		// 不透露该 ID 是否属于其他账号
-		res.Status, res.Error = StatusRejected, &ChangeError{Code: CodeIDConflict, Message: "记录 ID 冲突，请重新创建"}
-		return res, nil
+	if !exists {
+		taken, err := w.q.RecordIDTaken(ctx, id)
+		if err != nil {
+			return res, fmt.Errorf("检查记录 ID 失败: %w", err)
+		}
+		if taken {
+			return idConflict(id), nil // 不透露该 ID 属于其他账号
+		}
+	}
+	if exists && row.Entity != d.entity.Name {
+		return idConflict(id), nil
 	}
 	var cur *State
 	if exists {
@@ -171,7 +194,10 @@ func (w *writer) apply(ctx context.Context, d decoded) (Result, error) {
 		}
 		st, err := rowState(d.entity, row, key)
 		if err != nil {
-			return res, err
+			// 损坏的记录只拒绝这一条，不能让整批推送失败、客户端无限重试
+			w.s.d.Logger.ErrorContext(ctx, "stored record corrupt", "record_id", id, "error", err)
+			res.Status, res.Error = StatusRejected, &ChangeError{Code: CodeRecordCorrupt, Message: "记录数据异常，请联系我们处理"}
+			return res, nil
 		}
 		cur = &st
 	}
@@ -180,7 +206,29 @@ func (w *writer) apply(ctx context.Context, d decoded) (Result, error) {
 		res.Status, res.Error = StatusRejected, changeErrorFrom(err)
 		return res, nil
 	}
-	return w.persist(ctx, d.entity, id, row, exists, out)
+	res, err = w.persist(ctx, d.entity, id, row, exists, out)
+	if errors.Is(err, errIDTaken) {
+		return idConflict(id), nil
+	}
+	return res, err
+}
+
+func idConflict(id uuid.UUID) Result {
+	return Result{ID: id, Status: StatusRejected, Error: &ChangeError{Code: CodeIDConflict, Message: "记录 ID 冲突，请重新创建"}}
+}
+
+func (s *Service) limit(ctx context.Context, p auth.Principal) error {
+	if s.d.Limiter == nil {
+		return nil
+	}
+	r, err := s.d.Limiter.Hit(ctx, "sync:push:"+p.UserID.String(), pushPerMinute, time.Minute)
+	if err != nil {
+		return err
+	}
+	if !r.Allowed {
+		return httpx.TooManyRequests(httpx.CodeRateLimited, "同步过于频繁，请稍后再试", r.RetryAfter)
+	}
+	return nil
 }
 
 // keyFor 在实体含敏感字段时返回账号数据密钥。

@@ -10,10 +10,11 @@ import (
 
 // KeyWrapper 用主密钥包裹（加密）和解包数据密钥。生产环境由阿里云 KMS 实现（v0.9.0）。
 type KeyWrapper interface {
-	// Wrap 返回主密钥标识和被包裹的数据密钥。
-	Wrap(ctx context.Context, dek []byte) (keyID string, wrapped []byte, err error)
+	// Wrap 返回主密钥标识和被包裹的数据密钥。owner 为密钥所属账号，绑定到包裹结果中，
+	// 防止有数据库写权限的人在账号之间互换密钥。
+	Wrap(ctx context.Context, owner string, dek []byte) (keyID string, wrapped []byte, err error)
 	// Unwrap 用 keyID 对应的主密钥解包。
-	Unwrap(ctx context.Context, keyID string, wrapped []byte) ([]byte, error)
+	Unwrap(ctx context.Context, owner, keyID string, wrapped []byte) ([]byte, error)
 }
 
 // LocalKeyWrapper 用进程内的主密钥做 AES-256-GCM 包裹，供开发和测试环境使用。
@@ -22,7 +23,7 @@ type LocalKeyWrapper struct {
 	key []byte
 }
 
-var wrapAAD = []byte("jikelog-dek-wrap-v1")
+func wrapAAD(owner string) []byte { return []byte("jikelog-dek-wrap-v1|" + owner) }
 
 // NewLocalKeyWrapper 由 base64 编码的 32 字节主密钥创建。
 func NewLocalKeyWrapper(b64 string) (*LocalKeyWrapper, error) {
@@ -35,15 +36,15 @@ func NewLocalKeyWrapper(b64 string) (*LocalKeyWrapper, error) {
 }
 
 // Wrap 实现 KeyWrapper。
-func (w *LocalKeyWrapper) Wrap(_ context.Context, dek []byte) (string, []byte, error) {
-	wrapped, err := Seal(w.key, dek, wrapAAD)
+func (w *LocalKeyWrapper) Wrap(_ context.Context, owner string, dek []byte) (string, []byte, error) {
+	wrapped, err := Seal(w.key, dek, wrapAAD(owner))
 	return w.id, wrapped, err
 }
 
 // Unwrap 实现 KeyWrapper。
-func (w *LocalKeyWrapper) Unwrap(_ context.Context, keyID string, wrapped []byte) ([]byte, error) {
+func (w *LocalKeyWrapper) Unwrap(_ context.Context, owner, keyID string, wrapped []byte) ([]byte, error) {
 	if keyID != w.id {
 		return nil, errors.New("主密钥标识不匹配，可能更换了主密钥")
 	}
-	return Open(w.key, wrapped, wrapAAD)
+	return Open(w.key, wrapped, wrapAAD(owner))
 }

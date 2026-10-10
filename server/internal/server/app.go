@@ -78,7 +78,7 @@ func NewApp(ctx context.Context, o Options) (*App, error) {
 		return nil, err
 	}
 	hub := realtime.NewHub(o.Redis, o.Logger)
-	syncSvc := syncer.NewService(syncer.Deps{Tx: tx, Keys: keyring, Notifier: hub, Logger: o.Logger, Now: o.Now})
+	syncSvc := syncer.NewService(syncer.Deps{Tx: tx, Keys: keyring, Notifier: hub, Limiter: limiter, Logger: o.Logger, Now: o.Now})
 	attSvc := attachment.NewService(attachment.Deps{
 		Tx: tx, Store: o.Store, Keys: keyring, Sync: syncSvc, Limits: o.Config.Attachment, Logger: o.Logger,
 	})
@@ -95,7 +95,7 @@ func NewApp(ctx context.Context, o Options) (*App, error) {
 		Sync:       syncer.NewHandler(syncSvc, sessions),
 		Attachment: attachment.NewHandler(attSvc, sessions),
 	})
-	ws := hub.Handler(realtime.Options{Check: authSvc, Cursor: syncSvc.Cursor})
+	ws := hub.Handler(realtime.Options{Check: authSvc, Cursor: syncSvc.Cursor, Limiter: limiter})
 	router, err := NewRouter(o.Config, o.Logger, api, authSvc, ws)
 	if err != nil {
 		return nil, err
