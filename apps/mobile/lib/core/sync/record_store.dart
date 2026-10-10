@@ -130,9 +130,11 @@ class RecordStore {
   }
 
   /// 修改（或新建）记录的部分字段。值未变的字段不会产生新的时钟。
+  /// 已删除的记录忽略写入（例如编辑页关闭时迟到的保存），不能把墓碑改回正常记录。
   Future<void> write(String entity, String id, Map<String, Object?> changes) =>
       db.transaction(() async {
         final cur = await get(id);
+        if (cur != null && cur.deleted) return;
         final fields = {...?cur?.fields};
         final clocks = {...?cur?.clocks};
         var touched = false;
@@ -266,7 +268,10 @@ class RecordStore {
       version: version,
       serverSeq: serverSeq,
       deleted: cur.deleted,
-      dirty: cur.clocks.keys.any((f) => cur.clocks[f] != baseClocks[f]),
+      // 推送期间被删除的记录还要推送墓碑
+      dirty:
+          cur.deleted ||
+          cur.clocks.keys.any((f) => cur.clocks[f] != baseClocks[f]),
       hasConflict: cur.hasConflict,
     );
   });
@@ -278,38 +283,50 @@ class RecordStore {
       );
 
   /// 应用服务端记录（拉取结果，或推送结果为 merged/conflict 时的最终记录）。
-  /// 本地未修改的字段直接采用服务端的值；本地修改过（尚未推送）的字段保留本地值，只更新基准，下次推送时由服务端合并。
-  /// [pushed] 为本次推送的字段时钟：推送后没有再改过的字段以服务端结果为准（合并结果不能被本地旧值覆盖）。
+  ///
+  /// 本地未修改的字段直接采用服务端的值并更新基准。本地修改过、尚未被确认的字段保留本地值，
+  /// **基准保持不变**：下次推送时服务端发现基准时钟不是自己的时钟，会用补丁合并或按最后修改覆盖。
+  /// 如果把基准换成服务端的新值，补丁就会把对方的修改当成本地删除，快进时直接抹掉对方的修改。
+  ///
+  /// [sent] 为本次推送的内容（推送结果为 merged/conflict 时）：推送后没再改过的字段以服务端结果为准；
+  /// 推送后又改过的字段以推送的值为基准，下次只推送之后的修改。
+  /// 尚未推送的删除保留墓碑，等推送后由服务端裁决。
   Future<void> applyRemote(
     RemoteRecord r, {
     bool conflict = false,
-    Map<String, String> pushed = const {},
+    OutgoingChange? sent,
   }) => db.transaction(() async {
     r.clocks.values.forEach(clock.receive);
     final cur = await get(r.id);
     if (cur != null && cur.serverSeq >= r.serverSeq && !conflict) return;
+    if (cur != null && cur.deleted && cur.dirty) return;
     if (r.deleted) {
       await _applyTombstone(cur, r);
       return;
     }
     final fields = <String, Object?>{...r.fields};
     final clocks = <String, String>{...r.clocks};
+    final baseFields = <String, Object?>{...r.fields};
+    final baseClocks = <String, String>{...r.clocks};
     var dirty = false;
-    if (cur != null && cur.dirty && !cur.deleted) {
-      for (final f in cur.changedFields) {
-        if (pushed[f] == cur.clocks[f]) continue;
-        fields[f] = cur.fields[f];
-        clocks[f] = cur.clocks[f]!;
-        dirty = true;
+    for (final f in cur?.changedFields ?? const <String>[]) {
+      final local = cur!.clocks[f]!;
+      if (sent?.clocks[f] == local || r.clocks[f] == local) continue;
+      fields[f] = cur.fields[f];
+      clocks[f] = local;
+      _setBase(baseFields, baseClocks, f, cur.baseFields[f], cur.baseClocks[f]);
+      if (sent != null && sent.clocks.containsKey(f)) {
+        _setBase(baseFields, baseClocks, f, sent.fields[f], sent.clocks[f]);
       }
+      dirty = true;
     }
     await _save(
       id: r.id,
       entity: r.entity,
       fields: fields,
       clocks: clocks,
-      baseFields: r.fields,
-      baseClocks: r.clocks,
+      baseFields: baseFields,
+      baseClocks: baseClocks,
       version: r.version,
       serverSeq: r.serverSeq,
       deleted: false,
@@ -318,6 +335,22 @@ class RecordStore {
     );
     await db.setMeta(_clockKey, clock.last);
   });
+
+  static void _setBase(
+    Map<String, Object?> fields,
+    Map<String, String> clocks,
+    String f,
+    Object? value,
+    String? clock,
+  ) {
+    if (clock == null) {
+      fields.remove(f);
+      clocks.remove(f);
+    } else {
+      fields[f] = value;
+      clocks[f] = clock;
+    }
+  }
 
   Future<void> _applyTombstone(LocalRecord? cur, RemoteRecord r) async {
     // 删除胜过编辑：本地未推送的修改已在推送阶段交给服务端，落败的内容保存在修订历史中

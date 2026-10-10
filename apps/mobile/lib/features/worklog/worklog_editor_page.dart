@@ -8,6 +8,7 @@ import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
 import '../../core/sync/sync_engine.dart';
 import '../../core/sync/sync_providers.dart';
+import '../../core/sync/text_patch.dart';
 import '../../shared/ui/jk_feedback.dart';
 import '../../shared/ui/jk_states.dart';
 import '../attachments/attachment_section.dart';
@@ -62,6 +63,7 @@ class _WorklogEditorPageState extends ConsumerState<WorklogEditorPage> {
 
   Future<void> _flush() async {
     _timer?.cancel();
+    if (!_loaded) return; // 日志已删除，不能再写入
     final content = _content.text;
     final location = _location.text.trim();
     if (content == _savedContent && location == _savedLocation) return;
@@ -70,11 +72,14 @@ class _WorklogEditorPageState extends ConsumerState<WorklogEditorPage> {
     await _repo.update(widget.id, content: content, location: location);
   }
 
-  /// 其他设备的修改到达：没有未保存的输入时直接刷新编辑框；否则保留本地输入，推送时由服务端合并。
+  /// 其他设备的修改到达。没有未保存的输入时直接刷新编辑框；有未保存的输入时，
+  /// 把本地输入（相对上次保存的内容）合并到新内容上——直接保存本地输入会抹掉对方的修改。
   void _onRemote(Worklog? prev, Worklog? next) {
     if (next == null) {
       // 本机删除时由 _delete 负责返回，这里只处理其他设备的删除
       if (prev != null && mounted && !_deleting) {
+        _timer?.cancel();
+        _loaded = false; // 离开页面时不再保存
         showJkToast(context, '这篇日志已在其他设备上删除');
         context.pop();
       }
@@ -84,19 +89,49 @@ class _WorklogEditorPageState extends ConsumerState<WorklogEditorPage> {
       setState(() => _load(next));
       return;
     }
-    if (next.content != _savedContent && _content.text == _savedContent) {
-      _savedContent = next.content;
-      _content.value = TextEditingValue(
-        text: next.content,
-        selection: TextSelection.collapsed(
-          offset: _content.selection.baseOffset.clamp(0, next.content.length),
-        ),
-      );
-    }
-    if (next.location != _savedLocation && _location.text == _savedLocation) {
+    if (next.content != _savedContent) _onRemoteContent(next.content);
+    if (next.location != _savedLocation &&
+        _location.text.trim() == _savedLocation) {
       _savedLocation = next.location;
       _location.text = next.location;
     }
+  }
+
+  void _onRemoteContent(String remote) {
+    final local = _content.text;
+    final saved = _savedContent;
+    _savedContent = remote;
+    if (local == saved) {
+      _setContent(remote);
+      return;
+    }
+    final merged = TextPatch.rebase(saved, local, remote);
+    if (merged.ok) {
+      _setContent(merged.text); // 触发自动保存，保存合并后的内容
+    } else if (mounted) {
+      // 双方改了同一处：保留正在输入的内容，对方的版本可在修订历史中找回
+      showJkToast(context, '其他设备同时修改了这里，已保留你的输入，对方的版本可在修订历史中查看');
+    }
+  }
+
+  /// 替换编辑框内容，光标尽量留在原来的文字旁边。
+  void _setContent(String text) {
+    final old = _content.text;
+    var cursor = _content.selection.baseOffset;
+    if (cursor > _commonPrefix(old, text)) cursor += text.length - old.length;
+    _content.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: cursor.clamp(0, text.length)),
+    );
+  }
+
+  static int _commonPrefix(String a, String b) {
+    final n = a.length < b.length ? a.length : b.length;
+    var i = 0;
+    while (i < n && a.codeUnitAt(i) == b.codeUnitAt(i)) {
+      i++;
+    }
+    return i;
   }
 
   Future<void> _pickDate(Worklog w) async {

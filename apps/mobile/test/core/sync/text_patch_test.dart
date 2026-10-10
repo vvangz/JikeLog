@@ -92,4 +92,19 @@ void main() {
     expect(r.ok, isTrue);
     expect(r.text, ([...theirs]..[3] = mine[3]).join('\n'));
   });
+
+  test('三方合并：未保存的本地输入与其他设备的修改合并', () {
+    const base = '上午：周会。\n下午：写代码。';
+    final r = TextPatch.rebase(
+      base,
+      '上午：周会，定排期。\n下午：写代码。',
+      '上午：周会。\n下午：写代码和评审。',
+    );
+    expect(r.ok, isTrue);
+    expect(r.text, '上午：周会，定排期。\n下午：写代码和评审。');
+    expect(
+      TextPatch.rebase(base, '上午：A。\n下午：写代码。', '上午：B。\n下午：写代码。').ok,
+      isFalse,
+    );
+  });
 }

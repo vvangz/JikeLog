@@ -21,10 +21,14 @@ class AuthLoading extends AuthState {
 }
 
 class SignedOut extends AuthState {
-  const SignedOut({this.reason});
+  const SignedOut({this.reason, this.wipeLocalData = false});
 
   /// 被动退出的原因（如在其他设备修改了密码），用于在登录页提示。
   final String? reason;
+
+  /// 是否清空本机数据：只有主动退出和注销账号时清空。会话失效、设备被下线时保留，
+  /// 同一账号重新登录后继续同步未上传的修改；换成其他账号登录时才清空。
+  final bool wipeLocalData;
 }
 
 class SignedIn extends AuthState {
@@ -174,20 +178,20 @@ class AuthController extends Notifier<AuthState> {
     } on ApiException catch (e) {
       debugPrint('退出登录请求失败，仅清除本地登录态: $e');
     }
-    await _signOutLocally();
+    await _signOutLocally(wipe: true);
   }
 
-  /// 账号已注销或会话失效：只清除本地状态。
-  Future<void> signOutLocally({String? reason}) =>
-      _signOutLocally(reason: reason);
+  /// 账号已注销（[wipe] 为 true）或会话失效：只清除本地登录态。
+  Future<void> signOutLocally({String? reason, bool wipe = false}) =>
+      _signOutLocally(reason: reason, wipe: wipe);
 
-  Future<void> _signOutLocally({String? reason}) async {
+  Future<void> _signOutLocally({String? reason, bool wipe = false}) async {
     await ref.read(apiClientProvider).clearTokens();
     final store = ref.read(keyValueStoreProvider);
     await store.remove(_userCacheKey);
     await store.remove(deviceIdKey);
     // 未同步的设置属于上一个账号，不能在下一个账号登录时被上传
     await store.remove(settingsDirtyKey);
-    state = SignedOut(reason: reason);
+    state = SignedOut(reason: reason, wipeLocalData: wipe);
   }
 }

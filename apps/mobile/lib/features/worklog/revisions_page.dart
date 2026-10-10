@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
@@ -139,19 +140,28 @@ class _RevisionDetailState extends ConsumerState<_RevisionDetail> {
 
   Future<void> _restore(Map<String, Object?> f) async {
     setState(() => _restoring = true);
-    await ref
-        .read(worklogRepositoryProvider)
-        .update(
-          widget.worklogId,
-          date: DateTime.tryParse(f['date'] as String? ?? ''),
-          location: f['location'] as String? ?? '',
-          content: f['content'] as String? ?? '',
-        );
+    try {
+      await ref
+          .read(worklogRepositoryProvider)
+          .update(
+            widget.worklogId,
+            date: DateTime.tryParse(f['date'] as String? ?? ''),
+            location: f['location'] as String? ?? '',
+            content: f['content'] as String? ?? '',
+          );
+    } on Object catch (e) {
+      debugPrint('恢复修订失败: $e');
+      if (!mounted) return;
+      setState(() => _restoring = false);
+      showJkToast(context, '恢复失败，请重试', kind: JkToastKind.error);
+      return;
+    }
     if (!mounted) return;
     showJkToast(context, '已恢复此版本', kind: JkToastKind.success);
-    Navigator.of(context)
-      ..pop()
-      ..pop();
+    // 先关闭本页（由修订列表推入），再由路由返回编辑页
+    final router = GoRouter.of(context);
+    Navigator.of(context).pop();
+    router.pop();
   }
 
   @override

@@ -11,7 +11,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jikelog/app/app.dart';
 import 'package:jikelog/core/storage/stores.dart';
 import 'package:jikelog/core/sync/sync_providers.dart';
-import 'package:jikelog/features/attachments/attachment_providers.dart';
 import 'package:jikelog/features/attachments/attachment_section.dart';
 import 'package:jikelog/features/worklog/worklog_repository.dart';
 
@@ -184,8 +183,8 @@ void main() {
             }),
             tokens: MemoryTokenStore(testTokens),
             syncServer: FakeSyncServer(),
+            filesDir: () async => tmp,
           ),
-          attachmentDirProvider.overrideWithValue(() async => tmp),
           filePickerProvider.overrideWithValue(() async => [_TestFile(src)]),
         ],
         child: const JikeLogApp(),

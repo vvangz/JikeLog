@@ -275,7 +275,7 @@ class _DeleteAccountPageState extends ConsumerState<DeleteAccountPage>
     if (ok) {
       await ref
           .read(authControllerProvider.notifier)
-          .signOutLocally(reason: '账号已注销');
+          .signOutLocally(reason: '账号已注销', wipe: true);
     }
   }
 

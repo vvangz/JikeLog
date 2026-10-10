@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jikelog/core/sync/record_store.dart';
 import 'package:jikelog/core/sync/sync_providers.dart';
 import 'package:jikelog/features/worklog/worklog_list_page.dart';
 import 'package:jikelog/features/worklog/worklog_repository.dart';
@@ -88,6 +89,42 @@ void main() {
     await settleApp(tester);
     expect(find.byTooltip('待同步'), findsOneWidget);
     expect(server.records, isEmpty);
+  });
+
+  testWidgets('编辑框有未保存的输入时，其他设备的修改合并进来而不是被覆盖', (tester) async {
+    final server = FakeSyncServer();
+    await pumpApp(tester, syncServer: server);
+    await tapAndSettle(tester, find.byKey(const Key('worklog-create')));
+    final field = find.byKey(const Key('worklog-content'));
+    await tester.enterText(field, '第一段\n第二段');
+    await _autosave(tester);
+    final id = server.records.keys.single;
+
+    await tester.enterText(field, '第一段，本地补充\n第二段');
+    await tester.pump(const Duration(milliseconds: 100)); // 尚未自动保存
+    final c = _container(tester);
+    await _run(tester, () async {
+      final store = c.read(recordStoreProvider);
+      final cur = (await store.get(id))!;
+      final clock =
+          '${DateTime.now().millisecondsSinceEpoch + 1000}-0000-bbbbbbbbbbbbbbbb';
+      await store.applyRemote(
+        RemoteRecord(
+          entity: 'worklog',
+          id: id,
+          version: cur.version + 1,
+          serverSeq: cur.serverSeq + 1,
+          deleted: false,
+          fields: {...cur.fields, 'content': '第一段\n第二段，远端补充'},
+          clocks: {...cur.clocks, 'content': clock},
+        ),
+      );
+    });
+    final text = tester.widget<TextField>(field).controller!.text;
+    expect(text, '第一段，本地补充\n第二段，远端补充');
+    await _autosave(tester);
+    final saved = await c.read(recordStoreProvider).get(id);
+    expect(saved!.fields['content'], '第一段，本地补充\n第二段，远端补充');
   });
 
   testWidgets('Markdown 工具栏插入格式，预览渲染内容', (tester) async {

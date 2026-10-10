@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../features/attachments/attachment_providers.dart';
 import '../../features/auth/auth_controller.dart';
 import '../db/database.dart';
 import 'hlc.dart';
@@ -80,14 +81,14 @@ final realtimeClientProvider = Provider<RealtimeLink>((ref) {
   return client;
 });
 
-/// 按登录状态启停同步：登录后立即同步并保持实时连接，回到前台时再同步一次；
-/// 退出登录或切换账号时清空本地数据（数据只属于当时登录的账号）。
+/// 按登录状态启停同步：登录后立即同步并保持实时连接，回到前台时再同步一次。
+/// 主动退出、注销账号或换成其他账号登录时清空本地数据（数据只属于当时登录的账号）。
 final syncCoordinatorProvider = Provider<SyncCoordinator>((ref) {
   final c = SyncCoordinator(ref);
   ref.onDispose(c.dispose);
   ref.listen(
     authControllerProvider,
-    (_, next) => unawaited(c.onAuth(next)),
+    (_, next) => c.onAuthChanged(next),
     fireImmediately: true,
   );
   return c;
@@ -103,13 +104,24 @@ class SyncCoordinator {
   Timer? _timer;
   AppLifecycleListener? _lifecycle;
   bool _active = false;
+  Future<void> _queue = Future.value();
+
+  /// 已排队的登录态变化全部处理完毕。
+  Future<void> get idle => _queue;
+
+  /// 登录态变化按顺序处理：快速切换时不能交错执行（例如清空数据与开始同步同时进行）。
+  void onAuthChanged(AuthState state) {
+    _queue = _queue.then((_) => onAuth(state)).catchError((Object e) {
+      debugPrint('处理登录态变化失败: $e');
+    });
+  }
 
   Future<void> onAuth(AuthState state) async {
     switch (state) {
       case SignedIn(:final user):
         await _start(user.id);
-      case SignedOut():
-        await _stop(wipe: true);
+      case SignedOut(:final wipeLocalData):
+        await _stop(wipe: wipeLocalData);
       case AuthLoading():
         break;
     }
@@ -117,14 +129,16 @@ class SyncCoordinator {
 
   Future<void> _start(String userId) async {
     final db = _ref.read(appDatabaseProvider);
+    final engine = _ref.read(syncEngineProvider);
     final owner = await db.meta(_userKey);
     if (owner != userId) {
-      await db.wipe();
+      await engine.halt(); // 等进行中的同步结束，避免把上一个账号的数据写回
+      await _wipe();
       await db.setMeta(_userKey, userId);
     }
+    engine.resume();
     if (_active) return;
     _active = true;
-    final engine = _ref.read(syncEngineProvider);
     final realtime = _ref.read(realtimeClientProvider);
     realtime.start();
     unawaited(engine.sync());
@@ -145,8 +159,18 @@ class SyncCoordinator {
     _lifecycle?.dispose();
     _lifecycle = null;
     await _ref.read(realtimeClientProvider).stop();
+    await _ref.read(syncEngineProvider).halt();
     _ref.read(syncApiProvider).reset();
-    if (wipe) await _ref.read(appDatabaseProvider).wipe();
+    if (wipe) await _wipe();
+  }
+
+  Future<void> _wipe() async {
+    await _ref.read(appDatabaseProvider).wipe();
+    try {
+      await _ref.read(attachmentServiceProvider).deleteLocalFiles();
+    } on Object catch (e) {
+      debugPrint('删除本机附件文件失败: $e');
+    }
   }
 
   void dispose() {

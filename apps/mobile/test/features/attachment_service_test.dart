@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jikelog/core/api/api_client.dart';
+import 'package:jikelog/core/api/api_exception.dart';
 import 'package:jikelog/core/db/database.dart';
 import 'package:jikelog/core/storage/stores.dart';
 import 'package:jikelog/core/sync/hlc.dart';
@@ -23,6 +24,9 @@ class FakeStorage implements HttpClientAdapter {
   final putHeaders = <String, Map<String, dynamic>>{};
   bool corrupt = false;
 
+  /// 不为空时上传返回该状态码（模拟预签名链接过期等）。
+  int? putStatus;
+
   @override
   Future<ResponseBody> fetch(
     RequestOptions options,
@@ -31,6 +35,7 @@ class FakeStorage implements HttpClientAdapter {
   ) async {
     final key = options.uri.path;
     if (options.method == 'PUT') {
+      if (putStatus != null) return ResponseBody.fromString('', putStatus!);
       final bytes = <int>[];
       await requestStream?.forEach(bytes.addAll);
       objects[key] = bytes;
@@ -238,6 +243,138 @@ void main() {
     expect(await service.watch(owner).first, isEmpty);
     final tomb = await store.get('0192a000-0000-7000-8000-0000000000bb');
     expect(tomb!.deleted, isTrue);
+  });
+
+  test('服务端暂时不可用、存储链接过期时保持待上传；本地文件丢失时标记失败', () async {
+    await store.write('worklog', owner, {'date': '2026-10-09'});
+    await engine.sync();
+    backend.on(
+      'POST',
+      '/api/v1/attachments',
+      (_) => FakeResponse.error(503, 'UNAVAILABLE', message: '服务暂时不可用'),
+    );
+    final id = await service.add(
+      ownerEntity: 'worklog',
+      ownerId: owner,
+      source: await source('内容'),
+      fileName: 'a.txt',
+    );
+    await service.uploadPending();
+    expect(
+      (await service.watch(owner).first).single.state,
+      AttachmentState.uploading,
+    );
+
+    backend.on('POST', '/api/v1/attachments', (req) {
+      return FakeResponse.ok({
+        'uploadUrl': 'http://oss/u/$id',
+        'method': 'PUT',
+        'headers': {'Content-Type': 'text/plain'},
+        'expiresAt': '2100-01-01T00:00:00Z',
+      }, status: 201);
+    });
+    storage.putStatus = 403;
+    await service.uploadPending();
+    expect(
+      (await service.watch(owner).first).single.state,
+      AttachmentState.uploading,
+    );
+
+    storage.putStatus = null;
+    await File('${tmp.path}/attachments/$id').delete();
+    await service.uploadPending();
+    final v = (await service.watch(owner).first).single;
+    expect(v.state, AttachmentState.failed);
+    expect(v.error, '本地文件已丢失，请重新添加');
+  });
+
+  test('上传时带 Content-Length（预签名 PUT 不接受分块传输）', () async {
+    await store.write('worklog', owner, {'date': '2026-10-09'});
+    await engine.sync();
+    backend.on('POST', '/api/v1/attachments', (req) {
+      final id = req.body!['id'] as String;
+      return FakeResponse.ok({
+        'uploadUrl': 'http://oss/u/$id',
+        'method': 'PUT',
+        'headers': {'Content-Type': 'text/plain'},
+        'expiresAt': '2100-01-01T00:00:00Z',
+      }, status: 201);
+    });
+    final id = await service.add(
+      ownerEntity: 'worklog',
+      ownerId: owner,
+      source: await source('12345'),
+      fileName: 'a.txt',
+    );
+    await service.uploadPending();
+    expect(storage.putHeaders['/u/$id']![Headers.contentLengthHeader], '5');
+  });
+
+  test('超过大小上限的文件不复制、直接报错', () async {
+    final small = AttachmentService(
+      api: service.api,
+      db: db,
+      store: store,
+      engine: engine,
+      baseDir: () async => tmp,
+      maxSize: 3,
+    );
+    await expectLater(
+      small.add(
+        ownerEntity: 'worklog',
+        ownerId: owner,
+        source: await source('超过三个字节'),
+        fileName: 'big.txt',
+      ),
+      throwsA(
+        isA<ApiException>().having(
+          (e) => e.code,
+          'code',
+          ApiErrorCode.attachmentTooLarge,
+        ),
+      ),
+    );
+    expect(await db.select(db.localFiles).get(), isEmpty);
+    expect(Directory('${tmp.path}/attachments').existsSync(), isFalse);
+  });
+
+  test('下载失败不留下不完整的文件；清除本机附件文件', () async {
+    const id = '0192a000-0000-7000-8000-0000000000cc';
+    await store.applyRemote(
+      const RemoteRecord(
+        entity: 'attachment',
+        id: id,
+        version: 1,
+        serverSeq: 9,
+        deleted: false,
+        fields: {'ownerId': owner, 'fileName': 'c.txt', 'sha256': 'x'},
+        clocks: {'fileName': '1791553544000-0000-0000000000000000'},
+      ),
+    );
+    backend.on(
+      'GET',
+      '/api/v1/attachments/$id/download',
+      (_) => FakeResponse.ok({
+        'url': 'http://oss/u/missing',
+        'expiresAt': '2100-01-01T00:00:00Z',
+      }),
+    );
+    await expectLater(service.open(id), throwsA(anything));
+    final dir = Directory('${tmp.path}/attachments');
+    expect(
+      dir.existsSync() ? dir.listSync() : const <FileSystemEntity>[],
+      isEmpty,
+    );
+
+    await service.add(
+      ownerEntity: 'worklog',
+      ownerId: owner,
+      source: await source('z'),
+      fileName: 'z.txt',
+    );
+    expect(dir.listSync(), isNotEmpty);
+    await service.deleteLocalFiles();
+    expect(dir.existsSync(), isFalse);
   });
 
   test('由扩展名推断类型', () {

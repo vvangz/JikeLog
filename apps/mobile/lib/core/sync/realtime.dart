@@ -53,6 +53,9 @@ class RealtimeClient implements RealtimeLink {
   bool _running = false;
   int _failures = 0;
 
+  /// 每次启停加一：握手完成时代数已变（期间停止过）的连接直接关闭，避免同时存在两个连接。
+  int _generation = 0;
+
   bool get connected => _channel != null && _sub != null;
 
   static WebSocketChannel _defaultConnect(
@@ -77,12 +80,14 @@ class RealtimeClient implements RealtimeLink {
   void start() {
     if (_running) return;
     _running = true;
-    unawaited(_open());
+    _generation++;
+    unawaited(_open(_generation));
   }
 
   @override
   Future<void> stop() async {
     _running = false;
+    _generation++;
     _retry?.cancel();
     _retry = null;
     await _close();
@@ -97,9 +102,9 @@ class RealtimeClient implements RealtimeLink {
     await ch?.sink.close();
   }
 
-  Future<void> _open() async {
+  Future<void> _open(int generation) async {
     final token = client.accessToken;
-    if (!_running) return;
+    if (!_running || generation != _generation) return;
     if (token == null) return _scheduleRetry();
     final ch = _connect(wsUri(client.baseUrl), {
       'Authorization': 'Bearer $token',
@@ -113,7 +118,7 @@ class RealtimeClient implements RealtimeLink {
       if (_failures.isOdd) await client.refreshNow();
       return _scheduleRetry();
     }
-    if (!_running) {
+    if (!_running || generation != _generation) {
       await ch.sink.close();
       return;
     }
@@ -158,6 +163,10 @@ class RealtimeClient implements RealtimeLink {
     if (!_running) return;
     final secs = min(maxBackoff.inSeconds, 1 << min(_failures, 6));
     _retry?.cancel();
-    _retry = Timer(Duration(seconds: max(secs, 1)), () => unawaited(_open()));
+    final generation = _generation;
+    _retry = Timer(
+      Duration(seconds: max(secs, 1)),
+      () => unawaited(_open(generation)),
+    );
   }
 }

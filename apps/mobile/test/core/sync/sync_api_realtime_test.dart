@@ -33,16 +33,19 @@ FakeResponse _session(String id) => FakeResponse.ok({
 /// 可控的 WebSocket：测试中向客户端发送消息、关闭连接。
 class FakeChannel extends StreamChannelMixin<dynamic>
     implements WebSocketChannel {
-  FakeChannel({this.fail = false});
+  FakeChannel({this.fail = false, this.gate});
 
   final bool fail;
+
+  /// 不为空时握手等它完成（模拟握手较慢）。
+  final Completer<void>? gate;
   final incoming = StreamController<dynamic>();
   final sent = <dynamic>[];
   int? _closeCode;
 
   @override
   Future<void> get ready =>
-      fail ? Future.error(Exception('401')) : Future.value();
+      fail ? Future.error(Exception('401')) : (gate?.future ?? Future.value());
 
   @override
   Stream<dynamic> get stream => incoming.stream;
@@ -239,6 +242,41 @@ void main() {
         expect(revoked, 1);
         expect(channels.length, 2, reason: '设备下线后不再重连');
         rt.stop();
+      });
+    });
+
+    test('握手期间停止又启动：只保留最新的连接，旧连接关闭', () {
+      fakeAsync((async) {
+        late ApiClient client;
+        _client(FakeBackend()).then((c) => client = c);
+        async.flushMicrotasks();
+        final channels = <FakeChannel>[];
+        var changes = 0;
+        final rt = RealtimeClient(
+          client: client,
+          onChange: () => changes++,
+          connect: (uri, h) {
+            final ch = FakeChannel(gate: Completer<void>());
+            channels.add(ch);
+            return ch;
+          },
+        );
+        rt.start();
+        async.flushMicrotasks();
+        rt.stop();
+        rt.start();
+        async.flushMicrotasks();
+        expect(channels, hasLength(2));
+        channels[1].gate!.complete();
+        channels[0].gate!.complete();
+        async.flushMicrotasks();
+        expect(channels[0].incoming.isClosed, isTrue, reason: '旧连接应关闭');
+        channels[1].incoming.add(jsonEncode({'type': 'hello', 'seq': 1}));
+        async.flushMicrotasks();
+        expect(changes, 1);
+        expect(rt.connected, isTrue);
+        rt.stop();
+        async.flushMicrotasks();
       });
     });
 

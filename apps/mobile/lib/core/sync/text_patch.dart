@@ -95,6 +95,11 @@ abstract final class TextPatch {
     return (text: String.fromCharCodes(runes), ok: true);
   }
 
+  /// 三方合并：把 [base] → [local] 的修改应用到 [remote] 上（编辑框有未保存的输入时，
+  /// 其他设备的修改到达）。失败时（双方改了同一处）[PatchResult.ok] 为 false。
+  static PatchResult rebase(String base, String local, String remote) =>
+      apply(remote, make(base, local));
+
   /// 编码为推送时使用的 JSON 字符串。
   static String encode(List<Hunk> hunks) =>
       jsonEncode([for (final h in hunks) h.toJson()]);

@@ -48,8 +48,12 @@ class AttachmentService {
     required this.store,
     required this.engine,
     required this.baseDir,
+    this.maxSize = defaultMaxSize,
     Dio? storageDio,
   }) : _dio = storageDio ?? Dio();
+
+  /// 单个附件的大小上限（与服务端默认配置一致）。
+  static const defaultMaxSize = 100 * 1024 * 1024;
 
   final SyncApi api;
   final AppDatabase db;
@@ -58,6 +62,7 @@ class AttachmentService {
 
   /// 本地文件目录（待上传的副本与下载缓存）。
   final Future<Directory> Function() baseDir;
+  final int maxSize;
 
   /// 访问对象存储的客户端：不经过 API，不带登录令牌。
   final Dio _dio;
@@ -68,10 +73,19 @@ class AttachmentService {
   static const _cached = 'cached';
   static const _failed = 'failed';
 
+  Future<Directory> _dir() async =>
+      Directory(p.join((await baseDir()).path, 'attachments'));
+
   Future<File> _fileFor(String id) async {
-    final dir = Directory(p.join((await baseDir()).path, 'attachments'));
+    final dir = await _dir();
     await dir.create(recursive: true);
     return File(p.join(dir.path, id));
+  }
+
+  /// 删除本机全部附件文件（退出登录或切换账号时，与清空本地数据库一起调用）。
+  Future<void> deleteLocalFiles() async {
+    final dir = await _dir();
+    if (await dir.exists()) await dir.delete(recursive: true);
   }
 
   /// 为记录添加附件：复制到应用目录后在后台上传。
@@ -81,6 +95,12 @@ class AttachmentService {
     required File source,
     required String fileName,
   }) async {
+    if (await source.length() > maxSize) {
+      throw ApiException(
+        code: ApiErrorCode.attachmentTooLarge,
+        message: '单个附件不能超过 ${maxSize ~/ (1024 * 1024)}MB',
+      );
+    }
     final id = const Uuid().v7();
     final local = await source.copy((await _fileFor(id)).path);
     final digest = await sha256.bind(local.openRead()).first;
@@ -115,21 +135,51 @@ class AttachmentService {
     for (final f in rows) {
       final owner = await store.get(f.ownerId);
       if (owner == null || owner.version == 0) continue; // 等所属日志先同步
-      try {
-        await _upload(f);
-        uploaded = true;
-      } on ApiException catch (e) {
-        if (e.isNetwork) return; // 离线：稍后重试
-        await _markFailed(f.id, e.message);
-      } on DioException catch (e) {
-        debugPrint('附件上传失败（稍后重试）: $e');
-        return;
+      final error = await _tryUpload(f);
+      if (error is _Retry) break; // 暂时性错误：停止本轮，下次同步后再试
+      if (error is _Fail) {
+        await _markFailed(f.id, error.message);
+        continue;
       }
+      uploaded = true;
     }
     if (uploaded) unawaited(engine.sync()); // 拉取服务端生成的附件记录
   }
 
+  /// 上传一个附件，返回 null（成功）、[_Retry]（网络、服务端暂时不可用、链接过期）或 [_Fail]（需要用户处理）。
+  /// 在后台调用，任何异常都不能抛出。
+  Future<_UploadError?> _tryUpload(LocalFileRow f) async {
+    try {
+      await _upload(f);
+      return null;
+    } on ApiException catch (e) {
+      final s = e.status;
+      if (e.isNetwork || s == null || s >= 500 || s == 401 || s == 429) {
+        debugPrint('附件上传暂时失败（稍后重试）: $e');
+        return const _Retry();
+      }
+      return _Fail(e.message);
+    } on DioException catch (e) {
+      final s = e.response?.statusCode;
+      // 没有响应（网络）、5xx、403（预签名链接过期，下次重新申请）：稍后重试
+      if (s == null || s >= 500 || s == 403) {
+        debugPrint('附件上传到存储服务失败（稍后重试）: $e');
+        return const _Retry();
+      }
+      return _Fail('上传到存储服务失败（$s），请重试');
+    } on FileSystemException catch (e) {
+      debugPrint('附件本地文件不可读: $e');
+      return const _Fail('本地文件已丢失，请重新添加');
+    } on Object catch (e, st) {
+      debugPrint('附件上传失败: $e\n$st');
+      return const _Fail('上传失败，请重试');
+    }
+  }
+
   Future<void> _upload(LocalFileRow f) async {
+    // 先确认本地文件可读，再向服务端申请上传（否则服务端会留下一条未完成的上传）
+    final file = File(f.path);
+    final length = await file.length(); // 文件不存在时抛出 FileSystemException
     final ticket = await api.withSession(
       (s) => api.requestUpload(
         s,
@@ -144,8 +194,11 @@ class AttachmentService {
     );
     await _dio.put<void>(
       ticket.url,
-      data: File(f.path).openRead(),
-      options: Options(headers: ticket.headers),
+      data: file.openRead(),
+      // 预签名 PUT 不接受分块传输，必须带 Content-Length
+      options: Options(
+        headers: {...ticket.headers, Headers.contentLengthHeader: '$length'},
+      ),
     );
     await api.completeUpload(f.id);
     await (db.update(db.localFiles)..where((t) => t.id.equals(f.id))).write(
@@ -215,19 +268,36 @@ class AttachmentService {
     final row = await (db.select(
       db.localFiles,
     )..where((t) => t.id.equals(id))).getSingleOrNull();
-    if (row != null && await File(row.path).exists()) return File(row.path);
+    if (row != null) {
+      final cached = File(row.path);
+      if (await cached.exists() && await cached.length() == row.size) {
+        return cached;
+      }
+    }
     final rec = await store.get(id);
     if (rec == null) throw StateError('附件不存在');
-    final file = await _fileFor(id);
-    final url = await api.downloadUrl(id);
-    await _dio.download(url, file.path);
-    final digest = await sha256.bind(file.openRead()).first;
-    if (digest.toString() != rec.fields['sha256']) {
-      await file.delete();
+    final expected = rec.fields['sha256'];
+    if (expected is! String) {
       throw const ApiException(
         code: ApiErrorCode.unexpected,
-        message: '附件下载不完整，请重试',
+        message: '附件信息不完整，请稍后重试',
       );
+    }
+    final file = await _fileFor(id);
+    // 先下载到临时文件，校验通过后再改名：下载中断或内容不符时不留下不完整的文件
+    final part = File('${file.path}.part');
+    try {
+      await _dio.download(await api.downloadUrl(id), part.path);
+      final digest = await sha256.bind(part.openRead()).first;
+      if (digest.toString() != expected) {
+        throw const ApiException(
+          code: ApiErrorCode.unexpected,
+          message: '附件下载不完整，请重试',
+        );
+      }
+      await part.rename(file.path);
+    } finally {
+      if (await part.exists()) await part.delete();
     }
     await db
         .into(db.localFiles)
@@ -346,4 +416,18 @@ String mimeOf(String fileName) {
         'mp4': 'video/mp4',
       }[ext] ??
       'application/octet-stream';
+}
+
+sealed class _UploadError {
+  const _UploadError();
+}
+
+final class _Retry extends _UploadError {
+  const _Retry();
+}
+
+final class _Fail extends _UploadError {
+  const _Fail(this.message);
+
+  final String message;
 }

@@ -51,6 +51,12 @@ class FakeTransport implements SyncTransport {
     expiresAt: DateTime(2100),
   );
 
+  /// 拉取时下发损坏密文的记录（模拟无法解密）。
+  final corruptIds = <String>{};
+
+  /// 建立过的会话数。
+  int sessions = 0;
+
   /// 为 false 时模拟离线。
   bool online = true;
 
@@ -58,9 +64,18 @@ class FakeTransport implements SyncTransport {
   Future<void> Function()? beforePush;
   int pushCount = 0;
 
+  /// 与 [SyncApi.withSession] 一致：会话失效时换新会话重试一次。
   @override
-  Future<T> withSession<T>(Future<T> Function(E2ESession s) call) =>
-      call(_session);
+  Future<T> withSession<T>(Future<T> Function(E2ESession s) call) async {
+    sessions++;
+    try {
+      return await call(_session);
+    } on ApiException catch (e) {
+      if (e.code != ApiErrorCode.e2eSessionInvalid) rethrow;
+      sessions++;
+      return call(_session);
+    }
+  }
 
   void _check() {
     if (!online) {
@@ -151,12 +166,14 @@ class FakeTransport implements SyncTransport {
     for (final f in fields.keys) {
       final cc = clocks[f]!;
       final sc = cur.clocks[f];
-      if (cc == sc || (cur.absorbed[f]?.contains(cc) ?? false)) continue;
+      if (cc == sc) continue;
+      if (cur.absorbed[f]?.contains(cc) ?? false) {
+        if (status == 'applied') status = 'merged';
+        continue;
+      }
       changed = true;
-      if (sc == base[f]) {
-        cur.fields[f] = fields[f];
-        cur.clocks[f] = cc;
-        cur.absorbed.remove(f);
+      if (sc == base[f] && cc.compareTo(sc ?? '') > 0) {
+        _overwrite(cur, f, fields[f], cc);
       } else if (patches[f] != null &&
           Entities.field(entity, f).text &&
           TextPatch.apply(
@@ -167,14 +184,13 @@ class FakeTransport implements SyncTransport {
           cur.fields[f] as String? ?? '',
           TextPatch.decode(patches[f]!),
         ).text;
-        final winner = cc.compareTo(sc ?? '') > 0 ? cc : sc!;
-        if (winner != cc) (cur.absorbed[f] ??= {}).add(cc);
-        cur.clocks[f] = winner;
+        // 与服务端一致：合并结果用新的时钟，双方的时钟都记为已吸收
+        final latest = cc.compareTo(sc ?? '') > 0 ? cc : sc!;
+        (cur.absorbed[f] ??= {}).addAll([cc, ?sc]);
+        cur.clocks[f] = _clockAfter(latest);
         if (status == 'applied') status = 'merged';
       } else if (cc.compareTo(sc ?? '') > 0) {
-        cur.fields[f] = fields[f];
-        cur.clocks[f] = cc;
-        cur.absorbed.remove(f);
+        _overwrite(cur, f, fields[f], cc);
         status = 'conflict';
       } else {
         (cur.absorbed[f] ??= {}).add(cc);
@@ -191,6 +207,27 @@ class FakeTransport implements SyncTransport {
     );
   }
 
+  /// 紧随 [c] 之后的服务端时钟（与 Go 的 clockAfter 一致）。
+  static String _clockAfter(String c) {
+    var ms = int.parse(c.substring(0, 13));
+    var n = int.parse(c.substring(14, 18), radix: 16);
+    if (n == 0xffff) {
+      ms++;
+      n = 0;
+    } else {
+      n++;
+    }
+    return '${'$ms'.padLeft(13, '0')}-${n.toRadixString(16).padLeft(4, '0')}-0000000000000000';
+  }
+
+  /// 覆盖字段，并记住被覆盖值的时钟（写入它的设备重试时能识别）。
+  void _overwrite(ServerRecord r, String f, Object? v, String c) {
+    final old = r.clocks[f];
+    if (old != null) (r.absorbed[f] ??= {}).add(old);
+    r.fields[f] = v;
+    r.clocks[f] = c;
+  }
+
   void _bump(ServerRecord r) {
     r.version++;
     r.serverSeq = ++server.seq;
@@ -204,7 +241,12 @@ class FakeTransport implements SyncTransport {
           ..sort((a, b) => a.serverSeq.compareTo(b.serverSeq));
     final page = list.take(limit).toList();
     return PullPage(
-      records: [for (final r in page) await _seal(s, r)],
+      records: [
+        for (final r in page)
+          corruptIds.contains(r.id)
+              ? ((await _seal(s, r))..['fields'] = {'content': 'AAAA'})
+              : await _seal(s, r),
+      ],
       nextSince: page.isEmpty ? since : page.last.serverSeq,
       hasMore: list.length > limit,
     );

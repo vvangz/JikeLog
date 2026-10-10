@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -14,6 +15,7 @@ import 'package:jikelog/core/storage/stores.dart';
 import 'package:jikelog/core/sync/hlc.dart';
 import 'package:jikelog/core/sync/realtime.dart';
 import 'package:jikelog/core/sync/sync_providers.dart';
+import 'package:jikelog/features/attachments/attachment_providers.dart';
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 
@@ -164,6 +166,7 @@ List<Override> testOverrides({
   TokenStore? tokens,
   AppDatabase? db,
   FakeSyncServer? syncServer,
+  Future<Directory> Function()? filesDir,
 }) => [
   keyValueStoreProvider.overrideWithValue(store ?? MemoryStore()),
   deviceIdentityProvider.overrideWithValue(testDevice),
@@ -183,7 +186,15 @@ List<Override> testOverrides({
     FakeTransport(syncServer ?? FakeSyncServer()),
   ),
   realtimeClientProvider.overrideWithValue(FakeRealtime()),
+  attachmentDirProvider.overrideWithValue(filesDir ?? testFilesDir),
 ];
+
+/// 组件测试的本机文件目录（附件副本与下载缓存）。
+Future<Directory> testFilesDir() async {
+  final dir = Directory('${Directory.systemTemp.path}/jikelog-test-files-$pid');
+  await dir.create(recursive: true);
+  return dir;
+}
 
 /// 组件测试用的内存数据库：同步关闭流查询，避免组件树销毁后残留清理定时器。
 AppDatabase testDatabase() => AppDatabase(
