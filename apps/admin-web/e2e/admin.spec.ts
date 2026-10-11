@@ -52,3 +52,30 @@ test('超级管理员新建只读管理员', async ({ page }) => {
   await dialog.getByRole('button', { name: /新\s?建/ }).click();
   await expect(page.getByRole('cell', { name: 'auditor' })).toBeVisible();
 });
+
+test('宽屏：点击左上角图标，侧栏向右展开或收起（有过渡动画）', async ({ page }) => {
+  await mockApi(page, { session: true });
+  await page.goto('/dashboard');
+  const toggle = page.getByRole('button', { name: '导航' });
+  const rail = page.locator('[data-open]');
+  const width = () => rail.evaluate((el) => el.getBoundingClientRect().width);
+  await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible();
+  expect(await width()).toBe(220);
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect.poll(width).toBe(0);
+  await expect(page.getByRole('navigation', { name: '主导航' })).toBeHidden();
+
+  // 展开过程中宽度逐渐增加
+  await toggle.click();
+  const samples: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    samples.push(await width());
+    await page.waitForTimeout(40);
+  }
+  await expect.poll(width).toBe(220);
+  expect(samples.some((w) => w > 0 && w < 220)).toBe(true);
+  await page.getByRole('navigation', { name: '主导航' }).getByText('用户').click();
+  await expect(page.getByRole('heading', { name: '用户' })).toBeVisible();
+});

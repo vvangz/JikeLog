@@ -7,7 +7,10 @@ import { COMMON_ITEMS, MODULE_ITEMS, selectedKey, type NavItem } from './nav';
 import { useMediaQuery } from './useMediaQuery';
 import styles from '../App.module.css';
 
-/** 宽屏（≥ 840px）时侧栏常驻；窄屏时侧栏为抽屉浮层（遮罩、Esc 关闭、焦点留在浮层内），选择后自动收起。 */
+/**
+ * 宽屏（≥ 840px）时点击左上角入口图标，侧栏从左向右展开或收起（宽度过渡动画）；
+ * 窄屏时侧栏为从左侧滑出的抽屉浮层（遮罩、Esc 关闭、焦点留在浮层内），选择后自动收起。
+ */
 const WIDE_QUERY = '(min-width: 840px)';
 
 /** 应用外壳：左上角入口图标展开或收起左侧导航栏，上方是功能模块，下方是通用入口。 */
@@ -61,7 +64,10 @@ export function AppShell() {
       </Layout.Header>
       <Layout className={styles.body}>
         {wide ? (
-          open && nav
+          // 收起时保留在页面中以便播放收起动画；inert 让收起的菜单不能获得焦点、读屏也读不到
+          <div className={styles.navRail} data-open={open} inert={!open}>
+            {nav}
+          </div>
         ) : (
           <Drawer
             open={open}

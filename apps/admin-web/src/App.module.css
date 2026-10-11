@@ -30,6 +30,21 @@
   min-height: 0;
 }
 
+/* 宽屏侧栏的容器：点击左上角入口图标时宽度在 0 与 220px 之间过渡，菜单从左向右展开 */
+.navRail {
+  flex: none;
+  width: 220px;
+  height: 100%;
+  overflow: hidden;
+  border-right: 1px solid var(--jk-color-divider);
+  transition: width var(--jk-motion-duration-slow) cubic-bezier(0.2, 0, 0, 1);
+}
+
+.navRail[data-open='false'] {
+  width: 0;
+  border-right-width: 0;
+}
+
 .nav {
   display: flex;
   flex-direction: column;
@@ -38,8 +53,21 @@
   height: 100%;
   overflow-y: auto;
   background: var(--jk-color-surface);
-  border-right: 1px solid var(--jk-color-divider);
-  animation: jk-nav-unfold var(--jk-motion-duration-slow) cubic-bezier(0.2, 0, 0, 1);
+  /* 菜单随容器展开从左侧滑入、渐显 */
+  transition:
+    transform var(--jk-motion-duration-slow) cubic-bezier(0.2, 0, 0, 1),
+    opacity var(--jk-motion-duration-slow);
+}
+
+.navRail[data-open='false'] .nav {
+  transform: translateX(-40px);
+  opacity: 0;
+  /* 收起动画结束后再隐藏；展开时立即显示 */
+  visibility: hidden;
+  transition:
+    transform var(--jk-motion-duration-slow) cubic-bezier(0.2, 0, 0, 1),
+    opacity var(--jk-motion-duration-slow),
+    visibility 0s linear var(--jk-motion-duration-slow);
 }
 
 .navBottom {
@@ -52,24 +80,12 @@
   padding: var(--jk-spacing-xl) var(--jk-spacing-lg);
 }
 
-/* 侧栏自上而下展开 */
-@keyframes jk-nav-unfold {
-  from {
-    clip-path: inset(0 0 100% 0);
-  }
-  to {
-    clip-path: inset(0 0 0 0);
-  }
-}
-
 /* 窄屏：侧栏在抽屉中，占满抽屉 */
 @media (max-width: 839px) {
   .nav {
     position: static;
     width: 100%;
     height: 100%;
-    border-right: none;
-    animation: none;
   }
 
   .content {
@@ -104,7 +120,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .navRail,
   .nav {
-    animation: none;
+    transition: none;
   }
 }
