@@ -79,6 +79,57 @@ func (e DeviceInfoPlatform) Valid() bool {
 	}
 }
 
+// Defines values for ExportStatus.
+const (
+	ExportStatusDone    ExportStatus = "done"
+	ExportStatusExpired ExportStatus = "expired"
+	ExportStatusFailed  ExportStatus = "failed"
+	ExportStatusPending ExportStatus = "pending"
+	ExportStatusRunning ExportStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the ExportStatus enum.
+func (e ExportStatus) Valid() bool {
+	switch e {
+	case ExportStatusDone:
+		return true
+	case ExportStatusExpired:
+		return true
+	case ExportStatusFailed:
+		return true
+	case ExportStatusPending:
+		return true
+	case ExportStatusRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ExportModule.
+const (
+	ExportModuleLedger  ExportModule = "ledger"
+	ExportModuleMemo    ExportModule = "memo"
+	ExportModuleNote    ExportModule = "note"
+	ExportModuleWorklog ExportModule = "worklog"
+)
+
+// Valid indicates whether the value is a known member of the ExportModule enum.
+func (e ExportModule) Valid() bool {
+	switch e {
+	case ExportModuleLedger:
+		return true
+	case ExportModuleMemo:
+		return true
+	case ExportModuleNote:
+		return true
+	case ExportModuleWorklog:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthStatus.
 const (
 	HealthStatusDown HealthStatus = "down"
@@ -621,6 +672,62 @@ type ErrorEnvelope struct {
 	Success   bool   `json:"success"`
 }
 
+// Export defines model for Export.
+type Export struct {
+	Attachments bool      `json:"attachments"`
+	CreatedAt   time.Time `json:"createdAt"`
+
+	// Error 失败原因
+	Error *string `json:"error,omitempty"`
+
+	// ExpiresAt 导出文件的删除时刻
+	ExpiresAt  *time.Time         `json:"expiresAt,omitempty"`
+	FinishedAt *time.Time         `json:"finishedAt,omitempty"`
+	Id         openapi_types.UUID `json:"id"`
+	Modules    []ExportModule     `json:"modules"`
+
+	// Size zip 大小（字节），完成后才有
+	Size *int64 `json:"size,omitempty"`
+
+	// Status pending 排队中 / running 生成中 / done 可下载 / failed 失败 / expired 文件已删除
+	Status ExportStatus `json:"status"`
+}
+
+// ExportStatus pending 排队中 / running 生成中 / done 可下载 / failed 失败 / expired 文件已删除
+type ExportStatus string
+
+// ExportEnvelope defines model for ExportEnvelope.
+type ExportEnvelope struct {
+	Data  Export     `json:"data"`
+	Error *ErrorBody `json:"error,omitempty"`
+	Meta  *PageMeta  `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// ExportListEnvelope defines model for ExportListEnvelope.
+type ExportListEnvelope struct {
+	Data  []Export   `json:"data"`
+	Error *ErrorBody `json:"error,omitempty"`
+	Meta  *PageMeta  `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// ExportModule defines model for ExportModule.
+type ExportModule string
+
+// ExportRequest defines model for ExportRequest.
+type ExportRequest struct {
+	// Attachments 是否包含工作日志与笔记的附件文件
+	Attachments bool           `json:"attachments"`
+	Modules     []ExportModule `json:"modules"`
+}
+
 // Health defines model for Health.
 type Health struct {
 	Checks []HealthCheck `json:"checks"`
@@ -1092,6 +1199,9 @@ type VerifyIdentityRequest struct {
 // E2ESessionHeader defines model for E2ESessionHeader.
 type E2ESessionHeader = string
 
+// ExportId defines model for ExportId.
+type ExportId = openapi_types.UUID
+
 // Error defines model for Error.
 type Error = ErrorEnvelope
 
@@ -1145,6 +1255,9 @@ type CompleteSmsRegistrationJSONRequestBody = CompleteSmsRegistrationRequest
 
 // SendAuthSmsJSONRequestBody defines body for SendAuthSms for application/json ContentType.
 type SendAuthSmsJSONRequestBody = AuthSmsRequest
+
+// CreateExportJSONRequestBody defines body for CreateExport for application/json ContentType.
+type CreateExportJSONRequestBody = ExportRequest
 
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeRequest
@@ -1214,6 +1327,21 @@ type ServerInterface interface {
 	// SendAuthSms 发送登录或找回密码验证码
 	// (POST /api/v1/auth/sms/send)
 	SendAuthSms(c *gin.Context)
+	// ListExports 最近的导出
+	// (GET /api/v1/exports)
+	ListExports(c *gin.Context)
+	// CreateExport 发起导出
+	// (POST /api/v1/exports)
+	CreateExport(c *gin.Context)
+	// DeleteExport 删除导出
+	// (DELETE /api/v1/exports/{exportId})
+	DeleteExport(c *gin.Context, exportId ExportId)
+	// GetExport 导出状态
+	// (GET /api/v1/exports/{exportId})
+	GetExport(c *gin.Context, exportId ExportId)
+	// GetExportDownload 获取导出文件的下载地址
+	// (GET /api/v1/exports/{exportId}/download)
+	GetExportDownload(c *gin.Context, exportId ExportId)
 	// GetMe 当前账号信息
 	// (GET /api/v1/me)
 	GetMe(c *gin.Context)
@@ -1490,6 +1618,107 @@ func (siw *ServerInterfaceWrapper) SendAuthSms(c *gin.Context) {
 	}
 
 	siw.Handler.SendAuthSms(c)
+}
+
+// ListExports operation middleware
+func (siw *ServerInterfaceWrapper) ListExports(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ListExports(c)
+}
+
+// CreateExport operation middleware
+func (siw *ServerInterfaceWrapper) CreateExport(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.CreateExport(c)
+}
+
+// DeleteExport operation middleware
+func (siw *ServerInterfaceWrapper) DeleteExport(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "exportId" -------------
+	var exportId ExportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "exportId", c.Param("exportId"), &exportId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter exportId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.DeleteExport(c, exportId)
+}
+
+// GetExport operation middleware
+func (siw *ServerInterfaceWrapper) GetExport(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "exportId" -------------
+	var exportId ExportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "exportId", c.Param("exportId"), &exportId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter exportId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetExport(c, exportId)
+}
+
+// GetExportDownload operation middleware
+func (siw *ServerInterfaceWrapper) GetExportDownload(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "exportId" -------------
+	var exportId ExportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "exportId", c.Param("exportId"), &exportId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter exportId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetExportDownload(c, exportId)
 }
 
 // GetMe operation middleware
@@ -1941,6 +2170,11 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.GET(options.BaseURL+"/api/v1/attachments/usage", wrapper.GetAttachmentUsage)
 	router.POST(options.BaseURL+"/api/v1/attachments/:attachmentId/complete", wrapper.CompleteAttachmentUpload)
 	router.GET(options.BaseURL+"/api/v1/attachments/:attachmentId/download", wrapper.GetAttachmentDownload)
+	router.GET(options.BaseURL+"/api/v1/exports", wrapper.ListExports)
+	router.POST(options.BaseURL+"/api/v1/exports", wrapper.CreateExport)
+	router.DELETE(options.BaseURL+"/api/v1/exports/:exportId", wrapper.DeleteExport)
+	router.GET(options.BaseURL+"/api/v1/exports/:exportId", wrapper.GetExport)
+	router.GET(options.BaseURL+"/api/v1/exports/:exportId/download", wrapper.GetExportDownload)
 }
 
 type ErrorJSONResponse ErrorEnvelope
@@ -2401,6 +2635,200 @@ type SendAuthSmsdefaultJSONResponse struct {
 }
 
 func (response SendAuthSmsdefaultJSONResponse) VisitSendAuthSmsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListExportsRequestObject struct {
+}
+
+type ListExportsResponseObject interface {
+	VisitListExportsResponse(w http.ResponseWriter) error
+}
+
+type ListExports200JSONResponse ExportListEnvelope
+
+func (response ListExports200JSONResponse) VisitListExportsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListExportsdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response ListExportsdefaultJSONResponse) VisitListExportsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateExportRequestObject struct {
+	Body *CreateExportJSONRequestBody
+}
+
+type CreateExportResponseObject interface {
+	VisitCreateExportResponse(w http.ResponseWriter) error
+}
+
+type CreateExport202JSONResponse ExportEnvelope
+
+func (response CreateExport202JSONResponse) VisitCreateExportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateExportdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response CreateExportdefaultJSONResponse) VisitCreateExportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteExportRequestObject struct {
+	ExportId ExportId `json:"exportId"`
+}
+
+type DeleteExportResponseObject interface {
+	VisitDeleteExportResponse(w http.ResponseWriter) error
+}
+
+type DeleteExport200JSONResponse AckEnvelope
+
+func (response DeleteExport200JSONResponse) VisitDeleteExportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteExportdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response DeleteExportdefaultJSONResponse) VisitDeleteExportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetExportRequestObject struct {
+	ExportId ExportId `json:"exportId"`
+}
+
+type GetExportResponseObject interface {
+	VisitGetExportResponse(w http.ResponseWriter) error
+}
+
+type GetExport200JSONResponse ExportEnvelope
+
+func (response GetExport200JSONResponse) VisitGetExportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetExportdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response GetExportdefaultJSONResponse) VisitGetExportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetExportDownloadRequestObject struct {
+	ExportId ExportId `json:"exportId"`
+}
+
+type GetExportDownloadResponseObject interface {
+	VisitGetExportDownloadResponse(w http.ResponseWriter) error
+}
+
+type GetExportDownload200JSONResponse AttachmentDownloadEnvelope
+
+func (response GetExportDownload200JSONResponse) VisitGetExportDownloadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetExportDownloaddefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response GetExportDownloaddefaultJSONResponse) VisitGetExportDownloadResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -3240,6 +3668,21 @@ type StrictServerInterface interface {
 	// SendAuthSms 发送登录或找回密码验证码
 	// (POST /api/v1/auth/sms/send)
 	SendAuthSms(ctx context.Context, request SendAuthSmsRequestObject) (SendAuthSmsResponseObject, error)
+	// ListExports 最近的导出
+	// (GET /api/v1/exports)
+	ListExports(ctx context.Context, request ListExportsRequestObject) (ListExportsResponseObject, error)
+	// CreateExport 发起导出
+	// (POST /api/v1/exports)
+	CreateExport(ctx context.Context, request CreateExportRequestObject) (CreateExportResponseObject, error)
+	// DeleteExport 删除导出
+	// (DELETE /api/v1/exports/{exportId})
+	DeleteExport(ctx context.Context, request DeleteExportRequestObject) (DeleteExportResponseObject, error)
+	// GetExport 导出状态
+	// (GET /api/v1/exports/{exportId})
+	GetExport(ctx context.Context, request GetExportRequestObject) (GetExportResponseObject, error)
+	// GetExportDownload 获取导出文件的下载地址
+	// (GET /api/v1/exports/{exportId}/download)
+	GetExportDownload(ctx context.Context, request GetExportDownloadRequestObject) (GetExportDownloadResponseObject, error)
 	// GetMe 当前账号信息
 	// (GET /api/v1/me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
@@ -3702,6 +4145,139 @@ func (sh *strictHandler) SendAuthSms(ctx *gin.Context) {
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(SendAuthSmsResponseObject); ok {
 		if err := validResponse.VisitSendAuthSmsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListExports operation middleware
+func (sh *strictHandler) ListExports(ctx *gin.Context) {
+	var request ListExportsRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.ListExports(ctx, request.(ListExportsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListExports")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(ListExportsResponseObject); ok {
+		if err := validResponse.VisitListExportsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateExport operation middleware
+func (sh *strictHandler) CreateExport(ctx *gin.Context) {
+	var request CreateExportRequestObject
+
+	var body CreateExportJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateExport(ctx, request.(CreateExportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateExport")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(CreateExportResponseObject); ok {
+		if err := validResponse.VisitCreateExportResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteExport operation middleware
+func (sh *strictHandler) DeleteExport(ctx *gin.Context, exportId ExportId) {
+	var request DeleteExportRequestObject
+
+	request.ExportId = exportId
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteExport(ctx, request.(DeleteExportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteExport")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(DeleteExportResponseObject); ok {
+		if err := validResponse.VisitDeleteExportResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetExport operation middleware
+func (sh *strictHandler) GetExport(ctx *gin.Context, exportId ExportId) {
+	var request GetExportRequestObject
+
+	request.ExportId = exportId
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetExport(ctx, request.(GetExportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetExport")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetExportResponseObject); ok {
+		if err := validResponse.VisitGetExportResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetExportDownload operation middleware
+func (sh *strictHandler) GetExportDownload(ctx *gin.Context, exportId ExportId) {
+	var request GetExportDownloadRequestObject
+
+	request.ExportId = exportId
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetExportDownload(ctx, request.(GetExportDownloadRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetExportDownload")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetExportDownloadResponseObject); ok {
+		if err := validResponse.VisitGetExportDownloadResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {

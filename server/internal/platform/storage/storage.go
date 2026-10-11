@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -116,7 +117,7 @@ func (s *Store) PresignGet(ctx context.Context, key string, ttl time.Duration) (
 func (s *Store) Size(ctx context.Context, key string) (int64, error) {
 	info, err := s.internal.StatObject(ctx, s.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
-		if minio.ToErrorResponse(err).Code == "NoSuchKey" || minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
+		if isNotFound(err) {
 			return 0, ErrNotFound
 		}
 		return 0, fmt.Errorf("查询对象失败: %w", err)
@@ -141,4 +142,34 @@ func (s *Store) DeletePrefix(ctx context.Context, prefix string) error {
 		}
 	}
 	return nil
+}
+
+// Open 读取对象内容；对象不存在时返回 ErrNotFound。调用方负责关闭。
+func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, error) {
+	obj, err := s.internal.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("读取对象失败: %w", err)
+	}
+	// GetObject 不会立即请求，用 Stat 确认对象存在
+	if _, err := obj.Stat(); err != nil {
+		_ = obj.Close()
+		if isNotFound(err) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("读取对象失败: %w", err)
+	}
+	return obj, nil
+}
+
+// PutFile 把本地文件上传为对象。
+func (s *Store) PutFile(ctx context.Context, key, path, contentType string) error {
+	if _, err := s.internal.FPutObject(ctx, s.bucket, key, path, minio.PutObjectOptions{ContentType: contentType}); err != nil {
+		return fmt.Errorf("上传对象失败: %w", err)
+	}
+	return nil
+}
+
+func isNotFound(err error) bool {
+	r := minio.ToErrorResponse(err)
+	return r.Code == "NoSuchKey" || r.StatusCode == http.StatusNotFound
 }

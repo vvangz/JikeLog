@@ -16,8 +16,13 @@ import (
 // MaxTokens 为一次推送的设备数上限（极光单次最多 1000 个 registration_id）。
 const MaxTokens = 1000
 
-// ChannelReminders 为 App 中提醒通知的 Android 通知渠道 ID（App 启动时创建）。
-const ChannelReminders = "memo_reminders"
+// Android 通知渠道 ID（App 启动时创建）。
+const (
+	// ChannelReminders 为备忘录提醒。
+	ChannelReminders = "memo_reminders"
+	// ChannelGeneral 为其他通知（如数据导出完成）。
+	ChannelGeneral = "general"
+)
 
 // openApp 为点按通知后打开 App 的 Intent（极光要求 API 推送显式指定）。
 const openApp = "intent:#Intent;action=android.intent.action.MAIN;end"
@@ -34,6 +39,8 @@ type Message struct {
 	Extras map[string]string
 	// TTL 为设备离线时通知的保留时长。
 	TTL time.Duration
+	// Channel 为 Android 通知渠道；为空时使用 ChannelReminders。
+	Channel string
 }
 
 // Pusher 发送通知。
@@ -132,11 +139,15 @@ func (j *JPush) Push(ctx context.Context, m Message) error {
 	if len(m.Tokens) > MaxTokens {
 		return fmt.Errorf("一次最多推送 %d 台设备", MaxTokens)
 	}
+	channel := m.Channel
+	if channel == "" {
+		channel = ChannelReminders
+	}
 	body, err := json.Marshal(jpushRequest{
 		Platform: []string{"android"},
 		Audience: jpushAudience{RegistrationID: m.Tokens},
 		Notification: jpushNotification{Android: jpushAndroid{
-			Alert: m.Body, Title: m.Title, ChannelID: ChannelReminders,
+			Alert: m.Body, Title: m.Title, ChannelID: channel,
 			Intent: map[string]string{"url": openApp}, Extras: m.Extras,
 		}},
 		Options: jpushOptions{TimeToLive: int64(m.TTL / time.Second), Classification: 1},

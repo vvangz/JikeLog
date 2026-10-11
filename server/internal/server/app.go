@@ -18,6 +18,7 @@ import (
 	"github.com/vvangz/JikeLog/server/internal/attachment"
 	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/e2e"
+	"github.com/vvangz/JikeLog/server/internal/export"
 	"github.com/vvangz/JikeLog/server/internal/platform/config"
 	"github.com/vvangz/JikeLog/server/internal/platform/crypto"
 	"github.com/vvangz/JikeLog/server/internal/platform/db"
@@ -40,10 +41,18 @@ type App struct {
 	SMS auth.SMSSender
 	// Reminders 发送到期的备忘录提醒（测试可直接调用 Tick）。
 	Reminders *reminder.Dispatcher
+	// Exports 生成数据导出文件（测试可直接调用 Tick 与 Cleanup）。
+	Exports *export.Service
 
 	hub         *realtime.Hub
 	attachments *attachment.Service
 	logger      *slog.Logger
+}
+
+// ObjectStore 为对象存储（*storage.Store 实现）：附件直传直下与导出文件。
+type ObjectStore interface {
+	attachment.ObjectStore
+	export.ObjectStore
 }
 
 // Options 为组装服务所需的外部依赖。
@@ -53,8 +62,8 @@ type Options struct {
 	Logger *slog.Logger
 	Pool   *pgxpool.Pool
 	Redis  *redis.Client
-	// Store 为对象存储（附件）。
-	Store attachment.ObjectStore
+	// Store 为对象存储（附件与导出文件）。
+	Store ObjectStore
 	// Argon2 为空时使用 auth.DefaultArgon2Params（测试可传入低成本参数）。
 	Argon2 *auth.Argon2Params
 	// Now 为空时使用 time.Now（测试可注入可控时钟）。
@@ -88,6 +97,13 @@ func NewApp(ctx context.Context, o Options) (*App, error) {
 	attSvc := attachment.NewService(attachment.Deps{
 		Tx: tx, Store: o.Store, Keys: keyring, Sync: syncSvc, Limits: o.Config.Attachment, Logger: o.Logger,
 	})
+	push := o.Pusher
+	if push == nil {
+		push = newPusher(o.Config.Push, o.Logger)
+	}
+	exports := export.NewService(export.Deps{
+		Tx: tx, Store: o.Store, Records: syncSvc, Pusher: push, Logger: o.Logger, Now: o.Now,
+	})
 	onDeleted := func(ctx context.Context, userID uuid.UUID) {
 		keyring.Forget(userID)
 		if err := attSvc.DeleteUserObjects(ctx, userID); err != nil {
@@ -100,24 +116,25 @@ func NewApp(ctx context.Context, o Options) (*App, error) {
 		Account:    account.NewHandler(account.NewService(tx, authSvc, limiter, onDeleted)),
 		Sync:       syncer.NewHandler(syncSvc, sessions),
 		Attachment: attachment.NewHandler(attSvc, sessions),
+		Export:     export.NewHandler(exports),
 	})
 	ws := hub.Handler(realtime.Options{Check: authSvc, Cursor: syncSvc.Cursor, Limiter: limiter})
 	router, err := NewRouter(o.Config, o.Logger, api, authSvc, ws)
 	if err != nil {
 		return nil, err
 	}
-	push := o.Pusher
-	if push == nil {
-		push = newPusher(o.Config.Push, o.Logger)
-	}
 	reminders := reminder.NewDispatcher(reminder.Deps{Tx: tx, Pusher: push, Logger: o.Logger, Now: o.Now})
-	return &App{Handler: router, SMS: sender, Reminders: reminders, hub: hub, attachments: attSvc, logger: o.Logger}, nil
+	return &App{
+		Handler: router, SMS: sender, Reminders: reminders, Exports: exports,
+		hub: hub, attachments: attSvc, logger: o.Logger,
+	}, nil
 }
 
-// RunBackground 运行后台任务（跨实例通知订阅、备忘录提醒、附件对象清理），ctx 取消时关闭全部 WebSocket 连接后返回。
+// RunBackground 运行后台任务（跨实例通知订阅、备忘录提醒、数据导出、附件对象清理），ctx 取消时关闭全部 WebSocket 连接后返回。
 func (a *App) RunBackground(ctx context.Context) {
 	go a.hub.Run(ctx)
 	go a.Reminders.Run(ctx)
+	go a.Exports.Run(ctx)
 	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
 	for {
