@@ -49,6 +49,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 
   void _onText(String text) {
+    // 清除按钮随输入立即出现或消失
+    setState(() {});
     _timer?.cancel();
     _timer = Timer(_debounce, () => _update(_query.copyWith(text: text)));
   }
@@ -109,7 +111,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       currentDate: now,
       helpText: '选择时间范围',
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       _update(_query.copyWith(from: () => picked.start, to: () => picked.end));
     }
   }
@@ -273,7 +275,7 @@ class _Filters extends StatelessWidget {
   }
 }
 
-/// 按模块分组的结果列表。
+/// 按模块分组的结果列表（按需构建，结果较多时也只构建屏幕上的条目）。
 class _Results extends ConsumerWidget {
   const _Results({
     required this.result,
@@ -285,79 +287,85 @@ class _Results extends ConsumerWidget {
   final List<String> terms;
   final ValueChanged<SearchHit> onOpen;
 
+  /// 平铺的条目：提示、分组标题（模块）或结果。
+  List<Object> _items() => [
+    if (result.truncated) result,
+    for (final m in SearchModule.values)
+      if (result.hits.any((h) => h.module == m)) ...[
+        m,
+        ...result.hits.where((h) => h.module == m),
+      ],
+  ];
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.jkColors;
     final t = Theme.of(context).textTheme;
-    final ledger = _LedgerNames(
-      categories: {
-        for (final x
-            in ref.watch(categoriesProvider).value ?? const <LedgerCategory>[])
-          x.id: x,
-      },
-      accounts: {
-        for (final x in ref.watch(accountsProvider).value ?? const <Account>[])
-          x.id: x,
-      },
-      loans: {
-        for (final x in ref.watch(loansProvider).value ?? const <Loan>[])
-          x.id: x,
-      },
-    );
-    final groups = {
-      for (final m in SearchModule.values)
-        m: [
-          for (final h in result.hits)
-            if (h.module == m) h,
-        ],
-    }..removeWhere((_, v) => v.isEmpty);
-    return ListView(
+    final ledger = ref.watch(_ledgerNamesProvider);
+    final items = _items();
+    return ListView.builder(
       key: const Key('search-results'),
       padding: const EdgeInsets.only(bottom: JkTokens.spacingXl),
-      children: [
-        if (result.truncated)
-          Padding(
+      itemCount: items.length,
+      itemBuilder: (context, i) => switch (items[i]) {
+        final SearchHit h => _HitTile(
+          key: ObjectKey(h.record.id),
+          hit: h,
+          terms: terms,
+          ledger: ledger,
+          onTap: () => onOpen(h),
+        ),
+        final SearchModule m => Semantics(
+          header: true,
+          child: Padding(
             padding: const EdgeInsets.fromLTRB(
               JkTokens.spacingLg,
-              JkTokens.spacingMd,
               JkTokens.spacingLg,
-              0,
+              JkTokens.spacingLg,
+              JkTokens.spacingXs,
             ),
             child: Text(
-              '共 ${result.total} 条，只显示最近的 ${result.hits.length} 条。'
-              '可以添加关键词或筛选条件缩小范围。',
-              style: t.bodySmall?.copyWith(color: c.textSecondary),
+              '${m.label} · ${result.counts[m] ?? 0}',
+              key: Key('search-group-${m.name}'),
+              style: t.titleSmall?.copyWith(color: c.textSecondary),
             ),
           ),
-        for (final MapEntry(key: m, value: hits) in groups.entries) ...[
-          Semantics(
-            header: true,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                JkTokens.spacingLg,
-                JkTokens.spacingLg,
-                JkTokens.spacingLg,
-                JkTokens.spacingXs,
-              ),
-              child: Text(
-                '${m.label} · ${result.counts[m] ?? hits.length}',
-                key: Key('search-group-${m.name}'),
-                style: t.titleSmall?.copyWith(color: c.textSecondary),
-              ),
-            ),
+        ),
+        _ => Padding(
+          padding: const EdgeInsets.fromLTRB(
+            JkTokens.spacingLg,
+            JkTokens.spacingMd,
+            JkTokens.spacingLg,
+            0,
           ),
-          for (final h in hits)
-            _HitTile(
-              hit: h,
-              terms: terms,
-              ledger: ledger,
-              onTap: () => onOpen(h),
-            ),
-        ],
-      ],
+          child: Text(
+            '共 ${result.total} 条，只显示最近的 ${result.hits.length} 条。'
+            '可以添加关键词或筛选条件缩小范围。',
+            style: t.bodySmall?.copyWith(color: c.textSecondary),
+          ),
+        ),
+      },
     );
   }
 }
+
+/// 显示流水标题所需的名称表；只在记账数据变化时重建。
+final _ledgerNamesProvider = Provider.autoDispose<_LedgerNames>(
+  (ref) => _LedgerNames(
+    categories: {
+      for (final x
+          in ref.watch(categoriesProvider).value ?? const <LedgerCategory>[])
+        x.id: x,
+    },
+    accounts: {
+      for (final x in ref.watch(accountsProvider).value ?? const <Account>[])
+        x.id: x,
+    },
+    loans: {
+      for (final x in ref.watch(loansProvider).value ?? const <Loan>[]) x.id: x,
+    },
+  ),
+);
 
 class _LedgerNames {
   const _LedgerNames({
@@ -374,6 +382,7 @@ class _LedgerNames {
 /// 一条结果：标题、带高亮的片段、日期；流水另显示金额。
 class _HitTile extends StatelessWidget {
   const _HitTile({
+    super.key,
     required this.hit,
     required this.terms,
     required this.ledger,
@@ -390,7 +399,7 @@ class _HitTile extends StatelessWidget {
     final c = context.jkColors;
     final t = Theme.of(context).textTheme;
     final mark = TextStyle(
-      color: c.primary,
+      color: c.onPrimaryContainer,
       fontWeight: FontWeight.w700,
       backgroundColor: c.primaryContainer,
     );

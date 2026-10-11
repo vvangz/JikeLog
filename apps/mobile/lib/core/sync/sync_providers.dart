@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../features/attachments/attachment_providers.dart';
+import '../../features/export/export_api.dart';
 import '../../features/auth/auth_controller.dart';
 import '../db/database.dart';
 import 'hlc.dart';
@@ -170,6 +171,11 @@ class SyncCoordinator {
       await _ref.read(attachmentServiceProvider).deleteLocalFiles();
     } on Object catch (e) {
       debugPrint('删除本机附件文件失败: $e');
+    }
+    try {
+      await _ref.read(exportFilesProvider).clear();
+    } on Object catch (e) {
+      debugPrint('删除本机导出文件失败: $e');
     }
   }
 

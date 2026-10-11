@@ -220,6 +220,48 @@ void main() {
     expect(find.text('还没有导出过'), findsOneWidget);
   });
 
+  testWidgets('请求返回前离开页面不报错', (tester) async {
+    final pending = Completer<FakeResponse>();
+    final b = _backend([])
+      ..on('POST', '/api/v1/exports', (_) => pending.future);
+    await pumpApp(tester, backend: b, width: 1200);
+    await _open(tester);
+    await tester.tap(find.byKey(const Key('export-start')));
+    await tester.pump();
+    await tester.pageBack();
+    await settleApp(tester);
+    expect(find.byType(ExportPage), findsNothing);
+    pending.complete(FakeResponse.ok(_job(_id2, 'pending'), status: 202));
+    await settleApp(tester);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('窄屏 + 大字号：导出页面不溢出', (tester) async {
+    final jobs = [
+      _job(
+        _id1,
+        'done',
+        attachments: true,
+        size: 123456789,
+        expiresAt: DateTime.now().add(const Duration(hours: 3)),
+      ),
+      _job(_id2, 'failed', error: '生成导出文件失败，请稍后重试'),
+    ];
+    await pumpApp(
+      tester,
+      backend: _backend(jobs),
+      width: 320,
+      height: 700,
+      textScale: 1.5,
+    );
+    unawaited(_c(tester).read(routerProvider).push('/settings/export'));
+    await settleApp(tester);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -2000));
+    await settleApp(tester);
+    expect(find.byKey(const Key('export-download-$_id1')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   test('文件大小与文件名', () {
     expect(formatBytes(512), '512 B');
     expect(formatBytes(1536), '1.5 KB');

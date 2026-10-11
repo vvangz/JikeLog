@@ -301,6 +301,10 @@ void expectRequestCount(FakeBackend b, String method, String path, int n) =>
 class FakeExportFiles implements ExportFiles {
   final shared = <(String, String)>[];
   Object? fail;
+  var cleared = 0;
+
+  @override
+  Future<void> clear() async => cleared++;
 
   @override
   Future<void> downloadAndShare(String url, String fileName) async {

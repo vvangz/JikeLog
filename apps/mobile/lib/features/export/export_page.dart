@@ -52,16 +52,29 @@ class _ExportPageState extends ConsumerState<ExportPage> {
     }
   }
 
+  /// 请求失败时的提示：服务端给出的原因，或通用的网络提示。
+  void _toastError(Object e) {
+    if (!mounted) return;
+    if (e is! ApiException) debugPrint('导出请求失败: $e');
+    showJkToast(
+      context,
+      e is ApiException ? e.message : '操作失败，请检查网络后重试',
+      kind: JkToastKind.error,
+    );
+  }
+
+  // 以下操作都在 await 之后检查 mounted：页面可能已经关闭，此时 ref 不能再用
+
   Future<void> _create() async {
     setState(() => _creating = true);
+    final api = ref.read(exportApiProvider);
     try {
-      await ref
-          .read(exportApiProvider)
-          .create(_modules, attachments: _attachments);
+      await api.create(_modules, attachments: _attachments);
+      if (!mounted) return;
       ref.invalidate(exportsProvider);
-      if (mounted) showJkToast(context, '已开始导出，完成后会通知你');
-    } on ApiException catch (e) {
-      if (mounted) showJkToast(context, e.message, kind: JkToastKind.error);
+      showJkToast(context, '已开始导出，完成后会通知你');
+    } on Object catch (e) {
+      _toastError(e);
     } finally {
       if (mounted) setState(() => _creating = false);
     }
@@ -69,14 +82,15 @@ class _ExportPageState extends ConsumerState<ExportPage> {
 
   Future<void> _download(ExportJob job) async {
     setState(() => _downloading = job.id);
+    final api = ref.read(exportApiProvider);
+    final files = ref.read(exportFilesProvider);
     try {
-      final url = await ref.read(exportApiProvider).downloadUrl(job.id);
-      await ref
-          .read(exportFilesProvider)
-          .downloadAndShare(url, exportFileName(job.createdAt));
+      final url = await api.downloadUrl(job.id);
+      await files.downloadAndShare(url, exportFileName(job.createdAt));
     } on ApiException catch (e) {
-      if (mounted) showJkToast(context, e.message, kind: JkToastKind.error);
-      ref.invalidate(exportsProvider);
+      _toastError(e);
+      // 可能已过期：刷新状态
+      if (mounted) ref.invalidate(exportsProvider);
     } on Object catch (e) {
       debugPrint('下载导出文件失败: $e');
       if (mounted) {
@@ -95,12 +109,12 @@ class _ExportPageState extends ConsumerState<ExportPage> {
       confirmLabel: '删除',
       destructive: true,
     );
-    if (!ok) return;
+    if (!ok || !mounted) return;
     try {
       await ref.read(exportApiProvider).delete(job.id);
-      ref.invalidate(exportsProvider);
-    } on ApiException catch (e) {
-      if (mounted) showJkToast(context, e.message, kind: JkToastKind.error);
+      if (mounted) ref.invalidate(exportsProvider);
+    } on Object catch (e) {
+      _toastError(e);
     }
   }
 
@@ -158,6 +172,8 @@ class _ExportPageState extends ConsumerState<ExportPage> {
             ),
             const JkSectionTitle('最近的导出'),
             jobs.when(
+              // 定时刷新偶尔失败时继续显示上次的列表，不闪成错误页
+              skipError: true,
               loading: () => const Padding(
                 padding: EdgeInsets.all(JkTokens.spacingLg),
                 child: Center(child: CircularProgressIndicator()),

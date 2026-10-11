@@ -104,6 +104,11 @@ void main() {
     await tapAndSettle(tester, find.text('退出'));
     expect(find.byType(LoginPage), findsOneWidget);
     expectRequestCount(b, 'POST', '/api/v1/auth/logout', 1);
+    expect(
+      TestHooks.exportFiles.cleared,
+      greaterThan(0),
+      reason: '退出登录时删除本机的导出文件',
+    );
   });
 
   testWidgets('登录设备：加载、下线其他设备、加载失败重试', (tester) async {

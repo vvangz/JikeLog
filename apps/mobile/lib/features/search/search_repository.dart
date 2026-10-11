@@ -217,58 +217,58 @@ class SearchRepository {
     return result;
   }
 
-  /// [entity] 中任一字段的值属于给定集合的记录 ID。
+  /// [entity] 中任一字段的值属于给定集合的记录 ID。IN 列表分批绑定，不超过 SQLite 的变量个数上限。
   Future<Set<String>> _idsWhere(
     String entity,
     Map<String, Set<String>> anyOf,
   ) async {
-    final conds = <String>[];
-    final vars = <Variable>[Variable(entity)];
+    final out = <String>{};
     for (final MapEntry(key: field, value: values) in anyOf.entries) {
-      if (values.isEmpty) continue;
-      conds.add(
-        "json_extract(fields, '\$.$field') IN "
-        '(${List.filled(values.length, '?').join(', ')})',
-      );
-      vars.addAll(values.map(Variable.new));
+      for (final chunk in _chunks(values.toList(), _chunkSize)) {
+        final rows = await db
+            .customSelect(
+              'SELECT id FROM records WHERE entity = ? AND deleted = 0 '
+              "AND json_extract(fields, '\$.$field') IN (${_marks(chunk)})",
+              variables: [Variable(entity), ...chunk.map(Variable.new)],
+            )
+            .get();
+        out.addAll(rows.map((r) => r.read<String>('id')));
+      }
     }
-    if (conds.isEmpty) return {};
-    final rows = await db
-        .customSelect(
-          'SELECT id FROM records WHERE entity = ? AND deleted = 0 '
-          'AND (${conds.join(' OR ')})',
-          variables: vars,
-        )
-        .get();
-    return {for (final r in rows) r.read<String>('id')};
+    return out;
   }
 
-  /// 按模块与日期筛选、排序并加载记录。
+  /// 按模块与日期筛选、排序，只为前 [maxHits] 条读取正文与记录。
+  /// 命中很多（如单个常用字）时，不把全部正文读进内存。
   Future<SearchResult> _collect(Set<String> ids, SearchQuery q) async {
-    final docs = <(String, SearchModule, String, String, String)>[];
-    final from = q.from == null ? null : formatDay(q.from!);
-    final to = q.to == null ? null : formatDay(q.to!);
-    for (final chunk in _chunks(ids.toList(), 500)) {
+    final entities = [
+      for (final m in SearchModule.values)
+        if (q.modules.isEmpty || q.modules.contains(m)) m.entity,
+    ];
+    final filters = [
+      'entity IN (${_marks(entities)})',
+      if (q.from != null) 'day >= ?',
+      if (q.to != null) 'day <= ?',
+    ].join(' AND ');
+    final filterVars = [
+      ...entities.map(Variable.new),
+      if (q.from != null) Variable(formatDay(q.from!)),
+      if (q.to != null) Variable(formatDay(q.to!)),
+    ];
+    final docs = <(String, SearchModule, String)>[];
+    for (final chunk in _chunks(ids.toList(), _chunkSize)) {
       final rows = await db
           .customSelect(
-            'SELECT record_id, entity, day, title, body FROM search_docs '
-            'WHERE record_id IN (${List.filled(chunk.length, '?').join(', ')})',
-            variables: chunk.map(Variable.new).toList(),
+            'SELECT record_id, entity, day FROM search_docs '
+            'WHERE record_id IN (${_marks(chunk)}) AND $filters',
+            variables: [...chunk.map(Variable.new), ...filterVars],
           )
           .get();
       for (final r in rows) {
-        final module = SearchModule.ofEntity(r.read<String>('entity'));
-        final day = r.read<String>('day');
-        if (module == null) continue;
-        if (q.modules.isNotEmpty && !q.modules.contains(module)) continue;
-        if (from != null && day.compareTo(from) < 0) continue;
-        if (to != null && day.compareTo(to) > 0) continue;
         docs.add((
           r.read<String>('record_id'),
-          module,
-          day,
-          r.read<String>('title'),
-          r.read<String>('body'),
+          SearchModule.ofEntity(r.read<String>('entity'))!,
+          r.read<String>('day'),
         ));
       }
     }
@@ -282,11 +282,15 @@ class SearchRepository {
       counts[d.$2] = (counts[d.$2] ?? 0) + 1;
     }
     final top = docs.take(maxHits).toList();
+    final texts = await _texts(top.map((d) => d.$1).toList());
     final records = await _records(top.map((d) => d.$1).toList());
     return SearchResult(
       hits: [
-        for (final (id, module, day, title, body) in top)
-          if (records[id] case final r?)
+        for (final (id, module, day) in top)
+          if ((records[id], texts[id]) case (
+            final r?,
+            (final title, final body)?,
+          ))
             SearchHit(
               record: r,
               module: module,
@@ -298,6 +302,31 @@ class SearchRepository {
       counts: counts,
     );
   }
+
+  /// 索引中的标题与正文。
+  Future<Map<String, (String, String)>> _texts(List<String> ids) async {
+    if (ids.isEmpty) return {};
+    final rows = await db
+        .customSelect(
+          'SELECT record_id, title, body FROM search_docs '
+          'WHERE record_id IN (${_marks(ids)})',
+          variables: ids.map(Variable.new).toList(),
+        )
+        .get();
+    return {
+      for (final r in rows)
+        r.read<String>('record_id'): (
+          r.read<String>('title'),
+          r.read<String>('body'),
+        ),
+    };
+  }
+
+  /// 每次绑定的变量数上限（旧版 SQLite 为 999）。
+  static const _chunkSize = 500;
+
+  static String _marks(List<Object?> list) =>
+      List.filled(list.length, '?').join(', ');
 
   Future<Map<String, LocalRecord>> _records(List<String> ids) async {
     if (ids.isEmpty) return {};

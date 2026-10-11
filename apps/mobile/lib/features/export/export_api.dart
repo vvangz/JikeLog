@@ -135,18 +135,43 @@ final exportApiProvider = Provider<ExportApi>(
 abstract class ExportFiles {
   /// 下载 [url] 到本机临时目录并打开分享面板。
   Future<void> downloadAndShare(String url, String fileName);
+
+  /// 删除本机留下的导出文件（退出登录时）。
+  Future<void> clear();
 }
 
 class ShareExportFiles implements ExportFiles {
-  ShareExportFiles({Dio? dio}) : _dio = dio ?? Dio();
+  ShareExportFiles({Dio? dio})
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 15),
+              // 两次收到数据的最长间隔，不限制整个下载的时长
+              receiveTimeout: const Duration(seconds: 60),
+            ),
+          );
 
   final Dio _dio;
 
+  Future<Directory> _dir() async =>
+      Directory('${(await getTemporaryDirectory()).path}/exports');
+
+  @override
+  Future<void> clear() async {
+    final dir = await _dir();
+    if (await dir.exists()) await dir.delete(recursive: true);
+  }
+
   @override
   Future<void> downloadAndShare(String url, String fileName) async {
-    final dir = Directory('${(await getTemporaryDirectory()).path}/exports');
-    // 只保留最近一次下载的文件：导出内容是明文，不在本机长期留存
-    if (await dir.exists()) await dir.delete(recursive: true);
+    // 导出内容是明文：正式版只从 HTTPS 地址下载
+    if (kReleaseMode && Uri.parse(url).scheme != 'https') {
+      throw StateError('下载地址不安全');
+    }
+    // 只保留最近一次下载的文件（分享面板需要在之后读取它，不能立即删除）；退出登录时清空
+    await clear();
+    final dir = await _dir();
     await dir.create(recursive: true);
     final file = File('${dir.path}/$fileName');
     await _dio.download(url, file.path);

@@ -260,6 +260,11 @@ void main() {
       final a = id();
       await s.write(Entities.note, a, {'title': '升级前的笔记', 'body': ''});
       // 退回 v3：没有搜索表
+      // 一条无法解析的记录不能让升级失败
+      await old.customStatement(
+        'INSERT INTO records (id, entity, fields, clocks, updated_at) '
+        "VALUES ('bad', 'note', 'not json', '{}', 0)",
+      );
       await old.customStatement('DROP TABLE search_fts');
       await old.customStatement('DROP TABLE search_docs');
       await old.customStatement('PRAGMA user_version = 3');

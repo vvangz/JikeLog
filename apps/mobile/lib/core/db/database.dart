@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:flutter/foundation.dart';
 
 import '../search/search_doc.dart';
 
@@ -197,17 +198,42 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  /// 由全部记录重建搜索索引（本地库升级时）。
-  Future<void> rebuildSearchIndex() => transaction(() async {
+  /// 重建搜索索引时每批读取的记录数。
+  static const _rebuildBatch = 500;
+
+  /// 由全部记录重建搜索索引（本地库升级时）。按 ID 分批读取，不一次载入全部记录；
+  /// 无法解析的记录跳过（只是搜不到），不能让升级失败、App 无法打开。返回跳过的条数。
+  Future<int> rebuildSearchIndex() => transaction(() async {
     await customStatement('DELETE FROM search_docs');
-    final rows = await (select(records)..where((t) => t.deleted.not())).get();
-    for (final r in rows) {
-      final doc = searchDocOf(
-        r.entity,
-        (jsonDecode(r.fields) as Map<String, dynamic>).cast<String, Object?>(),
-        (jsonDecode(r.clocks) as Map<String, dynamic>).cast<String, String>(),
-      );
-      if (doc != null) await setSearch(r.id, r.entity, doc);
+    var after = '';
+    var skipped = 0;
+    while (true) {
+      final rows =
+          await (select(records)
+                ..where((t) => t.deleted.not() & t.id.isBiggerThanValue(after))
+                ..orderBy([(t) => OrderingTerm(expression: t.id)])
+                ..limit(_rebuildBatch))
+              .get();
+      for (final r in rows) {
+        try {
+          final doc = searchDocOf(
+            r.entity,
+            (jsonDecode(r.fields) as Map<String, dynamic>)
+                .cast<String, Object?>(),
+            {
+              for (final MapEntry(:key, :value)
+                  in (jsonDecode(r.clocks) as Map<String, dynamic>).entries)
+                if (value is String) key: value,
+            },
+          );
+          if (doc != null) await setSearch(r.id, r.entity, doc);
+        } on Object catch (e) {
+          skipped++;
+          debugPrint('跳过无法建立搜索索引的记录 ${r.id}: $e');
+        }
+      }
+      if (rows.length < _rebuildBatch) return skipped;
+      after = rows.last.id;
     }
   });
 

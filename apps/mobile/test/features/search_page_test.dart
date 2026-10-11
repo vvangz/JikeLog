@@ -181,6 +181,31 @@ void main() {
     expect(find.text('搜索全部内容'), findsOneWidget);
   });
 
+  testWidgets('窄屏 + 大字号：筛选与结果不溢出', (tester) async {
+    await pumpApp(tester, width: 320, height: 700, textScale: 1.5);
+    final cat = await _put(tester, Entities.ledgerCategory, {
+      'name': '一个名字非常长的餐饮分类',
+      'kind': 'expense',
+    });
+    await _put(tester, Entities.ledgerEntry, {
+      'type': 'expense',
+      'amount': '123456789',
+      'fee': '0',
+      'date': '2026-10-11',
+      'categoryId': cat,
+      'note': '很长很长的备注内容，用来检查窄屏下的换行与省略',
+    });
+    await _put(tester, Entities.note, {
+      'title': '一篇标题非常非常长的笔记，用来检查窄屏',
+      'body': '正文中也包含餐饮两个字',
+    });
+    unawaited(_c(tester).read(routerProvider).push('/search'));
+    await settleApp(tester);
+    await _search(tester, '餐饮');
+    expect(_hits(tester), hasLength(2));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('结果超过上限时提示缩小范围', (tester) async {
     await pumpApp(tester);
     await tester.runAsync(

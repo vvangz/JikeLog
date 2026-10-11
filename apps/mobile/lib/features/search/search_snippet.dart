@@ -11,10 +11,14 @@ class Snippet {
   final List<(int, int)> ranges;
 }
 
-/// 只把 ASCII 字母转为小写：与 SQLite 的 LIKE 和 trigram 一致，并且不改变字符串长度，位置可以直接对应。
-String _fold(String s) => String.fromCharCodes(
-  s.codeUnits.map((c) => c >= 0x41 && c <= 0x5a ? c + 32 : c),
-);
+/// 逐个字符转为小写（与 trigram 的大小写折叠一致），只采用不改变长度的转换，位置可以直接对应原文。
+String _fold(String s) => String.fromCharCodes(s.codeUnits.map(_foldUnit));
+
+int _foldUnit(int c) {
+  if (c < 0x80) return c >= 0x41 && c <= 0x5a ? c + 32 : c;
+  final lower = String.fromCharCode(c).toLowerCase();
+  return lower.length == 1 ? lower.codeUnitAt(0) : c;
+}
 
 /// 文字中全部关键词的位置（合并重叠部分）。
 List<(int, int)> matchRanges(String text, List<String> terms) {
