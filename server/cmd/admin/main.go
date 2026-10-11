@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/platform/config"
 	"github.com/vvangz/JikeLog/server/internal/platform/db"
+	"github.com/vvangz/JikeLog/server/internal/platform/httpx"
 )
 
 const usage = `用法：
@@ -97,8 +99,22 @@ func execute(ctx context.Context, svc *admin.Service, cmd, username, role, passw
 	}
 }
 
-// describe 把错误转为命令行提示。
-func describe(err error) error { return fmt.Errorf("失败：%w", err) }
+// describe 把错误转为命令行提示：参数校验错误列出具体原因（如密码不符合规则）。
+func describe(err error) error {
+	var he *httpx.Error
+	if errors.As(err, &he) {
+		if fields, ok := he.Details["fields"].(map[string]string); ok && len(fields) > 0 {
+			reasons := make([]string, 0, len(fields))
+			for _, r := range fields {
+				reasons = append(reasons, r)
+			}
+			sort.Strings(reasons)
+			return fmt.Errorf("失败：%s", strings.Join(reasons, "；"))
+		}
+		return fmt.Errorf("失败：%s", he.Message)
+	}
+	return fmt.Errorf("失败：%w", err)
+}
 
 func readPassword(r io.Reader) (string, error) {
 	line, err := bufio.NewReader(r).ReadString('\n')

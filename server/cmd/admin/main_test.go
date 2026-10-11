@@ -1,8 +1,11 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/vvangz/JikeLog/server/internal/platform/httpx"
 )
 
 func TestReadPassword(t *testing.T) {
@@ -24,5 +27,18 @@ func TestRunRequiresUsername(t *testing.T) {
 	}
 	if err := run([]string{"create"}, strings.NewReader("x\n"), nil); err == nil || !strings.Contains(err.Error(), "用法") {
 		t.Fatalf("缺少用户名应提示用法：%v", err)
+	}
+}
+
+func TestDescribeShowsReasons(t *testing.T) {
+	err := describe(httpx.Validation(map[string]string{"password": "密码需要同时包含字母和数字"}))
+	if err.Error() != "失败：密码需要同时包含字母和数字" {
+		t.Fatalf("%v", err)
+	}
+	if got := describe(httpx.NewError(409, "USERNAME_TAKEN", "用户名已被使用")).Error(); got != "失败：用户名已被使用" {
+		t.Fatalf("%v", got)
+	}
+	if got := describe(errors.New("连接失败")).Error(); got != "失败：连接失败" {
+		t.Fatalf("%v", got)
 	}
 }
