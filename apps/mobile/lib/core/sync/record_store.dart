@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 
 import '../db/database.dart';
+import '../search/search_doc.dart';
 import 'hlc.dart';
 import 'refs.dart';
 import 'schema.dart';
@@ -203,6 +204,7 @@ class RecordStore {
     final cur = await get(id);
     if (cur == null) return;
     await db.setRefs(id, const []);
+    await db.setSearch(id, cur.entity, null);
     if (cur.version == 0) {
       await (db.delete(db.records)..where((t) => t.id.equals(id))).go();
       return;
@@ -471,7 +473,14 @@ class RecordStore {
           ),
         ),
       )
-      .then((_) => db.setRefs(id, deleted ? const [] : refsOf(entity, fields)));
+      .then((_) async {
+        await db.setRefs(id, deleted ? const [] : refsOf(entity, fields));
+        await db.setSearch(
+          id,
+          entity,
+          deleted ? null : searchDocOf(entity, fields, clocks),
+        );
+      });
 
   /// 派生的排序键：工作日志按日期；笔记置顶在前，再按最后修改的字段时钟（HLC 可按字典序比较）；
   /// 备忘录按时间（补齐为 13 位毫秒数，字典序即时间顺序，便于按日期范围查询）。

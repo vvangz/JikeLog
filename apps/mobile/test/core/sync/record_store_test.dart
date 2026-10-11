@@ -158,6 +158,7 @@ void main() {
     ).write('worklog', wl1, {'date': '2026-10-01', 'content': '旧数据'});
     await v2.customStatement('DROP TABLE record_refs');
     await v2.customStatement('DROP TABLE calendar_links');
+    await _dropSearchTables(v2);
     await v2.customStatement('PRAGMA user_version = 1');
     await v2.close();
 
@@ -181,6 +182,7 @@ void main() {
       HybridClock(installationId: 'x'),
     ).write('note', note, {'format': 'markdown', 'tags': '保留'});
     await v3.customStatement('DROP TABLE calendar_links');
+    await _dropSearchTables(v3);
     await v3.customStatement('PRAGMA user_version = 2');
     await v3.close();
 
@@ -214,3 +216,9 @@ void main() {
 Future<String> _sortKey(AppDatabase db, String id) async => (await (db.select(
   db.records,
 )..where((t) => t.id.equals(id))).getSingle()).sortKey;
+
+/// 退回 v4 之前的结构：删掉搜索索引表（触发器随表删除）。
+Future<void> _dropSearchTables(AppDatabase db) async {
+  await db.customStatement('DROP TABLE search_fts');
+  await db.customStatement('DROP TABLE search_docs');
+}

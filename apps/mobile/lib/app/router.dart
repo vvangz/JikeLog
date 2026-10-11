@@ -24,6 +24,8 @@ import '../features/settings/settings_page.dart';
 import '../features/notes/note_editor_page.dart';
 import '../features/notes/notes_list_page.dart';
 import '../features/revisions/revisions_page.dart';
+import '../features/search/search_page.dart';
+import '../features/search/search_repository.dart';
 import '../features/worklog/worklog_editor_page.dart';
 import '../features/worklog/worklog_list_page.dart';
 import '../shared/ui/jk_logo.dart';
@@ -178,6 +180,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/ledger/categories',
         builder: (_, _) => const CategoriesPage(),
+      ),
+      GoRoute(
+        path: '/search',
+        builder: (_, state) => SearchPage(
+          module: SearchModule.parse(state.uri.queryParameters['module']),
+        ),
       ),
       GoRoute(path: '/settings/about', builder: (_, _) => const AboutPage()),
       GoRoute(path: '/account/phone', builder: (_, _) => const PhonePage()),
