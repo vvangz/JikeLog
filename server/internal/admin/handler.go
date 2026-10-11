@@ -127,8 +127,12 @@ func (h *Handler) AdminRefresh(ctx context.Context, req apigen.AdminRefreshReque
 	if err != nil {
 		return nil, err
 	}
-	return apigen.AdminRefresh200JSONResponse{Body: sessionBody(ctx, s),
-		Headers: apigen.AdminRefresh200ResponseHeaders{SetCookie: h.cookie(s.RefreshToken, s.RefreshExpires)}}, nil
+	resp := apigen.AdminRefresh200JSONResponse{Body: sessionBody(ctx, s)}
+	// 宽限期内用旧令牌刷新时不轮换，Cookie 保持另一个标签页已设置的新值
+	if s.RefreshToken != "" {
+		resp.Headers.SetCookie = h.cookie(s.RefreshToken, s.RefreshExpires)
+	}
+	return resp, nil
 }
 
 // AdminLogout 实现 POST /api/admin/v1/auth/logout。
@@ -281,6 +285,10 @@ func detail(d UserDetail) apigen.AdminUserDetail {
 			summary.LastActiveAt = &t
 		}
 	}
+	if summary.LastActiveAt == nil {
+		t := d.User.CreatedAt
+		summary.LastActiveAt = &t
+	}
 	settings := apigen.Settings{ThemeMode: apigen.ThemeModeSystem, FontScale: 1, WeekStart: 1, DefaultReminders: []int32{0}}
 	if d.HasSetting {
 		settings = account.ToSettings(d.Settings)
@@ -294,7 +302,7 @@ func detail(d UserDetail) apigen.AdminUserDetail {
 
 // AdminListAuditLogs 实现 GET /api/admin/v1/audit-logs。
 func (h *Handler) AdminListAuditLogs(ctx context.Context, req apigen.AdminListAuditLogsRequestObject) (apigen.AdminListAuditLogsResponseObject, error) {
-	ctx, _, _, err := request(ctx)
+	ctx, p, m, err := request(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +312,7 @@ func (h *Handler) AdminListAuditLogs(ctx context.Context, req apigen.AdminListAu
 		a := string(*req.Params.Action)
 		f.Action = &a
 	}
-	logs, total, err := h.svc.ListAuditLogs(ctx, f)
+	logs, total, err := h.svc.ListAuditLogs(ctx, p, f, m)
 	if err != nil {
 		return nil, err
 	}
@@ -320,11 +328,11 @@ func (h *Handler) AdminListAuditLogs(ctx context.Context, req apigen.AdminListAu
 
 // AdminListAdmins 实现 GET /api/admin/v1/admins。
 func (h *Handler) AdminListAdmins(ctx context.Context, _ apigen.AdminListAdminsRequestObject) (apigen.AdminListAdminsResponseObject, error) {
-	ctx, p, _, err := request(ctx)
+	ctx, p, m, err := request(ctx)
 	if err != nil {
 		return nil, err
 	}
-	list, err := h.svc.ListAdmins(ctx, p)
+	list, err := h.svc.ListAdmins(ctx, p, m)
 	if err != nil {
 		return nil, err
 	}

@@ -16,7 +16,8 @@ export function UsersPage() {
   const { client, call } = useAuth();
   const [params, setParams] = useSearchParams();
   const q = params.get('q') ?? '';
-  const page = Math.max(1, Number(params.get('page')) || 1);
+  const rawPage = Number(params.get('page'));
+  const page = Number.isInteger(rawPage) && rawPage >= 1 && rawPage <= 1000 ? rawPage : 1;
 
   const users = useQuery({
     queryKey: ['users', q, page],
@@ -33,7 +34,8 @@ export function UsersPage() {
     const np = next.page ?? page;
     if (nq) p.set('q', nq);
     if (np > 1) p.set('page', String(np));
-    setParams(p);
+    // 翻页不新增历史记录；新的搜索才新增
+    setParams(p, { replace: next.q === undefined });
   };
 
   return (
@@ -45,6 +47,7 @@ export function UsersPage() {
         aria-label="搜索用户"
         placeholder="用户名、昵称或手机号后 4 位"
         allowClear
+        key={q}
         defaultValue={q}
         maxLength={30}
         onSearch={(v) => update({ q: v.trim(), page: 1 })}

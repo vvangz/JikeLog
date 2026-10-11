@@ -71,6 +71,8 @@ func (e AttachmentUploadMethod) Valid() bool {
 const (
 	AuditActionChangePassword AuditAction = "change_password"
 	AuditActionCreateAdmin    AuditAction = "create_admin"
+	AuditActionListAdmins     AuditAction = "list_admins"
+	AuditActionListAuditLogs  AuditAction = "list_audit_logs"
 	AuditActionListUsers      AuditAction = "list_users"
 	AuditActionLogin          AuditAction = "login"
 	AuditActionLoginFailed    AuditAction = "login_failed"
@@ -87,6 +89,10 @@ func (e AuditAction) Valid() bool {
 	case AuditActionChangePassword:
 		return true
 	case AuditActionCreateAdmin:
+		return true
+	case AuditActionListAdmins:
+		return true
+	case AuditActionListAuditLogs:
 		return true
 	case AuditActionListUsers:
 		return true

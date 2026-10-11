@@ -5,7 +5,8 @@ import type { components } from '../api/schema.gen';
 export type AdminProfile = components['schemas']['AdminProfile'];
 export type AdminSession = components['schemas']['AdminSession'];
 
-export type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
+/** loading 恢复会话中 / signedOut 未登录 / signedIn 已登录 / offline 连不上服务器（会话可能仍有效）。 */
+export type AuthStatus = 'loading' | 'signedOut' | 'signedIn' | 'offline';
 
 /** 一次接口调用的结果（openapi-fetch 的返回值）。 */
 export interface FetchResult<T> {
@@ -28,6 +29,8 @@ export interface Auth {
   call: <T>(fn: () => Promise<FetchResult<T>>) => Promise<T>;
   /** 修改密码成功后更新管理员状态（不再要求改密码）。 */
   passwordChanged: () => void;
+  /** 连不上服务器时重新尝试恢复会话。 */
+  retry: () => void;
 }
 
 export const AuthContext = createContext<Auth | null>(null);

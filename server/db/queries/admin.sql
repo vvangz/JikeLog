@@ -26,22 +26,18 @@ SELECT count(*) FROM admin_users WHERE role = 'super_admin' AND NOT disabled;
 UPDATE admin_users SET role = @role, disabled = @disabled, updated_at = @now WHERE id = @id RETURNING *;
 
 -- name: SetAdminPassword :exec
--- 修改或重置密码：同时清除锁定。must_change_password 为 true 表示下次登录必须先改密码（被他人重置时）。
+-- 修改或重置密码。must_change_password 为 true 表示下次登录必须先改密码（被他人重置时）。
 UPDATE admin_users
 SET password_hash = @password_hash, must_change_password = @must_change_password,
-    password_changed_at = @now, failed_logins = 0, locked_until = NULL, updated_at = @now
+    password_changed_at = @now, updated_at = @now
 WHERE id = @id;
 
--- name: RecordAdminLoginFailure :one
--- 连续失败达到上限时锁定一段时间，并重新计数。
-UPDATE admin_users
-SET failed_logins = CASE WHEN failed_logins + 1 >= @max_failures::int THEN 0 ELSE failed_logins + 1 END,
-    locked_until = CASE WHEN failed_logins + 1 >= @max_failures::int THEN @lock_until::timestamptz ELSE locked_until END
-WHERE id = @id
-RETURNING locked_until;
-
 -- name: RecordAdminLogin :exec
-UPDATE admin_users SET failed_logins = 0, locked_until = NULL, last_login_at = @now WHERE id = @id;
+UPDATE admin_users SET last_login_at = @now WHERE id = @id;
+
+-- name: LockAdminRoles :exec
+-- 修改管理员角色或停用状态时串行执行，保证"至少一个启用的超级管理员"不会被并发修改打破（事务结束时释放）。
+SELECT pg_advisory_xact_lock(7243001);
 
 -- ───────────── 会话 ─────────────
 
@@ -53,7 +49,12 @@ VALUES (@id, @admin_id, @refresh_hash, @now, @expires_at, @now);
 SELECT * FROM admin_sessions WHERE refresh_hash = @refresh_hash FOR UPDATE;
 
 -- name: RotateAdminSession :exec
-UPDATE admin_sessions SET refresh_hash = @refresh_hash, last_used_at = @now WHERE id = @id;
+UPDATE admin_sessions
+SET prev_refresh_hash = refresh_hash, refresh_hash = @refresh_hash, rotated_at = @now, last_used_at = @now
+WHERE id = @id;
+
+-- name: GetAdminSessionByPrevHash :one
+SELECT * FROM admin_sessions WHERE prev_refresh_hash = @prev_refresh_hash;
 
 -- name: RevokeAdminSession :exec
 UPDATE admin_sessions SET revoked_at = @now WHERE id = @id AND revoked_at IS NULL;
@@ -159,4 +160,5 @@ ORDER BY revoked_at IS NOT NULL, last_active_at DESC;
 
 -- name: AdminLastSync :one
 -- 最后一次有记录写入服务端的时间（不含内容）；没有任何记录时查不到。
-SELECT updated_at FROM records WHERE user_id = @user_id ORDER BY updated_at DESC LIMIT 1;
+-- 按同步序号取最后一条（有索引），每次写入都会推进序号并更新 updated_at
+SELECT updated_at FROM records WHERE user_id = @user_id ORDER BY server_seq DESC LIMIT 1;

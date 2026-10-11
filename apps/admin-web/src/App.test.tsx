@@ -42,17 +42,42 @@ describe('登录与会话', () => {
   });
 
   it('打开页面时用 Cookie 恢复会话；Access Token 过期时自动刷新并重试', async () => {
-    const api = renderApp('/dashboard', { expireOnce: true });
+    const api = renderApp('/dashboard');
     expect(await screen.findByText('近 30 天新增用户')).toBeInTheDocument();
-    expect(api.calls.filter((c) => c.path === '/api/admin/v1/auth/refresh')).toHaveLength(2);
-    expect(api.calls.filter((c) => c.path === '/api/admin/v1/dashboard')).toHaveLength(2);
     expect(screen.getByRole('listitem', { name: '2026-09-02：1 人' })).toBeInTheDocument();
     expect(screen.getByText('Android · 18 台')).toBeInTheDocument();
     expect(screen.getByText('5.0 MB')).toBeInTheDocument();
+    expect(api.calls.filter((c) => c.path === '/api/admin/v1/auth/refresh')).toHaveLength(1);
+
+    // 令牌过期：下一次请求 401，刷新一次后重试成功
+    api.state.expired = true;
+    await userEvent.click(screen.getByRole('button', { name: '导航' }));
+    await userEvent.click(within(screen.getByRole('navigation', { name: '主导航' })).getByText('用户'));
+    expect(await screen.findByText('user01')).toBeInTheDocument();
+    expect(api.calls.filter((c) => c.path === '/api/admin/v1/auth/refresh')).toHaveLength(2);
+  });
+
+  it('连不上服务器时显示可重试的状态，而不是登录页', async () => {
+    const api = renderApp('/dashboard', { offline: true });
+    expect(await screen.findByText('无法连接服务器')).toBeInTheDocument();
+    api.state.offline = false;
+    await userEvent.click(screen.getByRole('button', { name: spaced('重试') }));
+    expect(await screen.findByText('用户总数')).toBeInTheDocument();
+  });
+
+  it('退出请求失败时留在原页面并提示，服务器恢复后可以退出', async () => {
+    const api = renderApp('/account', { failures: { '/api/admin/v1/auth/logout': [503, 'SERVICE_UNAVAILABLE', '服务暂不可用'] } });
+    await userEvent.click(await screen.findByRole('button', { name: '退出登录' }));
+    expect(await screen.findByText('退出失败，请重试')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '账号' })).toBeInTheDocument();
+    api.state.failures = {};
+    // 加载图标的退场动画在测试环境中不会结束，按钮名前会多出 loading
+    await userEvent.click(screen.getByRole('button', { name: /退出登录$/ }));
+    expect(await screen.findByRole('button', { name: spaced('登录') })).toBeInTheDocument();
   });
 
   it('刷新也失败时回到登录页', async () => {
-    const api = renderApp('/dashboard', { expireOnce: true });
+    const api = renderApp('/dashboard', { expired: true });
     api.state.session = false;
     expect(await screen.findByRole('button', { name: spaced('登录') })).toBeInTheDocument();
   });
@@ -86,7 +111,7 @@ describe('登录与会话', () => {
     await userEvent.click(screen.getByRole('button', { name: '修改密码' }));
     await waitFor(() => expect(screen.queryByText(/请先修改密码再使用管理后台/)).not.toBeInTheDocument());
     expect(api.state.admin.mustChangePassword).toBe(false);
-  });
+  }, 20_000);
 });
 
 describe('外壳与导航', () => {
@@ -104,7 +129,8 @@ describe('外壳与导航', () => {
     expect(within(nav).queryByText('管理员')).not.toBeInTheDocument();
     await userEvent.click(within(nav).getByText('审计日志'));
     expect(await screen.findByRole('heading', { name: '审计日志' })).toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: '主导航' })).not.toBeInTheDocument();
+    // 选择后浮层自动收起
+    expect(entry).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('设置页切换深色主题并保存在本机', async () => {

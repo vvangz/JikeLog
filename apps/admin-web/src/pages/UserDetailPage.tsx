@@ -1,7 +1,7 @@
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Descriptions, Progress, Space, Table, Tag, Typography } from 'antd';
-import { useNavigate, useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import type { components } from '../api/schema.gen';
 import { useAuth } from '../auth/useAuth';
 import { QueryState } from '../components/QueryState';
@@ -14,7 +14,6 @@ type Device = components['schemas']['AdminUserDevice'];
 /** 用户详情：只有配置与元数据（设置、设备、同步状态、附件用量），看不到任何内容。 */
 export function UserDetailPage() {
   const { id = '' } = useParams();
-  const navigate = useNavigate();
   const { client, call } = useAuth();
   const q = useQuery({
     queryKey: ['user', id],
@@ -24,7 +23,9 @@ export function UserDetailPage() {
   return (
     <div className={styles.page}>
       <Space style={{ marginBottom: 16 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)} aria-label="返回" />
+        <Link to="/users" aria-label="返回用户列表">
+          <Button icon={<ArrowLeftOutlined />} tabIndex={-1} />
+        </Link>
         <Typography.Title level={3} className={styles.pageTitle} style={{ margin: 0 }}>
           用户详情
         </Typography.Title>
@@ -66,7 +67,7 @@ function DetailView({ d }: { d: Detail }) {
         <Descriptions column={{ xs: 1, md: 2 }}>
           <Descriptions.Item label="最后同步">{formatTime(sync.lastSyncAt)}</Descriptions.Item>
           <Descriptions.Item label="服务端同步序号">{sync.serverSeq}</Descriptions.Item>
-          <Descriptions.Item label="附件用量" span={2}>
+          <Descriptions.Item label="附件用量" span="filled">
             <div style={{ width: '100%', maxWidth: 360 }}>
               <Typography.Text>
                 {formatBytes(storage.used)} / {formatBytes(storage.quota)}

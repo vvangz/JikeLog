@@ -39,7 +39,7 @@ export function LoginPage() {
               即刻日志管理后台
             </Typography.Title>
           </Space>
-          {error && <Alert type="error" showIcon message={error} role="alert" />}
+          {error && <Alert type="error" showIcon message={error} />}
           <Form<LoginForm> layout="vertical" onFinish={submit} requiredMark={false} disabled={busy}>
             <Form.Item label="用户名" name="username" rules={[{ required: true, message: '请输入用户名' }]}>
               <Input prefix={<UserOutlined />} autoComplete="username" autoFocus />

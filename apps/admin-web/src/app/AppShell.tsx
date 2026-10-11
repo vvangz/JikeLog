@@ -1,4 +1,4 @@
-import { Button, Layout, Menu, Typography } from 'antd';
+import { Button, Drawer, Layout, Menu, Typography } from 'antd';
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/useAuth';
@@ -7,7 +7,7 @@ import { COMMON_ITEMS, MODULE_ITEMS, selectedKey, type NavItem } from './nav';
 import { useMediaQuery } from './useMediaQuery';
 import styles from '../App.module.css';
 
-/** 宽屏（≥ 840px）时侧栏常驻；窄屏时侧栏为浮层，选择后自动收起。 */
+/** 宽屏（≥ 840px）时侧栏常驻；窄屏时侧栏为抽屉浮层（遮罩、Esc 关闭、焦点留在浮层内），选择后自动收起。 */
 const WIDE_QUERY = '(min-width: 840px)';
 
 /** 应用外壳：左上角入口图标展开或收起左侧导航栏，上方是功能模块，下方是通用入口。 */
@@ -31,6 +31,12 @@ export function AppShell() {
     if (!wide) setOpenNarrow(false);
   };
   const selected = [selectedKey(pathname)];
+  const nav = (
+    <nav id="main-nav" className={styles.nav} aria-label="主导航">
+      <Menu mode="inline" items={visible(MODULE_ITEMS)} selectedKeys={selected} onClick={go} />
+      <Menu mode="inline" items={visible(COMMON_ITEMS)} selectedKeys={selected} onClick={go} className={styles.navBottom} />
+    </nav>
+  );
 
   return (
     <Layout className={styles.root}>
@@ -39,6 +45,7 @@ export function AppShell() {
           type="text"
           aria-label="导航"
           aria-expanded={open}
+          aria-controls="main-nav"
           icon={<Logo />}
           onClick={() => setOpen(!open)}
           className={styles.entry}
@@ -46,23 +53,27 @@ export function AppShell() {
         <Typography.Title level={5} className={styles.title}>
           即刻日志管理后台
         </Typography.Title>
-        {admin && <Typography.Text type="secondary">{admin.username}</Typography.Text>}
+        {admin && (
+          <Typography.Text type="secondary" ellipsis className={styles.who}>
+            {admin.username}
+          </Typography.Text>
+        )}
       </Layout.Header>
       <Layout className={styles.body}>
-        {open && (
-          <>
-            {!wide && <div className={styles.scrim} onClick={() => setOpenNarrow(false)} aria-hidden />}
-            <nav className={styles.nav} aria-label="主导航">
-              <Menu mode="inline" items={visible(MODULE_ITEMS)} selectedKeys={selected} onClick={go} />
-              <Menu
-                mode="inline"
-                items={visible(COMMON_ITEMS)}
-                selectedKeys={selected}
-                onClick={go}
-                className={styles.navBottom}
-              />
-            </nav>
-          </>
+        {wide ? (
+          open && nav
+        ) : (
+          <Drawer
+            open={open}
+            placement="left"
+            width="min(80vw, 280px)"
+            closable={false}
+            onClose={() => setOpenNarrow(false)}
+            styles={{ body: { padding: 0 } }}
+            title="即刻日志管理后台"
+          >
+            {nav}
+          </Drawer>
         )}
         <Layout.Content className={styles.content}>
           <Outlet />

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -91,7 +93,8 @@ func TestAdminLoginSessionAndLockout(t *testing.T) {
 	if next == "" || next == s.cookie {
 		t.Fatal("刷新后应轮换 Refresh Token")
 	}
-	a.expect(a.adminCookieCall("/api/admin/v1/auth/refresh", s.cookie, true), http.StatusUnauthorized, "UNAUTHORIZED")
+	// 旧令牌在宽限期内仍可用（多个标签页同时刷新），详见 TestAdminRefreshGraceAndReuse
+	a.expect(a.adminCookieCall("/api/admin/v1/auth/refresh", s.cookie, true), http.StatusOK, "")
 
 	// 退出后 Access Token 与 Refresh Token 都失效
 	out := a.adminCookieCall("/api/admin/v1/auth/logout", next, true)
@@ -109,6 +112,15 @@ func TestAdminLoginSessionAndLockout(t *testing.T) {
 	}
 	a.expect(a.adminLogin("root01", "wrong-password-1"), http.StatusLocked, admin.CodeLocked)
 	a.expect(a.adminLogin("root01", adminPassword), http.StatusLocked, admin.CodeLocked)
+	// 锁定只针对这个 IP：别人不能在自己的网络里把管理员锁住
+	a.ip = "198.51.100.2"
+	a.expect(a.adminLogin("root01", adminPassword), http.StatusOK, "")
+	a.ip = "198.51.100.1"
+	// 不存在的用户名同样会被锁定：不能借锁定判断用户名是否存在（上面已失败 1 次）
+	for i := 0; i < 3; i++ {
+		a.expect(a.adminLogin("nobody", "wrong-password-1"), http.StatusUnauthorized, admin.CodeInvalidCredentials)
+	}
+	a.expect(a.adminLogin("nobody", "wrong-password-1"), http.StatusLocked, admin.CodeLocked)
 	a.clock.Advance(16 * time.Minute)
 	a.expect(a.adminLogin("root01", adminPassword), http.StatusOK, "")
 
@@ -321,5 +333,128 @@ func TestMaskPhone(t *testing.T) {
 		if got := admin.MaskPhone(in); got != want {
 			t.Errorf("MaskPhone(%q)=%q want %q", in, got, want)
 		}
+	}
+}
+
+func TestAdminAuditCannotBeEvaded(t *testing.T) {
+	a := newTestApp(t)
+	a.createAdmin("root05", admin.RoleSuperAdmin)
+	s := a.adminSignIn("root05", adminPassword)
+	u := a.register("carol01", "secret123", "install-a")
+
+	// 非法 UTF-8 与控制字符的 User-Agent：照常记录（清理后），不能借此让审计写不进去
+	bad := map[string]string{"User-Agent": "curl\xff\x00/8" + strings.Repeat("长", 400)}
+	a.expect(a.callWith(http.MethodGet, "/api/admin/v1/users/"+u.userID, nil, s.token, bad), http.StatusOK, "")
+	// 把密码误输进用户名框：审计日志中不记录原文
+	a.adminLogin("Secret Pass 123", "x")
+	a.adminLogin(strings.Repeat("x", 5000), "x")
+
+	logs := a.adminCall(http.MethodGet, "/api/admin/v1/audit-logs?pageSize=100", nil, s)
+	var viewed, invalid int
+	for _, it := range logs.Body["data"].([]any) {
+		l := it.(map[string]any)
+		switch l["action"] {
+		case "view_user":
+			viewed++
+			if ua := l["userAgent"].(string); !strings.HasPrefix(ua, "curl") || len([]rune(ua)) > 300 {
+				t.Fatalf("User-Agent 应清理并截断：%q", ua)
+			}
+		case "login_failed":
+			if l["username"] != "(无效用户名)" {
+				t.Fatalf("不合规的用户名不能原样记录：%v", l["username"])
+			}
+			invalid++
+		}
+	}
+	if viewed != 1 || invalid != 2 {
+		t.Fatalf("审计：view_user=%d login_failed=%d", viewed, invalid)
+	}
+	// 查看审计日志与管理员列表本身也有记录
+	a.adminCall(http.MethodGet, "/api/admin/v1/admins", nil, s)
+	acts := a.adminCall(http.MethodGet, "/api/admin/v1/audit-logs?action=list_audit_logs", nil, s)
+	if n := len(acts.Body["data"].([]any)); n != 1 {
+		t.Fatalf("查看审计日志应有记录：%d", n)
+	}
+	if n := len(a.adminCall(http.MethodGet, "/api/admin/v1/audit-logs?action=list_admins", nil, s).Body["data"].([]any)); n != 1 {
+		t.Fatalf("查看管理员列表应有记录：%d", n)
+	}
+
+	// 手机号只能按末 4 位搜索：更长的数字不匹配手机号
+	a.bindPhone(u.access, "13812345678")
+	if n := len(a.adminCall(http.MethodGet, "/api/admin/v1/users?q=5678", nil, s).Body["data"].([]any)); n != 1 {
+		t.Fatalf("末 4 位应能搜到：%d", n)
+	}
+	if n := len(a.adminCall(http.MethodGet, "/api/admin/v1/users?q=45678", nil, s).Body["data"].([]any)); n != 0 {
+		t.Fatalf("更长的数字不应匹配手机号：%d", n)
+	}
+}
+
+func TestAdminRefreshGraceAndReuse(t *testing.T) {
+	a := newTestApp(t)
+	a.createAdmin("root06", admin.RoleSuperAdmin)
+	s := a.adminSignIn("root06", adminPassword)
+
+	r1 := a.adminCookieCall("/api/admin/v1/auth/refresh", s.cookie, true)
+	a.expect(r1, http.StatusOK, "")
+	next := refreshCookie(r1)
+	// 另一个标签页几乎同时用旧 Cookie 刷新：宽限期内成功，但不轮换、不改 Cookie
+	r2 := a.adminCookieCall("/api/admin/v1/auth/refresh", s.cookie, true)
+	a.expect(r2, http.StatusOK, "")
+	if refreshCookie(r2) != "" {
+		t.Fatal("宽限期内不应设置新的 Cookie")
+	}
+	a.expect(a.call(http.MethodGet, "/api/admin/v1/me", nil, r2.str("data", "accessToken")), http.StatusOK, "")
+
+	// 宽限期过后旧令牌再次出现：视为被盗用，整个会话撤销
+	a.clock.Advance(11 * time.Second)
+	a.expect(a.adminCookieCall("/api/admin/v1/auth/refresh", s.cookie, true), http.StatusUnauthorized, "UNAUTHORIZED")
+	a.expect(a.adminCookieCall("/api/admin/v1/auth/refresh", next, true), http.StatusUnauthorized, "UNAUTHORIZED")
+	a.expect(a.call(http.MethodGet, "/api/admin/v1/me", nil, r1.str("data", "accessToken")), http.StatusUnauthorized, "UNAUTHORIZED")
+
+	// 会话最长 12 小时
+	s = a.adminSignIn("root06", adminPassword)
+	a.clock.Advance(admin.SessionTTL + time.Minute)
+	a.expect(a.adminCookieCall("/api/admin/v1/auth/refresh", s.cookie, true), http.StatusUnauthorized, "UNAUTHORIZED")
+
+	// 修改密码时当前密码连续错误 5 次后暂时拒绝
+	s = a.adminSignIn("root06", adminPassword)
+	for i := 0; i < 5; i++ {
+		a.expect(a.adminCall(http.MethodPut, "/api/admin/v1/me/password", map[string]any{"currentPassword": "wrong", "newPassword": "Changed12345"}, s), http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+	}
+	a.expect(a.adminCall(http.MethodPut, "/api/admin/v1/me/password", map[string]any{"currentPassword": adminPassword, "newPassword": "Changed12345"}, s), http.StatusTooManyRequests, "RATE_LIMITED")
+}
+
+func TestAdminConcurrentDemotionKeepsOneSuperAdmin(t *testing.T) {
+	a := newTestApp(t)
+	a.createAdmin("root07", admin.RoleSuperAdmin)
+	a.createAdmin("root08", admin.RoleSuperAdmin)
+	s7, s8 := a.adminSignIn("root07", adminPassword), a.adminSignIn("root08", adminPassword)
+	id7, id8 := a.adminID(s7), a.adminID(s8)
+
+	var wg sync.WaitGroup
+	codes := make([]int, 2)
+	for i, c := range []struct {
+		s  adminSession
+		id string
+	}{{s7, id8}, {s8, id7}} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodPatch, "/api/admin/v1/admins/"+c.id, strings.NewReader(`{"role":"viewer"}`))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+c.s.token)
+			req.RemoteAddr = "198.51.100.9:1"
+			rec := httptest.NewRecorder()
+			a.h.ServeHTTP(rec, req)
+			codes[i] = rec.Code
+		}()
+	}
+	wg.Wait()
+	var n int
+	if err := a.pool.QueryRow(context.Background(), "SELECT count(*) FROM admin_users WHERE role = 'super_admin' AND NOT disabled").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("应保留一个超级管理员：%d（%v）", n, codes)
 	}
 }

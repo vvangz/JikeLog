@@ -789,7 +789,7 @@ export interface paths {
         };
         /**
          * 用户列表
-         * @description 按用户名、昵称搜索；输入 4 位以上数字时也匹配手机号末尾。手机号脱敏返回。
+         * @description 按用户名、昵称搜索；输入恰好 4 位数字时也匹配手机号末 4 位。手机号脱敏返回。
          */
         get: operations["adminListUsers"];
         put?: never;
@@ -1603,7 +1603,7 @@ export interface components {
             data: components["schemas"]["AdminUserDetail"];
         };
         /** @enum {string} */
-        AuditAction: "login" | "login_failed" | "logout" | "view_dashboard" | "list_users" | "view_user" | "change_password" | "create_admin" | "update_admin" | "reset_password";
+        AuditAction: "login" | "login_failed" | "logout" | "view_dashboard" | "list_users" | "view_user" | "change_password" | "create_admin" | "update_admin" | "reset_password" | "list_audit_logs" | "list_admins";
         AuditLog: {
             /** Format: uuid */
             id: string;

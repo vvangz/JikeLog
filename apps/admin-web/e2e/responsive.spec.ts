@@ -8,6 +8,12 @@ test('手机宽度：侧栏为浮层，选择后自动收起，页面不出现�
   const nav = page.getByRole('navigation', { name: '主导航' });
   await expect(nav).toBeHidden();
 
+  // 键盘可以关闭浮层
+  await page.getByRole('button', { name: '导航' }).click();
+  await expect(nav).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(nav).toBeHidden();
+
   await page.getByRole('button', { name: '导航' }).click();
   await expect(nav).toBeVisible();
   await nav.getByText('用户').click();

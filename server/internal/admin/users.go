@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 	_ "time/tzdata" // 运行镜像不一定带时区数据库
-	"unicode"
 
 	"github.com/google/uuid"
 
@@ -19,6 +18,9 @@ const statsTimeZone = "Asia/Shanghai"
 
 // trendDays 为仪表盘新增用户趋势的天数（含今天）。
 const trendDays = 30
+
+// phoneSuffixLen 为按手机号搜索时的位数（只能是末 4 位）。
+const phoneSuffixLen = 4
 
 // Dashboard 为仪表盘数据。
 type Dashboard struct {
@@ -66,7 +68,9 @@ func (s *Service) Dashboard(ctx context.Context, p Principal, m Meta) (Dashboard
 	if err != nil {
 		return Dashboard{}, fmt.Errorf("统计设备平台失败: %w", err)
 	}
-	s.auditAs(ctx, p, ActionViewDashboard, m, "", "", nil)
+	if err := s.auditAs(ctx, p, ActionViewDashboard, m, "", "", nil); err != nil {
+		return Dashboard{}, err
+	}
 	return Dashboard{Stats: stats, Daily: daily, Platforms: platforms}, nil
 }
 
@@ -78,7 +82,8 @@ type UserPage struct {
 	Size  int
 }
 
-// ListUsers 按用户名、昵称（或 4 位以上数字时手机号末尾）搜索用户。
+// ListUsers 按用户名、昵称搜索用户；输入恰好 4 位数字时也匹配手机号末 4 位。
+// 只接受 4 位：更长的数字后缀可以逐位试出完整手机号，而管理员不应看到完整号码。
 func (s *Service) ListUsers(ctx context.Context, p Principal, query string, page, size int, m Meta) (UserPage, error) {
 	page, size = pageOf(page, size)
 	limit, offset := limitOffset(page, size)
@@ -88,7 +93,7 @@ func (s *Service) ListUsers(ctx context.Context, p Principal, query string, page
 	}
 	like := escapeLike(query)
 	suffix := ""
-	if len(query) >= 4 && strings.IndexFunc(query, func(r rune) bool { return !unicode.IsDigit(r) }) < 0 {
+	if len(query) == phoneSuffixLen && strings.IndexFunc(query, func(r rune) bool { return r < '0' || r > '9' }) < 0 {
 		suffix = query
 	}
 	q := s.d.Tx.Queries()
@@ -102,7 +107,9 @@ func (s *Service) ListUsers(ctx context.Context, p Principal, query string, page
 	if err != nil {
 		return UserPage{}, fmt.Errorf("统计用户失败: %w", err)
 	}
-	s.auditAs(ctx, p, ActionListUsers, m, "", "", map[string]any{"q": query, "page": page})
+	if err := s.auditAs(ctx, p, ActionListUsers, m, "", "", map[string]any{"q": query, "page": page}); err != nil {
+		return UserPage{}, err
+	}
 	return UserPage{Users: users, Total: total, Page: page, Size: size}, nil
 }
 
@@ -156,7 +163,9 @@ func (s *Service) GetUser(ctx context.Context, p Principal, id uuid.UUID, m Meta
 	if out.Used, err = q.SumAttachmentBytes(ctx, id); err != nil {
 		return UserDetail{}, fmt.Errorf("查询附件用量失败: %w", err)
 	}
-	s.auditAs(ctx, p, ActionViewUser, m, "user", id.String(), nil)
+	if err := s.auditAs(ctx, p, ActionViewUser, m, "user", id.String(), nil); err != nil {
+		return UserDetail{}, err
+	}
 	return out, nil
 }
 

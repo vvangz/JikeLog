@@ -57,6 +57,8 @@ export const ACTION_LABELS: Record<AuditAction, string> = {
   create_admin: '新建管理员',
   update_admin: '修改管理员',
   reset_password: '重置管理员密码',
+  list_audit_logs: '查看审计日志',
+  list_admins: '查看管理员列表',
 };
 
 export const ROLE_LABELS: Record<AdminRole, string> = {
@@ -85,6 +87,10 @@ const DETAIL_LABELS: Record<string, string> = {
   username: '用户名',
   role: '角色',
   disabled: '停用',
+  previousRole: '原角色',
+  previousDisabled: '原停用',
+  action: '筛选操作',
+  via: '方式',
 };
 
 const REASONS: Record<string, string> = {

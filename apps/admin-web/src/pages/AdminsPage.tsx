@@ -25,6 +25,8 @@ export function AdminsPage() {
   const admins = useQuery({
     queryKey: ['admins'],
     queryFn: () => call(() => client.GET('/api/admin/v1/admins')).then((r) => r.data),
+    // 只读管理员不请求（必然 403，还会留下审计记录）
+    enabled: me?.role === 'super_admin',
   });
   const done = (text: string) => {
     void message.success(text);
@@ -48,7 +50,8 @@ export function AdminsPage() {
       content: a.disabled ? '启用后对方可以重新登录。' : '停用后对方立即退出登录，并且不能再登录。',
       okText: a.disabled ? '启用' : '停用',
       okButtonProps: { danger: !a.disabled },
-      onOk: () => update.mutateAsync({ id: a.id, disabled: !a.disabled }),
+      // 错误已由 onError 提示；这里吞掉，避免确认框再报一次
+      onOk: () => update.mutateAsync({ id: a.id, disabled: !a.disabled }).catch(() => undefined),
     });
 
   if (me?.role !== 'super_admin') {

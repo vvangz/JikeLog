@@ -24,13 +24,15 @@ type AdminAuditLog struct {
 }
 
 type AdminSession struct {
-	ID          uuid.UUID
-	AdminID     uuid.UUID
-	RefreshHash []byte
-	CreatedAt   time.Time
-	ExpiresAt   time.Time
-	LastUsedAt  time.Time
-	RevokedAt   *time.Time
+	ID              uuid.UUID
+	AdminID         uuid.UUID
+	RefreshHash     []byte
+	PrevRefreshHash []byte
+	RotatedAt       *time.Time
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
+	LastUsedAt      time.Time
+	RevokedAt       *time.Time
 }
 
 type AdminUser struct {
@@ -40,8 +42,6 @@ type AdminUser struct {
 	Role               string
 	Disabled           bool
 	MustChangePassword bool
-	FailedLogins       int32
-	LockedUntil        *time.Time
 	LastLoginAt        *time.Time
 	PasswordChangedAt  time.Time
 	CreatedAt          time.Time

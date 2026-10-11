@@ -10,9 +10,6 @@ CREATE TABLE admin_users (
     disabled            boolean     NOT NULL DEFAULT false,
     -- 新建或被重置密码后，第一次登录必须先修改密码
     must_change_password boolean    NOT NULL DEFAULT true,
-    -- 连续登录失败次数与锁定截止时刻
-    failed_logins       integer     NOT NULL DEFAULT 0,
-    locked_until        timestamptz,
     last_login_at       timestamptz,
     password_changed_at timestamptz NOT NULL,
     created_at          timestamptz NOT NULL,
@@ -28,6 +25,9 @@ CREATE TABLE admin_sessions (
     id           uuid PRIMARY KEY,
     admin_id     uuid        NOT NULL REFERENCES admin_users (id) ON DELETE CASCADE,
     refresh_hash bytea       NOT NULL,
+    -- 上一枚 Refresh Token：轮换后短时间内仍可换取 Access Token（多个标签页同时刷新），但不再轮换
+    prev_refresh_hash bytea,
+    rotated_at   timestamptz,
     created_at   timestamptz NOT NULL,
     expires_at   timestamptz NOT NULL,
     last_used_at timestamptz NOT NULL,
@@ -36,6 +36,7 @@ CREATE TABLE admin_sessions (
 
 CREATE UNIQUE INDEX admin_sessions_refresh_key ON admin_sessions (refresh_hash);
 CREATE INDEX admin_sessions_admin_idx ON admin_sessions (admin_id);
+CREATE INDEX admin_sessions_prev_refresh_idx ON admin_sessions (prev_refresh_hash) WHERE prev_refresh_hash IS NOT NULL;
 
 -- 审计日志：只追加，不提供修改与删除
 CREATE TABLE admin_audit_logs (

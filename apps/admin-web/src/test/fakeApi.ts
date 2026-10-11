@@ -11,8 +11,12 @@ export interface FakeState {
   detail: S['AdminUserDetail'];
   dashboard: S['AdminDashboard'];
   logs: S['AuditLog'][];
-  /** 下一次受保护接口返回 401（模拟 Access Token 过期）。 */
-  expireOnce: boolean;
+  /** 当前令牌已过期：带它的请求返回 401，刷新后换发新令牌（模拟 Access Token 过期）。 */
+  expired: boolean;
+  /** 令牌版本：每次登录或刷新都换发 token-N。 */
+  tokenVersion: number;
+  /** 刷新接口的网络故障（fetch 直接失败）。 */
+  offline: boolean;
   /** 指定路径返回的错误（路径 → [状态码, 错误码, 说明]）。 */
   failures: Record<string, [number, string, string]>;
 }
@@ -134,7 +138,9 @@ export function defaultState(): FakeState {
         createdAt: now,
       },
     ],
-    expireOnce: false,
+    expired: false,
+    tokenVersion: 1,
+    offline: false,
     failures: {},
   };
 }
@@ -148,32 +154,35 @@ const fail = (status: number, code: string, message: string) =>
 /** 内存中的管理接口：记录每次请求，按 state 返回结果。 */
 export function fakeApi(state: FakeState = defaultState()) {
   const calls: Recorded[] = [];
-  const session = () => ({ accessToken: 'token-1', expiresAt: now, admin: state.admin });
+  const session = () => ({ accessToken: `token-${state.tokenVersion}`, expiresAt: now, admin: state.admin });
 
   const fetch = async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
     const path = url.pathname;
     const text = req.method === 'GET' ? '' : await req.text();
     calls.push({ method: req.method, path, query: url.searchParams, body: text ? JSON.parse(text) : undefined, headers: req.headers });
+    if (state.offline) throw new TypeError('Failed to fetch');
     const failure = state.failures[path];
     if (failure) return fail(...failure);
 
     if (path === '/api/admin/v1/auth/refresh') {
-      return state.session ? ok(session()) : fail(401, 'UNAUTHORIZED', '登录已失效');
+      if (!state.session) return fail(401, 'UNAUTHORIZED', '登录已失效');
+      state.tokenVersion++;
+      state.expired = false;
+      return ok(session());
     }
     if (path === '/api/admin/v1/auth/login') {
       const body = JSON.parse(text) as { password: string };
       if (body.password !== 'Admin12345') return fail(401, 'INVALID_CREDENTIALS', '用户名或密码错误');
       state.session = true;
+      state.tokenVersion++;
       return ok(session());
     }
     if (path === '/api/admin/v1/auth/logout') {
       state.session = false;
       return ok({ ok: true });
     }
-    if (req.headers.get('Authorization') !== 'Bearer token-1') return fail(401, 'UNAUTHORIZED', '请先登录');
-    if (state.expireOnce) {
-      state.expireOnce = false;
+    if (req.headers.get('Authorization') !== `Bearer token-${state.tokenVersion}` || state.expired) {
       return fail(401, 'UNAUTHORIZED', '令牌已过期');
     }
     if (state.admin.mustChangePassword && !['/api/admin/v1/me', '/api/admin/v1/me/password'].includes(path)) {

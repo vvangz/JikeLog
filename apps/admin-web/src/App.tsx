@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp, ConfigProvider, Result, Spin } from 'antd';
+import { App as AntApp, Button, ConfigProvider, Result, Spin } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import 'dayjs/locale/zh-cn';
 import dayjs from 'dayjs';
@@ -72,7 +72,23 @@ interface AppRoutesProps {
 }
 
 function AppRoutes({ theme, onTheme }: AppRoutesProps) {
-  const { status, admin } = useAuth();
+  const { status, admin, retry } = useAuth();
+  if (status === 'offline') {
+    return (
+      <div className={styles.center}>
+        <Result
+          status="warning"
+          title="无法连接服务器"
+          subTitle="请检查网络后重试。"
+          extra={
+            <Button type="primary" onClick={retry}>
+              重试
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
   if (status === 'loading') {
     return (
       <div className={styles.center}>

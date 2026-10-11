@@ -72,10 +72,11 @@ func (q *Queries) AdminDailyNewUsers(ctx context.Context, arg AdminDailyNewUsers
 }
 
 const adminLastSync = `-- name: AdminLastSync :one
-SELECT updated_at FROM records WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1
+SELECT updated_at FROM records WHERE user_id = $1 ORDER BY server_seq DESC LIMIT 1
 `
 
 // 最后一次有记录写入服务端的时间（不含内容）；没有任何记录时查不到。
+// 按同步序号取最后一条（有索引），每次写入都会推进序号并更新 updated_at
 func (q *Queries) AdminLastSync(ctx context.Context, userID uuid.UUID) (time.Time, error) {
 	row := q.db.QueryRow(ctx, adminLastSync, userID)
 	var updated_at time.Time
@@ -327,7 +328,7 @@ const createAdmin = `-- name: CreateAdmin :one
 
 INSERT INTO admin_users (id, username, password_hash, role, must_change_password, password_changed_at, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $6, $6)
-RETURNING id, username, password_hash, role, disabled, must_change_password, failed_logins, locked_until, last_login_at, password_changed_at, created_at, updated_at
+RETURNING id, username, password_hash, role, disabled, must_change_password, last_login_at, password_changed_at, created_at, updated_at
 `
 
 type CreateAdminParams struct {
@@ -358,8 +359,6 @@ func (q *Queries) CreateAdmin(ctx context.Context, arg CreateAdminParams) (Admin
 		&i.Role,
 		&i.Disabled,
 		&i.MustChangePassword,
-		&i.FailedLogins,
-		&i.LockedUntil,
 		&i.LastLoginAt,
 		&i.PasswordChangedAt,
 		&i.CreatedAt,
@@ -395,7 +394,7 @@ func (q *Queries) CreateAdminSession(ctx context.Context, arg CreateAdminSession
 }
 
 const getAdmin = `-- name: GetAdmin :one
-SELECT id, username, password_hash, role, disabled, must_change_password, failed_logins, locked_until, last_login_at, password_changed_at, created_at, updated_at FROM admin_users WHERE id = $1
+SELECT id, username, password_hash, role, disabled, must_change_password, last_login_at, password_changed_at, created_at, updated_at FROM admin_users WHERE id = $1
 `
 
 func (q *Queries) GetAdmin(ctx context.Context, id uuid.UUID) (AdminUser, error) {
@@ -408,8 +407,6 @@ func (q *Queries) GetAdmin(ctx context.Context, id uuid.UUID) (AdminUser, error)
 		&i.Role,
 		&i.Disabled,
 		&i.MustChangePassword,
-		&i.FailedLogins,
-		&i.LockedUntil,
 		&i.LastLoginAt,
 		&i.PasswordChangedAt,
 		&i.CreatedAt,
@@ -419,7 +416,7 @@ func (q *Queries) GetAdmin(ctx context.Context, id uuid.UUID) (AdminUser, error)
 }
 
 const getAdminByUsername = `-- name: GetAdminByUsername :one
-SELECT id, username, password_hash, role, disabled, must_change_password, failed_logins, locked_until, last_login_at, password_changed_at, created_at, updated_at FROM admin_users WHERE lower(username) = lower($1)
+SELECT id, username, password_hash, role, disabled, must_change_password, last_login_at, password_changed_at, created_at, updated_at FROM admin_users WHERE lower(username) = lower($1)
 `
 
 func (q *Queries) GetAdminByUsername(ctx context.Context, username string) (AdminUser, error) {
@@ -432,8 +429,6 @@ func (q *Queries) GetAdminByUsername(ctx context.Context, username string) (Admi
 		&i.Role,
 		&i.Disabled,
 		&i.MustChangePassword,
-		&i.FailedLogins,
-		&i.LockedUntil,
 		&i.LastLoginAt,
 		&i.PasswordChangedAt,
 		&i.CreatedAt,
@@ -475,7 +470,7 @@ func (q *Queries) GetAdminForSession(ctx context.Context, arg GetAdminForSession
 }
 
 const getAdminForUpdate = `-- name: GetAdminForUpdate :one
-SELECT id, username, password_hash, role, disabled, must_change_password, failed_logins, locked_until, last_login_at, password_changed_at, created_at, updated_at FROM admin_users WHERE id = $1 FOR UPDATE
+SELECT id, username, password_hash, role, disabled, must_change_password, last_login_at, password_changed_at, created_at, updated_at FROM admin_users WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetAdminForUpdate(ctx context.Context, id uuid.UUID) (AdminUser, error) {
@@ -488,8 +483,6 @@ func (q *Queries) GetAdminForUpdate(ctx context.Context, id uuid.UUID) (AdminUse
 		&i.Role,
 		&i.Disabled,
 		&i.MustChangePassword,
-		&i.FailedLogins,
-		&i.LockedUntil,
 		&i.LastLoginAt,
 		&i.PasswordChangedAt,
 		&i.CreatedAt,
@@ -499,7 +492,7 @@ func (q *Queries) GetAdminForUpdate(ctx context.Context, id uuid.UUID) (AdminUse
 }
 
 const getAdminSessionByHashForUpdate = `-- name: GetAdminSessionByHashForUpdate :one
-SELECT id, admin_id, refresh_hash, created_at, expires_at, last_used_at, revoked_at FROM admin_sessions WHERE refresh_hash = $1 FOR UPDATE
+SELECT id, admin_id, refresh_hash, prev_refresh_hash, rotated_at, created_at, expires_at, last_used_at, revoked_at FROM admin_sessions WHERE refresh_hash = $1 FOR UPDATE
 `
 
 func (q *Queries) GetAdminSessionByHashForUpdate(ctx context.Context, refreshHash []byte) (AdminSession, error) {
@@ -509,6 +502,29 @@ func (q *Queries) GetAdminSessionByHashForUpdate(ctx context.Context, refreshHas
 		&i.ID,
 		&i.AdminID,
 		&i.RefreshHash,
+		&i.PrevRefreshHash,
+		&i.RotatedAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.LastUsedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const getAdminSessionByPrevHash = `-- name: GetAdminSessionByPrevHash :one
+SELECT id, admin_id, refresh_hash, prev_refresh_hash, rotated_at, created_at, expires_at, last_used_at, revoked_at FROM admin_sessions WHERE prev_refresh_hash = $1
+`
+
+func (q *Queries) GetAdminSessionByPrevHash(ctx context.Context, prevRefreshHash []byte) (AdminSession, error) {
+	row := q.db.QueryRow(ctx, getAdminSessionByPrevHash, prevRefreshHash)
+	var i AdminSession
+	err := row.Scan(
+		&i.ID,
+		&i.AdminID,
+		&i.RefreshHash,
+		&i.PrevRefreshHash,
+		&i.RotatedAt,
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.LastUsedAt,
@@ -554,7 +570,7 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 }
 
 const listAdmins = `-- name: ListAdmins :many
-SELECT id, username, password_hash, role, disabled, must_change_password, failed_logins, locked_until, last_login_at, password_changed_at, created_at, updated_at FROM admin_users ORDER BY created_at
+SELECT id, username, password_hash, role, disabled, must_change_password, last_login_at, password_changed_at, created_at, updated_at FROM admin_users ORDER BY created_at
 `
 
 func (q *Queries) ListAdmins(ctx context.Context) ([]AdminUser, error) {
@@ -573,8 +589,6 @@ func (q *Queries) ListAdmins(ctx context.Context) ([]AdminUser, error) {
 			&i.Role,
 			&i.Disabled,
 			&i.MustChangePassword,
-			&i.FailedLogins,
-			&i.LockedUntil,
 			&i.LastLoginAt,
 			&i.PasswordChangedAt,
 			&i.CreatedAt,
@@ -647,6 +661,16 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 	return items, nil
 }
 
+const lockAdminRoles = `-- name: LockAdminRoles :exec
+SELECT pg_advisory_xact_lock(7243001)
+`
+
+// 修改管理员角色或停用状态时串行执行，保证"至少一个启用的超级管理员"不会被并发修改打破（事务结束时释放）。
+func (q *Queries) LockAdminRoles(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockAdminRoles)
+	return err
+}
+
 const pruneAdminSessions = `-- name: PruneAdminSessions :execrows
 DELETE FROM admin_sessions WHERE expires_at < $1
 `
@@ -660,7 +684,7 @@ func (q *Queries) PruneAdminSessions(ctx context.Context, before time.Time) (int
 }
 
 const recordAdminLogin = `-- name: RecordAdminLogin :exec
-UPDATE admin_users SET failed_logins = 0, locked_until = NULL, last_login_at = $1 WHERE id = $2
+UPDATE admin_users SET last_login_at = $1 WHERE id = $2
 `
 
 type RecordAdminLoginParams struct {
@@ -671,28 +695,6 @@ type RecordAdminLoginParams struct {
 func (q *Queries) RecordAdminLogin(ctx context.Context, arg RecordAdminLoginParams) error {
 	_, err := q.db.Exec(ctx, recordAdminLogin, arg.Now, arg.ID)
 	return err
-}
-
-const recordAdminLoginFailure = `-- name: RecordAdminLoginFailure :one
-UPDATE admin_users
-SET failed_logins = CASE WHEN failed_logins + 1 >= $1::int THEN 0 ELSE failed_logins + 1 END,
-    locked_until = CASE WHEN failed_logins + 1 >= $1::int THEN $2::timestamptz ELSE locked_until END
-WHERE id = $3
-RETURNING locked_until
-`
-
-type RecordAdminLoginFailureParams struct {
-	MaxFailures int32
-	LockUntil   time.Time
-	ID          uuid.UUID
-}
-
-// 连续失败达到上限时锁定一段时间，并重新计数。
-func (q *Queries) RecordAdminLoginFailure(ctx context.Context, arg RecordAdminLoginFailureParams) (*time.Time, error) {
-	row := q.db.QueryRow(ctx, recordAdminLoginFailure, arg.MaxFailures, arg.LockUntil, arg.ID)
-	var locked_until *time.Time
-	err := row.Scan(&locked_until)
-	return locked_until, err
 }
 
 const revokeAdminSession = `-- name: RevokeAdminSession :exec
@@ -741,12 +743,14 @@ func (q *Queries) RevokeOtherAdminSessions(ctx context.Context, arg RevokeOtherA
 }
 
 const rotateAdminSession = `-- name: RotateAdminSession :exec
-UPDATE admin_sessions SET refresh_hash = $1, last_used_at = $2 WHERE id = $3
+UPDATE admin_sessions
+SET prev_refresh_hash = refresh_hash, refresh_hash = $1, rotated_at = $2, last_used_at = $2
+WHERE id = $3
 `
 
 type RotateAdminSessionParams struct {
 	RefreshHash []byte
-	Now         time.Time
+	Now         *time.Time
 	ID          uuid.UUID
 }
 
@@ -758,7 +762,7 @@ func (q *Queries) RotateAdminSession(ctx context.Context, arg RotateAdminSession
 const setAdminPassword = `-- name: SetAdminPassword :exec
 UPDATE admin_users
 SET password_hash = $1, must_change_password = $2,
-    password_changed_at = $3, failed_logins = 0, locked_until = NULL, updated_at = $3
+    password_changed_at = $3, updated_at = $3
 WHERE id = $4
 `
 
@@ -769,7 +773,7 @@ type SetAdminPasswordParams struct {
 	ID                 uuid.UUID
 }
 
-// 修改或重置密码：同时清除锁定。must_change_password 为 true 表示下次登录必须先改密码（被他人重置时）。
+// 修改或重置密码。must_change_password 为 true 表示下次登录必须先改密码（被他人重置时）。
 func (q *Queries) SetAdminPassword(ctx context.Context, arg SetAdminPasswordParams) error {
 	_, err := q.db.Exec(ctx, setAdminPassword,
 		arg.PasswordHash,
@@ -781,7 +785,7 @@ func (q *Queries) SetAdminPassword(ctx context.Context, arg SetAdminPasswordPara
 }
 
 const updateAdmin = `-- name: UpdateAdmin :one
-UPDATE admin_users SET role = $1, disabled = $2, updated_at = $3 WHERE id = $4 RETURNING id, username, password_hash, role, disabled, must_change_password, failed_logins, locked_until, last_login_at, password_changed_at, created_at, updated_at
+UPDATE admin_users SET role = $1, disabled = $2, updated_at = $3 WHERE id = $4 RETURNING id, username, password_hash, role, disabled, must_change_password, last_login_at, password_changed_at, created_at, updated_at
 `
 
 type UpdateAdminParams struct {
@@ -806,8 +810,6 @@ func (q *Queries) UpdateAdmin(ctx context.Context, arg UpdateAdminParams) (Admin
 		&i.Role,
 		&i.Disabled,
 		&i.MustChangePassword,
-		&i.FailedLogins,
-		&i.LockedUntil,
 		&i.LastLoginAt,
 		&i.PasswordChangedAt,
 		&i.CreatedAt,

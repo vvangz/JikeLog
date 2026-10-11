@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"sync"
 	"unicode"
 
 	"github.com/google/uuid"
@@ -19,6 +18,7 @@ import (
 const (
 	minPasswordLen = 10
 	maxPasswordLen = 128
+	maxUsernameLen = 20
 )
 
 var usernamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{3,19}$`)
@@ -46,18 +46,8 @@ func checkRole(role string) error {
 	return nil
 }
 
-// dummyHash 用于用户名不存在时执行一次同样耗时的校验，避免通过响应时间判断用户名是否存在。
-var (
-	dummyOnce sync.Once
-	dummyHash string
-)
-
-func (s *Service) dummy(ctx context.Context) string {
-	dummyOnce.Do(func() {
-		dummyHash, _ = s.d.Hasher.Hash(ctx, "jikelog-dummy-password-1")
-	})
-	return dummyHash
-}
+// cliUser 为命令行操作在审计日志中的操作人。
+const cliUser = "(命令行)"
 
 // requireSuper 只允许超级管理员。
 func requireSuper(p Principal) error {
@@ -68,13 +58,16 @@ func requireSuper(p Principal) error {
 }
 
 // ListAdmins 返回全部管理员（仅超级管理员）。
-func (s *Service) ListAdmins(ctx context.Context, p Principal) ([]dbgen.AdminUser, error) {
+func (s *Service) ListAdmins(ctx context.Context, p Principal, m Meta) ([]dbgen.AdminUser, error) {
 	if err := requireSuper(p); err != nil {
 		return nil, err
 	}
 	list, err := s.d.Tx.Queries().ListAdmins(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("查询管理员失败: %w", err)
+	}
+	if err := s.auditAs(ctx, p, ActionListAdmins, m, "", "", nil); err != nil {
+		return nil, err
 	}
 	return list, nil
 }
@@ -113,8 +106,14 @@ func (s *Service) CreateAdmin(ctx context.Context, p *Principal, username, role,
 	if err != nil {
 		return dbgen.AdminUser{}, fmt.Errorf("创建管理员失败: %w", err)
 	}
+	detail := map[string]any{"username": username, "role": role}
 	if p != nil {
-		s.auditAs(ctx, *p, ActionCreateAdmin, m, "admin", a.ID.String(), map[string]any{"username": username, "role": role})
+		if err := s.auditAs(ctx, *p, ActionCreateAdmin, m, "admin", a.ID.String(), detail); err != nil {
+			return dbgen.AdminUser{}, err
+		}
+	} else {
+		detail["via"] = "cli"
+		s.audit(ctx, auditEntry{username: cliUser, action: ActionCreateAdmin, targetType: "admin", targetID: a.ID.String(), detail: detail})
 	}
 	return a, nil
 }
@@ -132,8 +131,16 @@ func (s *Service) UpdateAdmin(ctx context.Context, p Principal, id uuid.UUID, ro
 			return dbgen.AdminUser{}, err
 		}
 	}
-	var out dbgen.AdminUser
+	var out, before dbgen.AdminUser
 	err := s.d.Tx.InTx(ctx, func(q *dbgen.Queries) error {
+		// 串行化角色与停用的修改：两个超级管理员同时互相降级时，第二个会看到第一个的结果
+		if err := q.LockAdminRoles(ctx); err != nil {
+			return err
+		}
+		// 调用者可能刚被降级或停用：以事务内的状态为准
+		if me, err := q.GetAdmin(ctx, p.AdminID); err != nil || me.Disabled || me.Role != RoleSuperAdmin {
+			return errForbidden
+		}
 		cur, err := q.GetAdminForUpdate(ctx, id)
 		if db.IsNotFound(err) {
 			return errNotFound
@@ -141,6 +148,7 @@ func (s *Service) UpdateAdmin(ctx context.Context, p Principal, id uuid.UUID, ro
 		if err != nil {
 			return err
 		}
+		before = cur
 		next := cur
 		if role != nil {
 			next.Role = *role
@@ -174,7 +182,13 @@ func (s *Service) UpdateAdmin(ctx context.Context, p Principal, id uuid.UUID, ro
 		}
 		return dbgen.AdminUser{}, fmt.Errorf("修改管理员失败: %w", err)
 	}
-	s.auditAs(ctx, p, ActionUpdateAdmin, m, "admin", id.String(), map[string]any{"role": out.Role, "disabled": out.Disabled})
+	detail := map[string]any{
+		"username": out.Username, "role": out.Role, "disabled": out.Disabled,
+		"previousRole": before.Role, "previousDisabled": before.Disabled,
+	}
+	if err := s.auditAs(ctx, p, ActionUpdateAdmin, m, "admin", id.String(), detail); err != nil {
+		return dbgen.AdminUser{}, err
+	}
 	return out, nil
 }
 
@@ -217,7 +231,11 @@ func (s *Service) ResetPassword(ctx context.Context, p *Principal, id uuid.UUID,
 		return fmt.Errorf("重置密码失败: %w", err)
 	}
 	if p != nil {
-		s.auditAs(ctx, *p, ActionResetPassword, m, "admin", id.String(), nil)
+		if err := s.auditAs(ctx, *p, ActionResetPassword, m, "admin", id.String(), nil); err != nil {
+			return err
+		}
+	} else {
+		s.audit(ctx, auditEntry{username: cliUser, action: ActionResetPassword, targetType: "admin", targetID: id.String(), detail: map[string]any{"via": "cli"}})
 	}
 	return nil
 }
