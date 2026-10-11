@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -60,16 +61,24 @@ type testApp struct {
 
 func newTestApp(t *testing.T) *testApp {
 	t.Helper()
+	return newTestAppWith(t, nil)
+}
+
+// newTestAppWith 与 newTestApp 相同，extra 覆盖默认的环境变量。
+func newTestAppWith(t *testing.T, extra map[string]string) *testApp {
+	t.Helper()
 	pool := testinfra.Postgres(t)
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 	clk := &testClock{now: time.Now(), mr: mr}
-	cfg := testConfig(t, map[string]string{
+	env := map[string]string{
 		"JIKELOG_HTTP_CORS_ORIGINS": "http://localhost:5173",
 		// 便于测试配额：单个附件 64KB，总量 100KB
 		"JIKELOG_ATTACHMENT_MAX_SIZE": "65536", "JIKELOG_ATTACHMENT_QUOTA": "102400",
-	})
+	}
+	maps.Copy(env, extra)
+	cfg := testConfig(t, env)
 	store, err := storage.New(testinfra.ObjectStore(t))
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +97,7 @@ func newTestApp(t *testing.T) *testApp {
 	}
 	return &testApp{
 		t: t, h: app.Handler, app: app, pool: pool, store: store,
-		sms: app.SMS.(*auth.MockSender), mr: mr, clock: clk, pushes: pushes, ip: "198.51.100.1",
+		sms: mockSender(app.SMS), mr: mr, clock: clk, pushes: pushes, ip: "198.51.100.1",
 	}
 }
 
@@ -220,4 +229,10 @@ func (a *testApp) bindPhone(token, phone string) {
 	a.t.Helper()
 	code := a.sendSMS(phone, "bind_phone", token)
 	a.expect(a.call(http.MethodPut, "/api/v1/me/phone", map[string]any{"phone": phone, "code": code, "currentPassword": "secret123"}, token), http.StatusOK, "")
+}
+
+// mockSender 返回模拟短信通道（短信未开通的测试中为 nil）。
+func mockSender(s auth.SMSSender) *auth.MockSender {
+	m, _ := s.(*auth.MockSender)
+	return m
 }

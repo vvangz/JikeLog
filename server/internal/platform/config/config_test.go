@@ -266,3 +266,14 @@ func TestErrorsDoNotLeakSecrets(t *testing.T) {
 		}
 	}
 }
+
+func TestProductionWithoutSMS(t *testing.T) {
+	// 单机自托管、尚未开通短信：不需要人机验证
+	if _, err := LoadFrom(with(prod(map[string]string{"JIKELOG_SMS_PROVIDER": "disabled", "JIKELOG_CAPTCHA_PROVIDER": "none"}))); err != nil {
+		t.Fatalf("短信未开通时不需要人机验证：%v", err)
+	}
+	// 开通短信就必须有人机验证
+	if _, err := LoadFrom(with(prod(map[string]string{"JIKELOG_CAPTCHA_PROVIDER": "none"}))); err == nil {
+		t.Fatal("开通短信时必须启用人机验证")
+	}
+}

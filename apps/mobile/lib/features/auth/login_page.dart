@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/server_features.dart';
 import '../../app/providers.dart';
 import '../../core/api/endpoints.dart';
 import '../../shared/ui/api_form.dart';
@@ -58,6 +59,9 @@ class _LoginPageState extends ConsumerState<LoginPage> with ApiFormState {
   Widget build(BuildContext context) {
     final state = ref.watch(authControllerProvider);
     final reason = state is SignedOut ? state.reason : null;
+    // 服务端没有开通短信时只有密码登录，也不能用手机号找回密码
+    final sms = smsEnabled(ref);
+    final mode = sms ? _mode : _Mode.password;
     return AuthScaffold(
       title: '登录即刻日志',
       subtitle: reason ?? '高效记录工作、笔记、备忘与账目',
@@ -67,19 +71,21 @@ class _LoginPageState extends ConsumerState<LoginPage> with ApiFormState {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SegmentedButton<_Mode>(
-                segments: const [
-                  ButtonSegment(value: _Mode.password, label: Text('密码登录')),
-                  ButtonSegment(value: _Mode.sms, label: Text('验证码登录')),
-                ],
-                selected: {_mode},
-                onSelectionChanged: (s) => setState(() {
-                  _mode = s.first;
-                  fieldErrors = const {};
-                }),
-              ),
-              const SizedBox(height: 24),
-              if (_mode == _Mode.password)
+              if (sms) ...[
+                SegmentedButton<_Mode>(
+                  segments: const [
+                    ButtonSegment(value: _Mode.password, label: Text('密码登录')),
+                    ButtonSegment(value: _Mode.sms, label: Text('验证码登录')),
+                  ],
+                  selected: {_mode},
+                  onSelectionChanged: (s) => setState(() {
+                    _mode = s.first;
+                    fieldErrors = const {};
+                  }),
+                ),
+                const SizedBox(height: 24),
+              ],
+              if (mode == _Mode.password)
                 ..._passwordFields()
               else
                 ..._smsFields(),
@@ -97,10 +103,11 @@ class _LoginPageState extends ConsumerState<LoginPage> with ApiFormState {
                     onPressed: () => context.push('/register'),
                     child: const Text('注册新账号'),
                   ),
-                  TextButton(
-                    onPressed: () => context.push('/password/reset'),
-                    child: const Text('忘记密码'),
-                  ),
+                  if (sms)
+                    TextButton(
+                      onPressed: () => context.push('/password/reset'),
+                      child: const Text('忘记密码'),
+                    ),
                 ],
               ),
             ],

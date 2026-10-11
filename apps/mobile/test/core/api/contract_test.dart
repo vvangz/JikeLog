@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jikelog/core/api/api_client.dart';
 import 'package:jikelog/core/api/endpoints.dart';
 import 'package:jikelog/core/api/models.dart';
+import 'package:jikelog/core/api/server_features.dart';
 import 'package:jikelog/core/storage/stores.dart';
 import 'package:jikelog/core/sync/e2e.dart';
 import 'package:jikelog/core/sync/sync_api.dart';
@@ -333,6 +334,14 @@ void main() {
       (_schema('ExportModule')['enum'] as List).toSet(),
       ExportModule.values.map((m) => m.name).toSet(),
     );
+  });
+
+  test('服务端功能与契约一致', () {
+    final schema = _schema('SystemFeatures');
+    final f = ServerFeatures.fromJson(_sample(schema)! as Map<String, dynamic>);
+    expect(_required(schema), {'sms', 'push'});
+    expect([f.sms, f.push], everyElement(isTrue));
+    expect(_required(_schema('SystemInfo')), contains('features'));
   });
 
   test('验证码用途与契约枚举一致', () {

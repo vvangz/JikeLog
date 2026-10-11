@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/server_features.dart';
 import '../../app/providers.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/endpoints.dart';
@@ -97,7 +98,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
   @override
   Widget build(BuildContext context) => AuthScaffold(
     title: '注册账号',
-    subtitle: '注册后可在"帐号"中绑定手机号，用于验证码登录和找回密码',
+    subtitle: smsEnabled(ref)
+        ? '注册后可在"帐号"中绑定手机号，用于验证码登录和找回密码'
+        : '请牢记用户名和密码：$smsUnavailableHint，暂时无法通过手机号找回密码',
     showBack: true,
     child: Form(
       key: formKey,
