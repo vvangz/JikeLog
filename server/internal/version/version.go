@@ -2,7 +2,7 @@
 package version
 
 // Version 为产品版本号，由 Release Please 在发布时自动更新。
-const Version = "0.6.0" // x-release-please-version
+const Version = "0.7.0" // x-release-please-version
 
 // Commit 与 BuildTime 在构建时通过 -ldflags "-X" 注入。
 var (

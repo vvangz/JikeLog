@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: 即刻日志 JikeLog API
-  version: 0.6.0 # x-release-please-version
+  version: 0.7.0 # x-release-please-version
   description: |
     即刻日志服务端接口契约，是服务端、Android 客户端、Web 管理后台三端的唯一事实来源。
 
