@@ -17,6 +17,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/vvangz/JikeLog/server/internal/admin"
 	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/platform/config"
 	"github.com/vvangz/JikeLog/server/internal/platform/httpx"
@@ -78,7 +79,8 @@ func newBareRouter(t *testing.T, cfg config.Config) *gin.Engine {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	api := NewAPI(Handlers{System: system.NewHandler(system.Config{Name: "jikelog-api", Logger: logger})})
-	r, err := NewRouter(cfg, logger, api, testAuthService(t, cfg), nil)
+	admins := admin.NewService(admin.Deps{Tokens: admin.NewTokens(cfg.Auth.JWTSecret, "", nil), Logger: logger})
+	r, err := NewRouter(cfg, logger, api, testAuthService(t, cfg), admins, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +172,7 @@ func TestNewRouterRejectsInvalidTrustedProxy(t *testing.T) {
 	// 绕过配置校验直接构造，验证路由层的兜底检查
 	cfg := config.Config{HTTP: config.HTTP{TrustedProxies: []string{"not-an-ip"}}}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	if _, err := NewRouter(cfg, logger, NewAPI(Handlers{System: system.NewHandler(system.Config{})}), nil, nil); err == nil {
+	if _, err := NewRouter(cfg, logger, NewAPI(Handlers{System: system.NewHandler(system.Config{})}), nil, nil, nil); err == nil {
 		t.Fatal("非法代理地址应返回错误")
 	}
 }

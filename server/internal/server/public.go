@@ -15,6 +15,10 @@ var publicRoutes = map[string]struct{}{
 	"POST /api/v1/auth/register/sms":   {},
 	"POST /api/v1/auth/refresh":        {},
 	"POST /api/v1/auth/password/reset": {},
+	// 管理后台：登录、刷新、退出（刷新与退出凭 HttpOnly Cookie 与自定义请求头）
+	"POST /api/admin/v1/auth/login":   {},
+	"POST /api/admin/v1/auth/refresh": {},
+	"POST /api/admin/v1/auth/logout":  {},
 }
 
 func isPublicRoute(method, route string) bool {

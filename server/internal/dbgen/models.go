@@ -10,6 +10,44 @@ import (
 	"github.com/google/uuid"
 )
 
+type AdminAuditLog struct {
+	ID         uuid.UUID
+	AdminID    *uuid.UUID
+	Username   string
+	Action     string
+	TargetType string
+	TargetID   string
+	Ip         string
+	UserAgent  string
+	Detail     []byte
+	CreatedAt  time.Time
+}
+
+type AdminSession struct {
+	ID          uuid.UUID
+	AdminID     uuid.UUID
+	RefreshHash []byte
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+	LastUsedAt  time.Time
+	RevokedAt   *time.Time
+}
+
+type AdminUser struct {
+	ID                 uuid.UUID
+	Username           string
+	PasswordHash       string
+	Role               string
+	Disabled           bool
+	MustChangePassword bool
+	FailedLogins       int32
+	LockedUntil        *time.Time
+	LastLoginAt        *time.Time
+	PasswordChangedAt  time.Time
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
 type Attachment struct {
 	ID          uuid.UUID
 	UserID      uuid.UUID

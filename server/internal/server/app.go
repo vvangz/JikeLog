@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/vvangz/JikeLog/server/internal/account"
+	"github.com/vvangz/JikeLog/server/internal/admin"
 	"github.com/vvangz/JikeLog/server/internal/attachment"
 	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/e2e"
@@ -43,6 +44,8 @@ type App struct {
 	Reminders *reminder.Dispatcher
 	// Exports 生成数据导出文件（测试可直接调用 Tick 与 Cleanup）。
 	Exports *export.Service
+	// Admins 为管理后台（测试可直接创建管理员）。
+	Admins *admin.Service
 
 	hub         *realtime.Hub
 	attachments *attachment.Service
@@ -104,6 +107,7 @@ func NewApp(ctx context.Context, o Options) (*App, error) {
 	exports := export.NewService(export.Deps{
 		Tx: tx, Store: o.Store, Records: syncSvc, Pusher: push, Logger: o.Logger, Now: o.Now,
 	})
+	admins := newAdminService(o, tx, limiter)
 	onDeleted := func(ctx context.Context, userID uuid.UUID) {
 		keyring.Forget(userID)
 		if err := attSvc.DeleteUserObjects(ctx, userID); err != nil {
@@ -117,15 +121,16 @@ func NewApp(ctx context.Context, o Options) (*App, error) {
 		Sync:       syncer.NewHandler(syncSvc, sessions),
 		Attachment: attachment.NewHandler(attSvc, sessions),
 		Export:     export.NewHandler(exports),
+		Admin:      admin.NewHandler(admins, o.Config.IsDeployed()),
 	})
 	ws := hub.Handler(realtime.Options{Check: authSvc, Cursor: syncSvc.Cursor, Limiter: limiter})
-	router, err := NewRouter(o.Config, o.Logger, api, authSvc, ws)
+	router, err := NewRouter(o.Config, o.Logger, api, authSvc, admins, ws)
 	if err != nil {
 		return nil, err
 	}
 	reminders := reminder.NewDispatcher(reminder.Deps{Tx: tx, Pusher: push, Logger: o.Logger, Now: o.Now})
 	return &App{
-		Handler: router, SMS: sender, Reminders: reminders, Exports: exports,
+		Handler: router, SMS: sender, Reminders: reminders, Exports: exports, Admins: admins,
 		hub: hub, attachments: attSvc, logger: o.Logger,
 	}, nil
 }
@@ -146,6 +151,9 @@ func (a *App) RunBackground(ctx context.Context) {
 		case <-ticker.C:
 			if _, err := a.attachments.Cleanup(ctx, 100); err != nil {
 				a.logger.WarnContext(ctx, "attachment cleanup failed", "error", err)
+			}
+			if err := a.Admins.Cleanup(ctx); err != nil {
+				a.logger.WarnContext(ctx, "admin session cleanup failed", "error", err)
 			}
 		}
 	}
@@ -179,6 +187,19 @@ func newAuthService(ctx context.Context, o Options, tx db.TxRunner, limiter *rat
 		return nil, nil, fmt.Errorf("初始化认证模块失败: %w", err)
 	}
 	return svc, sender, nil
+}
+
+// newAdminService 创建管理后台服务：管理员令牌的签名密钥由 JWT 密钥派生，与用户令牌不同（ADR-011）。
+func newAdminService(o Options, tx db.TxRunner, limiter *ratelimit.Limiter) *admin.Service {
+	params := auth.DefaultArgon2Params
+	if o.Argon2 != nil {
+		params = *o.Argon2
+	}
+	return admin.NewService(admin.Deps{
+		Tx: tx, Hasher: auth.NewHasher(params), Limiter: limiter, Logger: o.Logger, Now: o.Now,
+		Tokens: admin.NewTokens(o.Config.Auth.JWTSecret, o.Config.Auth.JWTPreviousSecret, o.Now),
+		Quota:  o.Config.Attachment.Quota,
+	})
 }
 
 func newSystemHandler(o Options) *system.Handler {

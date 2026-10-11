@@ -34,6 +34,24 @@ func (e AccountSmsPurpose) Valid() bool {
 	}
 }
 
+// Defines values for AdminRole.
+const (
+	AdminRoleSuperAdmin AdminRole = "super_admin"
+	AdminRoleViewer     AdminRole = "viewer"
+)
+
+// Valid indicates whether the value is a known member of the AdminRole enum.
+func (e AdminRole) Valid() bool {
+	switch e {
+	case AdminRoleSuperAdmin:
+		return true
+	case AdminRoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AttachmentUploadMethod.
 const (
 	AttachmentUploadMethodPUT AttachmentUploadMethod = "PUT"
@@ -43,6 +61,48 @@ const (
 func (e AttachmentUploadMethod) Valid() bool {
 	switch e {
 	case AttachmentUploadMethodPUT:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AuditAction.
+const (
+	AuditActionChangePassword AuditAction = "change_password"
+	AuditActionCreateAdmin    AuditAction = "create_admin"
+	AuditActionListUsers      AuditAction = "list_users"
+	AuditActionLogin          AuditAction = "login"
+	AuditActionLoginFailed    AuditAction = "login_failed"
+	AuditActionLogout         AuditAction = "logout"
+	AuditActionResetPassword  AuditAction = "reset_password"
+	AuditActionUpdateAdmin    AuditAction = "update_admin"
+	AuditActionViewDashboard  AuditAction = "view_dashboard"
+	AuditActionViewUser       AuditAction = "view_user"
+)
+
+// Valid indicates whether the value is a known member of the AuditAction enum.
+func (e AuditAction) Valid() bool {
+	switch e {
+	case AuditActionChangePassword:
+		return true
+	case AuditActionCreateAdmin:
+		return true
+	case AuditActionListUsers:
+		return true
+	case AuditActionLogin:
+		return true
+	case AuditActionLoginFailed:
+		return true
+	case AuditActionLogout:
+		return true
+	case AuditActionResetPassword:
+		return true
+	case AuditActionUpdateAdmin:
+		return true
+	case AuditActionViewDashboard:
+		return true
+	case AuditActionViewUser:
 		return true
 	default:
 		return false
@@ -355,6 +415,51 @@ func (e TokenPairTokenType) Valid() bool {
 	}
 }
 
+// Defines values for AdminCsrfHeader.
+const (
+	AdminCsrfHeaderN1 AdminCsrfHeader = "1"
+)
+
+// Valid indicates whether the value is a known member of the AdminCsrfHeader enum.
+func (e AdminCsrfHeader) Valid() bool {
+	switch e {
+	case AdminCsrfHeaderN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdminLogoutParamsXJikeLogAdmin.
+const (
+	AdminLogoutParamsXJikeLogAdminN1 AdminLogoutParamsXJikeLogAdmin = "1"
+)
+
+// Valid indicates whether the value is a known member of the AdminLogoutParamsXJikeLogAdmin enum.
+func (e AdminLogoutParamsXJikeLogAdmin) Valid() bool {
+	switch e {
+	case AdminLogoutParamsXJikeLogAdminN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdminRefreshParamsXJikeLogAdmin.
+const (
+	AdminRefreshParamsXJikeLogAdminN1 AdminRefreshParamsXJikeLogAdmin = "1"
+)
+
+// Valid indicates whether the value is a known member of the AdminRefreshParamsXJikeLogAdmin enum.
+func (e AdminRefreshParamsXJikeLogAdmin) Valid() bool {
+	switch e {
+	case AdminRefreshParamsXJikeLogAdminN1:
+		return true
+	default:
+		return false
+	}
+}
+
 // AccountSmsPurpose defines model for AccountSmsPurpose.
 type AccountSmsPurpose string
 
@@ -388,6 +493,205 @@ type AckEnvelope struct {
 // AckRequest defines model for AckRequest.
 type AckRequest struct {
 	Seq int64 `json:"seq"`
+}
+
+// AdminChangePasswordRequest defines model for AdminChangePasswordRequest.
+type AdminChangePasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+}
+
+// AdminCreateRequest defines model for AdminCreateRequest.
+type AdminCreateRequest struct {
+	// Password 初始密码，对方第一次登录时必须修改
+	Password string    `json:"password"`
+	Role     AdminRole `json:"role"`
+	Username string    `json:"username"`
+}
+
+// AdminDashboard defines model for AdminDashboard.
+type AdminDashboard struct {
+	// ActiveMonth 最近 30 天有设备活动的用户数
+	ActiveMonth int64 `json:"activeMonth"`
+
+	// ActiveToday 今天有设备活动的用户数（按北京时间）
+	ActiveToday int64 `json:"activeToday"`
+
+	// ActiveWeek 最近 7 天有设备活动的用户数
+	ActiveWeek int64 `json:"activeWeek"`
+
+	// NewUsersDaily 最近 30 天每天新增的用户数（含今天，没有新增的日期为 0）
+	NewUsersDaily []DailyCount `json:"newUsersDaily"`
+	NewUsersToday int64        `json:"newUsersToday"`
+
+	// Platforms 最近 30 天活跃的已登录设备的平台分布
+	Platforms []PlatformCount `json:"platforms"`
+
+	// StorageBytes 全部用户的附件总用量
+	StorageBytes int64 `json:"storageBytes"`
+	TotalUsers   int64 `json:"totalUsers"`
+}
+
+// AdminDashboardEnvelope defines model for AdminDashboardEnvelope.
+type AdminDashboardEnvelope struct {
+	Data  AdminDashboard `json:"data"`
+	Error *ErrorBody     `json:"error,omitempty"`
+	Meta  *PageMeta      `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// AdminLoginRequest defines model for AdminLoginRequest.
+type AdminLoginRequest struct {
+	Password string `json:"password"`
+	Username string `json:"username"`
+}
+
+// AdminProfile defines model for AdminProfile.
+type AdminProfile struct {
+	CreatedAt   time.Time          `json:"createdAt"`
+	Disabled    bool               `json:"disabled"`
+	Id          openapi_types.UUID `json:"id"`
+	LastLoginAt *time.Time         `json:"lastLoginAt,omitempty"`
+
+	// MustChangePassword 为 true 时必须先修改密码，其他接口返回 403 `PASSWORD_CHANGE_REQUIRED`
+	MustChangePassword bool      `json:"mustChangePassword"`
+	Role               AdminRole `json:"role"`
+	Username           string    `json:"username"`
+}
+
+// AdminProfileEnvelope defines model for AdminProfileEnvelope.
+type AdminProfileEnvelope struct {
+	Data  AdminProfile `json:"data"`
+	Error *ErrorBody   `json:"error,omitempty"`
+	Meta  *PageMeta    `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// AdminProfileListEnvelope defines model for AdminProfileListEnvelope.
+type AdminProfileListEnvelope struct {
+	Data  []AdminProfile `json:"data"`
+	Error *ErrorBody     `json:"error,omitempty"`
+	Meta  *PageMeta      `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// AdminResetPasswordRequest defines model for AdminResetPasswordRequest.
+type AdminResetPasswordRequest struct {
+	Password string `json:"password"`
+}
+
+// AdminRole defines model for AdminRole.
+type AdminRole string
+
+// AdminSession defines model for AdminSession.
+type AdminSession struct {
+	AccessToken string       `json:"accessToken"`
+	Admin       AdminProfile `json:"admin"`
+	ExpiresAt   time.Time    `json:"expiresAt"`
+}
+
+// AdminSessionEnvelope defines model for AdminSessionEnvelope.
+type AdminSessionEnvelope struct {
+	Data  AdminSession `json:"data"`
+	Error *ErrorBody   `json:"error,omitempty"`
+	Meta  *PageMeta    `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// AdminUpdateRequest defines model for AdminUpdateRequest.
+type AdminUpdateRequest struct {
+	Disabled *bool      `json:"disabled,omitempty"`
+	Role     *AdminRole `json:"role,omitempty"`
+}
+
+// AdminUserDetail defines model for AdminUserDetail.
+type AdminUserDetail struct {
+	Devices  []AdminUserDevice `json:"devices"`
+	Settings Settings          `json:"settings"`
+	Storage  struct {
+		Quota int64 `json:"quota"`
+		Used  int64 `json:"used"`
+	} `json:"storage"`
+	Sync struct {
+		// LastSyncAt 最后一次有数据写入服务端的时间
+		LastSyncAt *time.Time `json:"lastSyncAt,omitempty"`
+
+		// ServerSeq 服务端最新的同步序号；设备的 ackSeq 小于它表示还有未同步的修改
+		ServerSeq int64 `json:"serverSeq"`
+	} `json:"sync"`
+	User AdminUserSummary `json:"user"`
+}
+
+// AdminUserDetailEnvelope defines model for AdminUserDetailEnvelope.
+type AdminUserDetailEnvelope struct {
+	Data  AdminUserDetail `json:"data"`
+	Error *ErrorBody      `json:"error,omitempty"`
+	Meta  *PageMeta       `json:"meta,omitempty"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// AdminUserDevice defines model for AdminUserDevice.
+type AdminUserDevice struct {
+	// AckSeq 设备已同步到的序号
+	AckSeq       int64              `json:"ackSeq"`
+	AppVersion   string             `json:"appVersion"`
+	CreatedAt    time.Time          `json:"createdAt"`
+	Id           openapi_types.UUID `json:"id"`
+	LastActiveAt time.Time          `json:"lastActiveAt"`
+
+	// LocalReminders 设备能否自己按时弹出提醒
+	LocalReminders bool   `json:"localReminders"`
+	Model          string `json:"model"`
+	OsVersion      string `json:"osVersion"`
+	Platform       string `json:"platform"`
+
+	// PushEnabled 是否注册了推送
+	PushEnabled bool `json:"pushEnabled"`
+
+	// SignedIn false 表示已退出登录或被下线
+	SignedIn bool `json:"signedIn"`
+}
+
+// AdminUserListEnvelope defines model for AdminUserListEnvelope.
+type AdminUserListEnvelope struct {
+	Data  []AdminUserSummary `json:"data"`
+	Error *ErrorBody         `json:"error,omitempty"`
+	Meta  PageMeta           `json:"meta"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
+// AdminUserSummary defines model for AdminUserSummary.
+type AdminUserSummary struct {
+	CreatedAt time.Time `json:"createdAt"`
+
+	// DeviceCount 已登录的设备数
+	DeviceCount  int64              `json:"deviceCount"`
+	Id           openapi_types.UUID `json:"id"`
+	LastActiveAt *time.Time         `json:"lastActiveAt,omitempty"`
+	Nickname     string             `json:"nickname"`
+
+	// PhoneMasked 脱敏的手机号，如 +86 138****5678；未绑定时省略
+	PhoneMasked  *string `json:"phoneMasked,omitempty"`
+	StorageBytes int64   `json:"storageBytes"`
+	Username     string  `json:"username"`
 }
 
 // AttachmentComplete defines model for AttachmentComplete.
@@ -483,6 +787,34 @@ type AttachmentUsageEnvelope struct {
 	Success   bool   `json:"success"`
 }
 
+// AuditAction defines model for AuditAction.
+type AuditAction string
+
+// AuditLog defines model for AuditLog.
+type AuditLog struct {
+	Action     AuditAction            `json:"action"`
+	AdminId    *openapi_types.UUID    `json:"adminId,omitempty"`
+	CreatedAt  time.Time              `json:"createdAt"`
+	Detail     map[string]interface{} `json:"detail"`
+	Id         openapi_types.UUID     `json:"id"`
+	Ip         string                 `json:"ip"`
+	TargetId   string                 `json:"targetId"`
+	TargetType string                 `json:"targetType"`
+	UserAgent  string                 `json:"userAgent"`
+	Username   string                 `json:"username"`
+}
+
+// AuditLogListEnvelope defines model for AuditLogListEnvelope.
+type AuditLogListEnvelope struct {
+	Data  []AuditLog `json:"data"`
+	Error *ErrorBody `json:"error,omitempty"`
+	Meta  PageMeta   `json:"meta"`
+
+	// RequestId 请求 ID，与响应头 X-Request-ID 一致，便于排查
+	RequestId string `json:"requestId"`
+	Success   bool   `json:"success"`
+}
+
 // AuthSession defines model for AuthSession.
 type AuthSession struct {
 	// DeviceId 服务端为本次登录分配的设备 ID
@@ -566,6 +898,12 @@ type CompleteSmsRegistrationRequest struct {
 	//
 	// Example: zhang_san
 	Username Username `json:"username"`
+}
+
+// DailyCount defines model for DailyCount.
+type DailyCount struct {
+	Count int64              `json:"count"`
+	Day   openapi_types.Date `json:"day"`
 }
 
 // Device defines model for Device.
@@ -785,6 +1123,12 @@ type PasswordLoginRequest struct {
 //
 // Example: 13812345678
 type Phone = string
+
+// PlatformCount defines model for PlatformCount.
+type PlatformCount struct {
+	Devices  int64  `json:"devices"`
+	Platform string `json:"platform"`
+}
 
 // PullEnvelope defines model for PullEnvelope.
 type PullEnvelope struct {
@@ -1196,14 +1540,74 @@ type VerifyIdentityRequest struct {
 	SmsCode *SmsCode `json:"smsCode,omitempty"`
 }
 
+// AdminCsrfHeader defines model for AdminCsrfHeader.
+type AdminCsrfHeader string
+
+// AdminId defines model for AdminId.
+type AdminId = openapi_types.UUID
+
+// AdminRefreshCookie defines model for AdminRefreshCookie.
+type AdminRefreshCookie = string
+
 // E2ESessionHeader defines model for E2ESessionHeader.
 type E2ESessionHeader = string
 
 // ExportId defines model for ExportId.
 type ExportId = openapi_types.UUID
 
+// Page defines model for Page.
+type Page = int
+
+// PageSize defines model for PageSize.
+type PageSize = int
+
 // Error defines model for Error.
 type Error = ErrorEnvelope
+
+// AdminListAuditLogsParams defines parameters for AdminListAuditLogs.
+type AdminListAuditLogsParams struct {
+	AdminId *openapi_types.UUID `form:"adminId,omitempty" json:"adminId,omitempty"`
+	Action  *AuditAction        `form:"action,omitempty" json:"action,omitempty"`
+
+	// From 起始时刻（含）
+	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
+
+	// To 截止时刻（不含）
+	To *time.Time `form:"to,omitempty" json:"to,omitempty"`
+
+	// Page 页码，从 1 开始
+	Page     *Page     `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *PageSize `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+}
+
+// AdminLogoutParams defines parameters for AdminLogout.
+type AdminLogoutParams struct {
+	// XJikeLogAdmin 固定为 1。跨站页面不能随意设置自定义请求头，以此防止跨站请求伪造
+	XJikeLogAdmin       AdminLogoutParamsXJikeLogAdmin `json:"X-JikeLog-Admin"`
+	JikelogAdminRefresh *AdminRefreshCookie            `form:"jikelog_admin_refresh,omitempty" json:"jikelog_admin_refresh,omitempty"`
+}
+
+// AdminLogoutParamsXJikeLogAdmin defines parameters for AdminLogout.
+type AdminLogoutParamsXJikeLogAdmin string
+
+// AdminRefreshParams defines parameters for AdminRefresh.
+type AdminRefreshParams struct {
+	// XJikeLogAdmin 固定为 1。跨站页面不能随意设置自定义请求头，以此防止跨站请求伪造
+	XJikeLogAdmin       AdminRefreshParamsXJikeLogAdmin `json:"X-JikeLog-Admin"`
+	JikelogAdminRefresh *AdminRefreshCookie             `form:"jikelog_admin_refresh,omitempty" json:"jikelog_admin_refresh,omitempty"`
+}
+
+// AdminRefreshParamsXJikeLogAdmin defines parameters for AdminRefresh.
+type AdminRefreshParamsXJikeLogAdmin string
+
+// AdminListUsersParams defines parameters for AdminListUsers.
+type AdminListUsersParams struct {
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Page 页码，从 1 开始
+	Page     *Page     `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *PageSize `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+}
 
 // CreateAttachmentUploadParams defines parameters for CreateAttachmentUpload.
 type CreateAttachmentUploadParams struct {
@@ -1231,6 +1635,21 @@ type PushChangesParams struct {
 	// XJikeLogE2E 传输加密会话 ID（见 createE2ESession）；请求或响应含敏感字段时必须携带
 	XJikeLogE2E *E2ESessionHeader `json:"X-JikeLog-E2E,omitempty"`
 }
+
+// AdminCreateAdminJSONRequestBody defines body for AdminCreateAdmin for application/json ContentType.
+type AdminCreateAdminJSONRequestBody = AdminCreateRequest
+
+// AdminUpdateAdminJSONRequestBody defines body for AdminUpdateAdmin for application/json ContentType.
+type AdminUpdateAdminJSONRequestBody = AdminUpdateRequest
+
+// AdminResetPasswordJSONRequestBody defines body for AdminResetPassword for application/json ContentType.
+type AdminResetPasswordJSONRequestBody = AdminResetPasswordRequest
+
+// AdminLoginJSONRequestBody defines body for AdminLogin for application/json ContentType.
+type AdminLoginJSONRequestBody = AdminLoginRequest
+
+// AdminChangePasswordJSONRequestBody defines body for AdminChangePassword for application/json ContentType.
+type AdminChangePasswordJSONRequestBody = AdminChangePasswordRequest
 
 // CreateAttachmentUploadJSONRequestBody defines body for CreateAttachmentUpload for application/json ContentType.
 type CreateAttachmentUploadJSONRequestBody = AttachmentUploadRequest
@@ -1291,6 +1710,45 @@ type PushChangesJSONRequestBody = PushRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// AdminListAdmins 管理员列表（仅超级管理员）
+	// (GET /api/admin/v1/admins)
+	AdminListAdmins(c *gin.Context)
+	// AdminCreateAdmin 新建管理员（仅超级管理员）
+	// (POST /api/admin/v1/admins)
+	AdminCreateAdmin(c *gin.Context)
+	// AdminUpdateAdmin 修改角色或停用（仅超级管理员）
+	// (PATCH /api/admin/v1/admins/{adminId})
+	AdminUpdateAdmin(c *gin.Context, adminId AdminId)
+	// AdminResetPassword 重置管理员密码（仅超级管理员）
+	// (POST /api/admin/v1/admins/{adminId}/password)
+	AdminResetPassword(c *gin.Context, adminId AdminId)
+	// AdminListAuditLogs 审计日志
+	// (GET /api/admin/v1/audit-logs)
+	AdminListAuditLogs(c *gin.Context, params AdminListAuditLogsParams)
+	// AdminLogin 管理员登录
+	// (POST /api/admin/v1/auth/login)
+	AdminLogin(c *gin.Context)
+	// AdminLogout 管理员退出
+	// (POST /api/admin/v1/auth/logout)
+	AdminLogout(c *gin.Context, params AdminLogoutParams)
+	// AdminRefresh 刷新管理员会话
+	// (POST /api/admin/v1/auth/refresh)
+	AdminRefresh(c *gin.Context, params AdminRefreshParams)
+	// AdminDashboard 仪表盘
+	// (GET /api/admin/v1/dashboard)
+	AdminDashboard(c *gin.Context)
+	// AdminMe 当前管理员
+	// (GET /api/admin/v1/me)
+	AdminMe(c *gin.Context)
+	// AdminChangePassword 修改自己的密码
+	// (PUT /api/admin/v1/me/password)
+	AdminChangePassword(c *gin.Context)
+	// AdminListUsers 用户列表
+	// (GET /api/admin/v1/users)
+	AdminListUsers(c *gin.Context, params AdminListUsersParams)
+	// AdminGetUser 用户详情（只有配置，不含内容）
+	// (GET /api/admin/v1/users/{userId})
+	AdminGetUser(c *gin.Context, userId openapi_types.UUID)
 	// CreateAttachmentUpload 申请上传附件
 	// (POST /api/v1/attachments)
 	CreateAttachmentUpload(c *gin.Context, params CreateAttachmentUploadParams)
@@ -1412,6 +1870,385 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(c *gin.Context)
+
+// AdminListAdmins operation middleware
+func (siw *ServerInterfaceWrapper) AdminListAdmins(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AdminListAdmins(c)
+}
+
+// AdminCreateAdmin operation middleware
+func (siw *ServerInterfaceWrapper) AdminCreateAdmin(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AdminCreateAdmin(c)
+}
+
+// AdminUpdateAdmin operation middleware
+func (siw *ServerInterfaceWrapper) AdminUpdateAdmin(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "adminId" -------------
+	var adminId AdminId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "adminId", c.Param("adminId"), &adminId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter adminId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AdminUpdateAdmin(c, adminId)
+}
+
+// AdminResetPassword operation middleware
+func (siw *ServerInterfaceWrapper) AdminResetPassword(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "adminId" -------------
+	var adminId AdminId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "adminId", c.Param("adminId"), &adminId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter adminId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AdminResetPassword(c, adminId)
+}
+
+// AdminListAuditLogs operation middleware
+func (siw *ServerInterfaceWrapper) AdminListAuditLogs(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AdminListAuditLogsParams
+
+	// ------------- Optional query parameter "adminId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "adminId", c.Request.URL.Query(), &params.AdminId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter adminId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "action" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "action", c.Request.URL.Query(), &params.Action, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter action: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", c.Request.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter from: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", c.Request.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter to: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", c.Request.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter page: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", c.Request.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter pageSize: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AdminListAuditLogs(c, params)
+}
+
+// AdminLogin operation middleware
+func (siw *ServerInterfaceWrapper) AdminLogin(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AdminLogin(c)
+}
+
+// AdminLogout operation middleware
+func (siw *ServerInterfaceWrapper) AdminLogout(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AdminLogoutParams
+
+	headers := c.Request.Header
+
+	// ------------- Required header parameter "X-JikeLog-Admin" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-JikeLog-Admin")]; found {
+		var XJikeLogAdmin AdminLogoutParamsXJikeLogAdmin
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-JikeLog-Admin, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-JikeLog-Admin", valueList[0], &XJikeLogAdmin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-JikeLog-Admin: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XJikeLogAdmin = XJikeLogAdmin
+
+	} else {
+		siw.ErrorHandler(c, fmt.Errorf("Header parameter X-JikeLog-Admin is required, but not found"), http.StatusBadRequest)
+		return
+	}
+
+	{
+		var cookie string
+
+		if cookie, err = c.Cookie("jikelog_admin_refresh"); err == nil {
+			var value AdminRefreshCookie
+			err = runtime.BindStyledParameterWithOptions("simple", "jikelog_admin_refresh", cookie, &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationCookie, Explode: true, Required: false, Type: "string", Format: ""})
+			if err != nil {
+				siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter jikelog_admin_refresh: %w", err), http.StatusBadRequest)
+				return
+			}
+			params.JikelogAdminRefresh = &value
+
+		}
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AdminLogout(c, params)
+}
+
+// AdminRefresh operation middleware
+func (siw *ServerInterfaceWrapper) AdminRefresh(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AdminRefreshParams
+
+	headers := c.Request.Header
+
+	// ------------- Required header parameter "X-JikeLog-Admin" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-JikeLog-Admin")]; found {
+		var XJikeLogAdmin AdminRefreshParamsXJikeLogAdmin
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-JikeLog-Admin, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-JikeLog-Admin", valueList[0], &XJikeLogAdmin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-JikeLog-Admin: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XJikeLogAdmin = XJikeLogAdmin
+
+	} else {
+		siw.ErrorHandler(c, fmt.Errorf("Header parameter X-JikeLog-Admin is required, but not found"), http.StatusBadRequest)
+		return
+	}
+
+	{
+		var cookie string
+
+		if cookie, err = c.Cookie("jikelog_admin_refresh"); err == nil {
+			var value AdminRefreshCookie
+			err = runtime.BindStyledParameterWithOptions("simple", "jikelog_admin_refresh", cookie, &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationCookie, Explode: true, Required: false, Type: "string", Format: ""})
+			if err != nil {
+				siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter jikelog_admin_refresh: %w", err), http.StatusBadRequest)
+				return
+			}
+			params.JikelogAdminRefresh = &value
+
+		}
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AdminRefresh(c, params)
+}
+
+// AdminDashboard operation middleware
+func (siw *ServerInterfaceWrapper) AdminDashboard(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AdminDashboard(c)
+}
+
+// AdminMe operation middleware
+func (siw *ServerInterfaceWrapper) AdminMe(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AdminMe(c)
+}
+
+// AdminChangePassword operation middleware
+func (siw *ServerInterfaceWrapper) AdminChangePassword(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AdminChangePassword(c)
+}
+
+// AdminListUsers operation middleware
+func (siw *ServerInterfaceWrapper) AdminListUsers(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AdminListUsersParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", c.Request.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter q: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", c.Request.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter page: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", c.Request.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter pageSize: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AdminListUsers(c, params)
+}
+
+// AdminGetUser operation middleware
+func (siw *ServerInterfaceWrapper) AdminGetUser(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "userId" -------------
+	var userId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", c.Param("userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter userId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.AdminGetUser(c, userId)
+}
 
 // CreateAttachmentUpload operation middleware
 func (siw *ServerInterfaceWrapper) CreateAttachmentUpload(c *gin.Context) {
@@ -2175,9 +3012,558 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.DELETE(options.BaseURL+"/api/v1/exports/:exportId", wrapper.DeleteExport)
 	router.GET(options.BaseURL+"/api/v1/exports/:exportId", wrapper.GetExport)
 	router.GET(options.BaseURL+"/api/v1/exports/:exportId/download", wrapper.GetExportDownload)
+	router.POST(options.BaseURL+"/api/admin/v1/auth/login", wrapper.AdminLogin)
+	router.POST(options.BaseURL+"/api/admin/v1/auth/refresh", wrapper.AdminRefresh)
+	router.POST(options.BaseURL+"/api/admin/v1/auth/logout", wrapper.AdminLogout)
+	router.GET(options.BaseURL+"/api/admin/v1/me", wrapper.AdminMe)
+	router.PUT(options.BaseURL+"/api/admin/v1/me/password", wrapper.AdminChangePassword)
+	router.GET(options.BaseURL+"/api/admin/v1/dashboard", wrapper.AdminDashboard)
+	router.GET(options.BaseURL+"/api/admin/v1/users", wrapper.AdminListUsers)
+	router.GET(options.BaseURL+"/api/admin/v1/users/:userId", wrapper.AdminGetUser)
+	router.GET(options.BaseURL+"/api/admin/v1/audit-logs", wrapper.AdminListAuditLogs)
+	router.GET(options.BaseURL+"/api/admin/v1/admins", wrapper.AdminListAdmins)
+	router.POST(options.BaseURL+"/api/admin/v1/admins", wrapper.AdminCreateAdmin)
+	router.PATCH(options.BaseURL+"/api/admin/v1/admins/:adminId", wrapper.AdminUpdateAdmin)
+	router.POST(options.BaseURL+"/api/admin/v1/admins/:adminId/password", wrapper.AdminResetPassword)
 }
 
 type ErrorJSONResponse ErrorEnvelope
+
+type AdminListAdminsRequestObject struct {
+}
+
+type AdminListAdminsResponseObject interface {
+	VisitAdminListAdminsResponse(w http.ResponseWriter) error
+}
+
+type AdminListAdmins200JSONResponse AdminProfileListEnvelope
+
+func (response AdminListAdmins200JSONResponse) VisitAdminListAdminsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminListAdminsdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AdminListAdminsdefaultJSONResponse) VisitAdminListAdminsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminCreateAdminRequestObject struct {
+	Body *AdminCreateAdminJSONRequestBody
+}
+
+type AdminCreateAdminResponseObject interface {
+	VisitAdminCreateAdminResponse(w http.ResponseWriter) error
+}
+
+type AdminCreateAdmin201JSONResponse AdminProfileEnvelope
+
+func (response AdminCreateAdmin201JSONResponse) VisitAdminCreateAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminCreateAdmindefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AdminCreateAdmindefaultJSONResponse) VisitAdminCreateAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminUpdateAdminRequestObject struct {
+	AdminId AdminId `json:"adminId"`
+	Body    *AdminUpdateAdminJSONRequestBody
+}
+
+type AdminUpdateAdminResponseObject interface {
+	VisitAdminUpdateAdminResponse(w http.ResponseWriter) error
+}
+
+type AdminUpdateAdmin200JSONResponse AdminProfileEnvelope
+
+func (response AdminUpdateAdmin200JSONResponse) VisitAdminUpdateAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminUpdateAdmindefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AdminUpdateAdmindefaultJSONResponse) VisitAdminUpdateAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminResetPasswordRequestObject struct {
+	AdminId AdminId `json:"adminId"`
+	Body    *AdminResetPasswordJSONRequestBody
+}
+
+type AdminResetPasswordResponseObject interface {
+	VisitAdminResetPasswordResponse(w http.ResponseWriter) error
+}
+
+type AdminResetPassword200JSONResponse AckEnvelope
+
+func (response AdminResetPassword200JSONResponse) VisitAdminResetPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminResetPassworddefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AdminResetPassworddefaultJSONResponse) VisitAdminResetPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminListAuditLogsRequestObject struct {
+	Params AdminListAuditLogsParams
+}
+
+type AdminListAuditLogsResponseObject interface {
+	VisitAdminListAuditLogsResponse(w http.ResponseWriter) error
+}
+
+type AdminListAuditLogs200JSONResponse AuditLogListEnvelope
+
+func (response AdminListAuditLogs200JSONResponse) VisitAdminListAuditLogsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminListAuditLogsdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AdminListAuditLogsdefaultJSONResponse) VisitAdminListAuditLogsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminLoginRequestObject struct {
+	Body *AdminLoginJSONRequestBody
+}
+
+type AdminLoginResponseObject interface {
+	VisitAdminLoginResponse(w http.ResponseWriter) error
+}
+
+type AdminLogin200ResponseHeaders struct {
+	SetCookie *string
+}
+
+type AdminLogin200JSONResponse struct {
+	Body    AdminSessionEnvelope
+	Headers AdminLogin200ResponseHeaders
+}
+
+func (response AdminLogin200JSONResponse) VisitAdminLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.SetCookie != nil {
+		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminLogindefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AdminLogindefaultJSONResponse) VisitAdminLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminLogoutRequestObject struct {
+	Params AdminLogoutParams
+}
+
+type AdminLogoutResponseObject interface {
+	VisitAdminLogoutResponse(w http.ResponseWriter) error
+}
+
+type AdminLogout200ResponseHeaders struct {
+	SetCookie *string
+}
+
+type AdminLogout200JSONResponse struct {
+	Body    AckEnvelope
+	Headers AdminLogout200ResponseHeaders
+}
+
+func (response AdminLogout200JSONResponse) VisitAdminLogoutResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.SetCookie != nil {
+		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminLogoutdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AdminLogoutdefaultJSONResponse) VisitAdminLogoutResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminRefreshRequestObject struct {
+	Params AdminRefreshParams
+}
+
+type AdminRefreshResponseObject interface {
+	VisitAdminRefreshResponse(w http.ResponseWriter) error
+}
+
+type AdminRefresh200ResponseHeaders struct {
+	SetCookie *string
+}
+
+type AdminRefresh200JSONResponse struct {
+	Body    AdminSessionEnvelope
+	Headers AdminRefresh200ResponseHeaders
+}
+
+func (response AdminRefresh200JSONResponse) VisitAdminRefreshResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.SetCookie != nil {
+		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminRefreshdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AdminRefreshdefaultJSONResponse) VisitAdminRefreshResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminDashboardRequestObject struct {
+}
+
+type AdminDashboardResponseObject interface {
+	VisitAdminDashboardResponse(w http.ResponseWriter) error
+}
+
+type AdminDashboard200JSONResponse AdminDashboardEnvelope
+
+func (response AdminDashboard200JSONResponse) VisitAdminDashboardResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminDashboarddefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AdminDashboarddefaultJSONResponse) VisitAdminDashboardResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminMeRequestObject struct {
+}
+
+type AdminMeResponseObject interface {
+	VisitAdminMeResponse(w http.ResponseWriter) error
+}
+
+type AdminMe200JSONResponse AdminProfileEnvelope
+
+func (response AdminMe200JSONResponse) VisitAdminMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminMedefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AdminMedefaultJSONResponse) VisitAdminMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminChangePasswordRequestObject struct {
+	Body *AdminChangePasswordJSONRequestBody
+}
+
+type AdminChangePasswordResponseObject interface {
+	VisitAdminChangePasswordResponse(w http.ResponseWriter) error
+}
+
+type AdminChangePassword200JSONResponse AckEnvelope
+
+func (response AdminChangePassword200JSONResponse) VisitAdminChangePasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminChangePassworddefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AdminChangePassworddefaultJSONResponse) VisitAdminChangePasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminListUsersRequestObject struct {
+	Params AdminListUsersParams
+}
+
+type AdminListUsersResponseObject interface {
+	VisitAdminListUsersResponse(w http.ResponseWriter) error
+}
+
+type AdminListUsers200JSONResponse AdminUserListEnvelope
+
+func (response AdminListUsers200JSONResponse) VisitAdminListUsersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminListUsersdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AdminListUsersdefaultJSONResponse) VisitAdminListUsersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminGetUserRequestObject struct {
+	UserId openapi_types.UUID `json:"userId"`
+}
+
+type AdminGetUserResponseObject interface {
+	VisitAdminGetUserResponse(w http.ResponseWriter) error
+}
+
+type AdminGetUser200JSONResponse AdminUserDetailEnvelope
+
+func (response AdminGetUser200JSONResponse) VisitAdminGetUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminGetUserdefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response AdminGetUserdefaultJSONResponse) VisitAdminGetUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type CreateAttachmentUploadRequestObject struct {
 	Params CreateAttachmentUploadParams
@@ -3632,6 +5018,45 @@ func (response GetReadyzdefaultJSONResponse) VisitGetReadyzResponse(w http.Respo
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// AdminListAdmins 管理员列表（仅超级管理员）
+	// (GET /api/admin/v1/admins)
+	AdminListAdmins(ctx context.Context, request AdminListAdminsRequestObject) (AdminListAdminsResponseObject, error)
+	// AdminCreateAdmin 新建管理员（仅超级管理员）
+	// (POST /api/admin/v1/admins)
+	AdminCreateAdmin(ctx context.Context, request AdminCreateAdminRequestObject) (AdminCreateAdminResponseObject, error)
+	// AdminUpdateAdmin 修改角色或停用（仅超级管理员）
+	// (PATCH /api/admin/v1/admins/{adminId})
+	AdminUpdateAdmin(ctx context.Context, request AdminUpdateAdminRequestObject) (AdminUpdateAdminResponseObject, error)
+	// AdminResetPassword 重置管理员密码（仅超级管理员）
+	// (POST /api/admin/v1/admins/{adminId}/password)
+	AdminResetPassword(ctx context.Context, request AdminResetPasswordRequestObject) (AdminResetPasswordResponseObject, error)
+	// AdminListAuditLogs 审计日志
+	// (GET /api/admin/v1/audit-logs)
+	AdminListAuditLogs(ctx context.Context, request AdminListAuditLogsRequestObject) (AdminListAuditLogsResponseObject, error)
+	// AdminLogin 管理员登录
+	// (POST /api/admin/v1/auth/login)
+	AdminLogin(ctx context.Context, request AdminLoginRequestObject) (AdminLoginResponseObject, error)
+	// AdminLogout 管理员退出
+	// (POST /api/admin/v1/auth/logout)
+	AdminLogout(ctx context.Context, request AdminLogoutRequestObject) (AdminLogoutResponseObject, error)
+	// AdminRefresh 刷新管理员会话
+	// (POST /api/admin/v1/auth/refresh)
+	AdminRefresh(ctx context.Context, request AdminRefreshRequestObject) (AdminRefreshResponseObject, error)
+	// AdminDashboard 仪表盘
+	// (GET /api/admin/v1/dashboard)
+	AdminDashboard(ctx context.Context, request AdminDashboardRequestObject) (AdminDashboardResponseObject, error)
+	// AdminMe 当前管理员
+	// (GET /api/admin/v1/me)
+	AdminMe(ctx context.Context, request AdminMeRequestObject) (AdminMeResponseObject, error)
+	// AdminChangePassword 修改自己的密码
+	// (PUT /api/admin/v1/me/password)
+	AdminChangePassword(ctx context.Context, request AdminChangePasswordRequestObject) (AdminChangePasswordResponseObject, error)
+	// AdminListUsers 用户列表
+	// (GET /api/admin/v1/users)
+	AdminListUsers(ctx context.Context, request AdminListUsersRequestObject) (AdminListUsersResponseObject, error)
+	// AdminGetUser 用户详情（只有配置，不含内容）
+	// (GET /api/admin/v1/users/{userId})
+	AdminGetUser(ctx context.Context, request AdminGetUserRequestObject) (AdminGetUserResponseObject, error)
 	// CreateAttachmentUpload 申请上传附件
 	// (POST /api/v1/attachments)
 	CreateAttachmentUpload(ctx context.Context, request CreateAttachmentUploadRequestObject) (CreateAttachmentUploadResponseObject, error)
@@ -3800,6 +5225,367 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictGinServerOptions
+}
+
+// AdminListAdmins operation middleware
+func (sh *strictHandler) AdminListAdmins(ctx *gin.Context) {
+	var request AdminListAdminsRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AdminListAdmins(ctx, request.(AdminListAdminsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdminListAdmins")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AdminListAdminsResponseObject); ok {
+		if err := validResponse.VisitAdminListAdminsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AdminCreateAdmin operation middleware
+func (sh *strictHandler) AdminCreateAdmin(ctx *gin.Context) {
+	var request AdminCreateAdminRequestObject
+
+	var body AdminCreateAdminJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AdminCreateAdmin(ctx, request.(AdminCreateAdminRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdminCreateAdmin")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AdminCreateAdminResponseObject); ok {
+		if err := validResponse.VisitAdminCreateAdminResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AdminUpdateAdmin operation middleware
+func (sh *strictHandler) AdminUpdateAdmin(ctx *gin.Context, adminId AdminId) {
+	var request AdminUpdateAdminRequestObject
+
+	request.AdminId = adminId
+
+	var body AdminUpdateAdminJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AdminUpdateAdmin(ctx, request.(AdminUpdateAdminRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdminUpdateAdmin")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AdminUpdateAdminResponseObject); ok {
+		if err := validResponse.VisitAdminUpdateAdminResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AdminResetPassword operation middleware
+func (sh *strictHandler) AdminResetPassword(ctx *gin.Context, adminId AdminId) {
+	var request AdminResetPasswordRequestObject
+
+	request.AdminId = adminId
+
+	var body AdminResetPasswordJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AdminResetPassword(ctx, request.(AdminResetPasswordRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdminResetPassword")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AdminResetPasswordResponseObject); ok {
+		if err := validResponse.VisitAdminResetPasswordResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AdminListAuditLogs operation middleware
+func (sh *strictHandler) AdminListAuditLogs(ctx *gin.Context, params AdminListAuditLogsParams) {
+	var request AdminListAuditLogsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AdminListAuditLogs(ctx, request.(AdminListAuditLogsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdminListAuditLogs")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AdminListAuditLogsResponseObject); ok {
+		if err := validResponse.VisitAdminListAuditLogsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AdminLogin operation middleware
+func (sh *strictHandler) AdminLogin(ctx *gin.Context) {
+	var request AdminLoginRequestObject
+
+	var body AdminLoginJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AdminLogin(ctx, request.(AdminLoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdminLogin")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AdminLoginResponseObject); ok {
+		if err := validResponse.VisitAdminLoginResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AdminLogout operation middleware
+func (sh *strictHandler) AdminLogout(ctx *gin.Context, params AdminLogoutParams) {
+	var request AdminLogoutRequestObject
+
+	request.Params = params
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AdminLogout(ctx, request.(AdminLogoutRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdminLogout")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AdminLogoutResponseObject); ok {
+		if err := validResponse.VisitAdminLogoutResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AdminRefresh operation middleware
+func (sh *strictHandler) AdminRefresh(ctx *gin.Context, params AdminRefreshParams) {
+	var request AdminRefreshRequestObject
+
+	request.Params = params
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AdminRefresh(ctx, request.(AdminRefreshRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdminRefresh")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AdminRefreshResponseObject); ok {
+		if err := validResponse.VisitAdminRefreshResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AdminDashboard operation middleware
+func (sh *strictHandler) AdminDashboard(ctx *gin.Context) {
+	var request AdminDashboardRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AdminDashboard(ctx, request.(AdminDashboardRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdminDashboard")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AdminDashboardResponseObject); ok {
+		if err := validResponse.VisitAdminDashboardResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AdminMe operation middleware
+func (sh *strictHandler) AdminMe(ctx *gin.Context) {
+	var request AdminMeRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AdminMe(ctx, request.(AdminMeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdminMe")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AdminMeResponseObject); ok {
+		if err := validResponse.VisitAdminMeResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AdminChangePassword operation middleware
+func (sh *strictHandler) AdminChangePassword(ctx *gin.Context) {
+	var request AdminChangePasswordRequestObject
+
+	var body AdminChangePasswordJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AdminChangePassword(ctx, request.(AdminChangePasswordRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdminChangePassword")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AdminChangePasswordResponseObject); ok {
+		if err := validResponse.VisitAdminChangePasswordResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AdminListUsers operation middleware
+func (sh *strictHandler) AdminListUsers(ctx *gin.Context, params AdminListUsersParams) {
+	var request AdminListUsersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AdminListUsers(ctx, request.(AdminListUsersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdminListUsers")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AdminListUsersResponseObject); ok {
+		if err := validResponse.VisitAdminListUsersResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AdminGetUser operation middleware
+func (sh *strictHandler) AdminGetUser(ctx *gin.Context, userId openapi_types.UUID) {
+	var request AdminGetUserRequestObject
+
+	request.UserId = userId
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.AdminGetUser(ctx, request.(AdminGetUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdminGetUser")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(AdminGetUserResponseObject); ok {
+		if err := validResponse.VisitAdminGetUserResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // CreateAttachmentUpload operation middleware

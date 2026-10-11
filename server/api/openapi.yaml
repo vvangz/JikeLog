@@ -31,6 +31,10 @@ tags:
     description: 附件：对象存储直传直下
   - name: export
     description: 数据导出：服务端异步生成 zip，完成后下载（ADR-010）
+  - name: admin
+    description: |
+      Web 管理后台（ADR-011）。全部接口在 /api/admin/v1 下，只接受管理员令牌（adminAuth）；
+      管理员令牌访问用户接口一律返回 403 `ADMIN_FORBIDDEN`。管理员只能查看用户的配置信息，看不到任何内容。
 
 security:
   - bearerAuth: []
@@ -833,14 +837,373 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  /api/admin/v1/auth/login:
+    post:
+      tags: [admin]
+      operationId: adminLogin
+      summary: 管理员登录
+      description: |
+        成功时返回 Access Token（15 分钟），Refresh Token 写入 HttpOnly Cookie。
+        同一账号连续 5 次失败锁定 15 分钟（423 `ADMIN_LOCKED`）；用户名或密码错误统一返回 401 `INVALID_CREDENTIALS`。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminLoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSessionEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/v1/auth/refresh:
+    post:
+      tags: [admin]
+      operationId: adminRefresh
+      summary: 刷新管理员会话
+      description: 用 Cookie 中的 Refresh Token 换取新的 Access Token，Refresh Token 同时轮换。
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AdminCsrfHeader'
+        - $ref: '#/components/parameters/AdminRefreshCookie'
+      responses:
+        '200':
+          description: 新的会话
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSessionEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/v1/auth/logout:
+    post:
+      tags: [admin]
+      operationId: adminLogout
+      summary: 管理员退出
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AdminCsrfHeader'
+        - $ref: '#/components/parameters/AdminRefreshCookie'
+      responses:
+        '200':
+          description: 已退出
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AckEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/v1/me:
+    get:
+      tags: [admin]
+      operationId: adminMe
+      summary: 当前管理员
+      security:
+        - adminAuth: []
+      responses:
+        '200':
+          description: 当前管理员
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminProfileEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/v1/me/password:
+    put:
+      tags: [admin]
+      operationId: adminChangePassword
+      summary: 修改自己的密码
+      description: 修改后其他会话全部失效，当前会话保留。
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminChangePasswordRequest'
+      responses:
+        '200':
+          description: 已修改
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AckEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/v1/dashboard:
+    get:
+      tags: [admin]
+      operationId: adminDashboard
+      summary: 仪表盘
+      security:
+        - adminAuth: []
+      responses:
+        '200':
+          description: 统计数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminDashboardEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/v1/users:
+    get:
+      tags: [admin]
+      operationId: adminListUsers
+      summary: 用户列表
+      description: 按用户名、昵称搜索；输入 4 位以上数字时也匹配手机号末尾。手机号脱敏返回。
+      security:
+        - adminAuth: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+            maxLength: 30
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserListEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/v1/users/{userId}:
+    get:
+      tags: [admin]
+      operationId: adminGetUser
+      summary: 用户详情（只有配置，不含内容）
+      security:
+        - adminAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 用户配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserDetailEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/v1/audit-logs:
+    get:
+      tags: [admin]
+      operationId: adminListAuditLogs
+      summary: 审计日志
+      security:
+        - adminAuth: []
+      parameters:
+        - name: adminId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          schema:
+            $ref: '#/components/schemas/AuditAction'
+        - name: from
+          in: query
+          description: 起始时刻（含）
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: 截止时刻（不含）
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 审计日志，新的在前
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogListEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/v1/admins:
+    get:
+      tags: [admin]
+      operationId: adminListAdmins
+      summary: 管理员列表（仅超级管理员）
+      security:
+        - adminAuth: []
+      responses:
+        '200':
+          description: 管理员
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminProfileListEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [admin]
+      operationId: adminCreateAdmin
+      summary: 新建管理员（仅超级管理员）
+      description: 新管理员第一次登录时必须修改密码。用户名已存在时返回 409 `USERNAME_TAKEN`。
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateRequest'
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminProfileEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/v1/admins/{adminId}:
+    patch:
+      tags: [admin]
+      operationId: adminUpdateAdmin
+      summary: 修改角色或停用（仅超级管理员）
+      description: 不能修改自己；不能停用或降级最后一个超级管理员（409 `LAST_SUPER_ADMIN`）。停用后该管理员的会话立即失效。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AdminId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateRequest'
+      responses:
+        '200':
+          description: 已修改
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminProfileEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/admin/v1/admins/{adminId}/password:
+    post:
+      tags: [admin]
+      operationId: adminResetPassword
+      summary: 重置管理员密码（仅超级管理员）
+      description: 该管理员的会话全部失效，下次登录必须修改密码。不能用于自己（请使用修改密码）。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AdminId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminResetPasswordRequest'
+      responses:
+        '200':
+          description: 已重置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AckEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    adminAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 管理员 Access Token（受众 admin），与用户令牌不能互用
 
   parameters:
+    AdminId:
+      name: adminId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AdminCsrfHeader:
+      name: X-JikeLog-Admin
+      in: header
+      required: true
+      description: 固定为 1。跨站页面不能随意设置自定义请求头，以此防止跨站请求伪造
+      schema:
+        type: string
+        enum: ['1']
+    AdminRefreshCookie:
+      name: jikelog_admin_refresh
+      in: cookie
+      required: false
+      schema:
+        type: string
+        maxLength: 100
+    Page:
+      name: page
+      in: query
+      description: 页码，从 1 开始
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
     ExportId:
       name: exportId
       in: path
@@ -1891,3 +2254,366 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/Export'
+
+    # ───────────────────────────── 管理后台 ─────────────────────────────
+    AdminRole:
+      type: string
+      enum: [super_admin, viewer]
+
+    AdminProfile:
+      type: object
+      required: [id, username, role, disabled, mustChangePassword, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        role:
+          $ref: '#/components/schemas/AdminRole'
+        disabled:
+          type: boolean
+        mustChangePassword:
+          type: boolean
+          description: 为 true 时必须先修改密码，其他接口返回 403 `PASSWORD_CHANGE_REQUIRED`
+        lastLoginAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminProfileEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminProfile'
+
+    AdminProfileListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminProfile'
+
+    AdminLoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          maxLength: 20
+        password:
+          type: string
+          maxLength: 128
+
+    AdminSession:
+      type: object
+      required: [accessToken, expiresAt, admin]
+      properties:
+        accessToken:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        admin:
+          $ref: '#/components/schemas/AdminProfile'
+
+    AdminSessionEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminSession'
+
+    AdminChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          maxLength: 128
+        newPassword:
+          type: string
+          minLength: 10
+          maxLength: 128
+
+    AdminCreateRequest:
+      type: object
+      required: [username, role, password]
+      properties:
+        username:
+          type: string
+          maxLength: 20
+        role:
+          $ref: '#/components/schemas/AdminRole'
+        password:
+          type: string
+          minLength: 10
+          maxLength: 128
+          description: 初始密码，对方第一次登录时必须修改
+
+    AdminUpdateRequest:
+      type: object
+      properties:
+        role:
+          $ref: '#/components/schemas/AdminRole'
+        disabled:
+          type: boolean
+
+    AdminResetPasswordRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          minLength: 10
+          maxLength: 128
+
+    AdminDashboard:
+      type: object
+      required: [totalUsers, newUsersToday, activeToday, activeWeek, activeMonth, storageBytes, newUsersDaily, platforms]
+      properties:
+        totalUsers:
+          type: integer
+          format: int64
+        newUsersToday:
+          type: integer
+          format: int64
+        activeToday:
+          type: integer
+          format: int64
+          description: 今天有设备活动的用户数（按北京时间）
+        activeWeek:
+          type: integer
+          format: int64
+          description: 最近 7 天有设备活动的用户数
+        activeMonth:
+          type: integer
+          format: int64
+          description: 最近 30 天有设备活动的用户数
+        storageBytes:
+          type: integer
+          format: int64
+          description: 全部用户的附件总用量
+        newUsersDaily:
+          type: array
+          description: 最近 30 天每天新增的用户数（含今天，没有新增的日期为 0）
+          items:
+            $ref: '#/components/schemas/DailyCount'
+        platforms:
+          type: array
+          description: 最近 30 天活跃的已登录设备的平台分布
+          items:
+            $ref: '#/components/schemas/PlatformCount'
+
+    DailyCount:
+      type: object
+      required: [day, count]
+      properties:
+        day:
+          type: string
+          format: date
+        count:
+          type: integer
+          format: int64
+
+    PlatformCount:
+      type: object
+      required: [platform, devices]
+      properties:
+        platform:
+          type: string
+        devices:
+          type: integer
+          format: int64
+
+    AdminDashboardEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminDashboard'
+
+    AdminUserSummary:
+      type: object
+      required: [id, username, nickname, createdAt, deviceCount, storageBytes]
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        nickname:
+          type: string
+        phoneMasked:
+          type: string
+          description: 脱敏的手机号，如 +86 138****5678；未绑定时省略
+        createdAt:
+          type: string
+          format: date-time
+        lastActiveAt:
+          type: string
+          format: date-time
+        deviceCount:
+          type: integer
+          format: int64
+          description: 已登录的设备数
+        storageBytes:
+          type: integer
+          format: int64
+
+    AdminUserListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminUserSummary'
+
+    AdminUserDevice:
+      type: object
+      required: [id, platform, model, osVersion, appVersion, lastActiveAt, createdAt, signedIn, localReminders, pushEnabled, ackSeq]
+      properties:
+        id:
+          type: string
+          format: uuid
+        platform:
+          type: string
+        model:
+          type: string
+        osVersion:
+          type: string
+        appVersion:
+          type: string
+        lastActiveAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        signedIn:
+          type: boolean
+          description: false 表示已退出登录或被下线
+        localReminders:
+          type: boolean
+          description: 设备能否自己按时弹出提醒
+        pushEnabled:
+          type: boolean
+          description: 是否注册了推送
+        ackSeq:
+          type: integer
+          format: int64
+          description: 设备已同步到的序号
+
+    AdminUserDetail:
+      type: object
+      required: [user, settings, devices, sync, storage]
+      properties:
+        user:
+          $ref: '#/components/schemas/AdminUserSummary'
+        settings:
+          $ref: '#/components/schemas/Settings'
+        devices:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUserDevice'
+        sync:
+          type: object
+          required: [serverSeq]
+          properties:
+            serverSeq:
+              type: integer
+              format: int64
+              description: 服务端最新的同步序号；设备的 ackSeq 小于它表示还有未同步的修改
+            lastSyncAt:
+              type: string
+              format: date-time
+              description: 最后一次有数据写入服务端的时间
+        storage:
+          type: object
+          required: [used, quota]
+          properties:
+            used:
+              type: integer
+              format: int64
+            quota:
+              type: integer
+              format: int64
+
+    AdminUserDetailEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/AdminUserDetail'
+
+    AuditAction:
+      type: string
+      enum:
+        - login
+        - login_failed
+        - logout
+        - view_dashboard
+        - list_users
+        - view_user
+        - change_password
+        - create_admin
+        - update_admin
+        - reset_password
+
+    AuditLog:
+      type: object
+      required: [id, username, action, targetType, targetId, ip, userAgent, detail, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        adminId:
+          type: string
+          format: uuid
+        username:
+          type: string
+        action:
+          $ref: '#/components/schemas/AuditAction'
+        targetType:
+          type: string
+        targetId:
+          type: string
+        ip:
+          type: string
+        userAgent:
+          type: string
+        detail:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+
+    AuditLogListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data, meta]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/AuditLog'
