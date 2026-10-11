@@ -7,13 +7,18 @@ VALUES (@id, @user_id, sqlc.narg(device_id), @modules, @attachments, @created_at
 ON CONFLICT (user_id) WHERE status IN ('pending', 'running') DO NOTHING;
 
 -- name: CountExportsSince :one
+-- 包含用户已删除的导出：删除不能用来绕过次数限制。
 SELECT count(*) FROM exports WHERE user_id = @user_id AND created_at >= @since;
 
 -- name: ListExports :many
-SELECT * FROM exports WHERE user_id = @user_id ORDER BY created_at DESC LIMIT @max_rows;
+SELECT * FROM exports WHERE user_id = @user_id AND status <> 'deleted' ORDER BY created_at DESC LIMIT @max_rows;
 
 -- name: GetExport :one
-SELECT * FROM exports WHERE id = @id AND user_id = @user_id;
+SELECT * FROM exports WHERE id = @id AND user_id = @user_id AND status <> 'deleted';
+
+-- name: GetExportStatus :one
+-- 后台任务核对导出是否仍在（账号可能已注销）。
+SELECT status FROM exports WHERE id = @id;
 
 -- name: ClaimExport :one
 -- 领取一个可以生成的导出（等待中，或生成中但领取已过期），并写回领取期限（调用方在事务内执行）。
@@ -41,6 +46,11 @@ WHERE id = @id AND status = 'running' AND attempts = @attempts;
 UPDATE exports SET status = 'pending', lease_until = @retry_at, error = @error
 WHERE id = @id AND status = 'running' AND attempts = @attempts;
 
+-- name: ReleaseExport :exec
+-- 服务停止时交还未完成的领取：立即可以重新领取，本次不计入尝试次数。
+UPDATE exports SET status = 'pending', lease_until = NULL, attempts = attempts - 1
+WHERE id = @id AND status = 'running' AND attempts = @attempts;
+
 -- name: FailExport :execrows
 UPDATE exports SET status = 'failed', lease_until = NULL, error = @error, finished_at = @finished_at
 WHERE id = @id AND status = 'running' AND attempts = @attempts;
@@ -54,15 +64,14 @@ LIMIT @max_rows;
 -- name: ExpireExport :exec
 UPDATE exports SET status = 'expired', object_key = NULL, lease_until = NULL WHERE id = @id AND status = 'done';
 
--- name: DeleteExport :one
--- 删除一条已结束的导出记录（进行中的不删除），返回需要删除的对象。
-DELETE FROM exports
-WHERE id = @id AND user_id = @user_id AND status NOT IN ('pending', 'running')
-RETURNING object_key;
+-- name: MarkExportDeleted :execrows
+-- 用户删除导出（文件已由调用方删除）。进行中的不能删除。
+UPDATE exports SET status = 'deleted', object_key = NULL, lease_until = NULL
+WHERE id = @id AND user_id = @user_id AND status IN ('done', 'failed', 'expired');
 
 -- name: PruneExports :execrows
--- 已结束且文件已不存在的导出记录保留一段时间供查看，之后删除。
-DELETE FROM exports WHERE status IN ('failed', 'expired') AND created_at < @before;
+-- 已结束且文件已不存在的导出记录保留一段时间供查看，之后删除（须长于 24 小时，以免影响次数限制）。
+DELETE FROM exports WHERE status IN ('failed', 'expired', 'deleted') AND created_at < @before;
 
 -- name: ListUserRecords :many
 -- 逐页读取账号的有效记录（不含墓碑），按同步序号翻页。
@@ -73,6 +82,11 @@ LIMIT @max_rows;
 
 -- name: ListReadyAttachments :many
 SELECT id, object_key, size FROM attachments WHERE user_id = @user_id AND status = 'ready';
+
+-- name: ListPushTokens :many
+-- 账号所有已登录设备的推送标识：导出完成时都通知，其他设备也能知道发生了导出。
+SELECT push_token::text FROM devices
+WHERE user_id = @user_id AND revoked_at IS NULL AND push_token IS NOT NULL;
 
 -- name: GetExportDevice :one
 -- 发起导出的设备：推送标识（可能为空）与时区。已退出登录的设备查不到。

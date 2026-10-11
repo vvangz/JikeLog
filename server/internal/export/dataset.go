@@ -45,7 +45,7 @@ var attachmentOwners = map[string]Module{syncer.EntityWorklog: ModuleWorklog, sy
 
 // RecordSource 逐条读取账号的明文记录（*syncer.Service 实现）。
 type RecordSource interface {
-	EachRecord(ctx context.Context, userID uuid.UUID, entities []string, fn func(syncer.Snapshot) error) error
+	EachRecord(ctx context.Context, userID uuid.UUID, entities []string, fn func(syncer.Snapshot) error) (int, error)
 }
 
 // dataset 为一次导出读取到的全部记录。
@@ -54,6 +54,8 @@ type dataset struct {
 	byEntity map[string][]syncer.Snapshot
 	// attachments 为属于所选模块中现有记录的附件，按所属记录分组。
 	attachments map[uuid.UUID][]syncer.Snapshot
+	// skipped 为无法解密或解析、未能导出的记录数。
+	skipped int
 }
 
 // load 读取所选模块的全部有效记录（模块按 Modules 的顺序排列）。
@@ -71,7 +73,8 @@ func load(ctx context.Context, src RecordSource, userID uuid.UUID, modules []Mod
 		entities = append(entities, syncer.EntityAttachment)
 	}
 	var atts []syncer.Snapshot
-	err := src.EachRecord(ctx, userID, entities, func(s syncer.Snapshot) error {
+	var err error
+	d.skipped, err = src.EachRecord(ctx, userID, entities, func(s syncer.Snapshot) error {
 		if s.Entity == syncer.EntityAttachment {
 			atts = append(atts, s)
 		} else {

@@ -34,6 +34,8 @@ type summary struct {
 	Attachments int
 	// Missing 为对象存储中找不到的附件数（已被删除或从未上传完成）。
 	Missing int
+	// Skipped 为无法解密或解析、未能导出的记录数。
+	Skipped int
 }
 
 // archive 向 zip 中写入文件。
@@ -50,7 +52,8 @@ type archive struct {
 func (a *archive) create(name string) (io.Writer, error) {
 	w, err := a.zw.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Deflate, Modified: a.now})
 	if err != nil {
-		return nil, fmt.Errorf("写入 %s 失败: %w", name, err)
+		// 不带文件名：其中可能有笔记标题等内容，错误会写进日志
+		return nil, fmt.Errorf("写入 zip 失败: %w", err)
 	}
 	return w, nil
 }
@@ -74,6 +77,12 @@ func build(ctx context.Context, out io.Writer, d *dataset, o buildOptions) (summ
 			a.attPaths[att.ID] = a.names.unique(dir, safeName(fileStem(str(att.Fields, "fileName")), "附件"), fileExt(str(att.Fields, "fileName")))
 		}
 	}
+	sum := summary{Records: map[string]int{}, Skipped: d.skipped}
+	if o.Open != nil {
+		if err := a.writeAttachments(ctx, d, o.Open, &sum); err != nil {
+			return summary{}, err
+		}
+	}
 	steps := []func() error{
 		func() error { return a.writeJSON(d) },
 		func() error { return a.writeWorklogs(d) },
@@ -86,14 +95,8 @@ func build(ctx context.Context, out io.Writer, d *dataset, o buildOptions) (summ
 			return summary{}, err
 		}
 	}
-	sum := summary{Records: map[string]int{}}
 	for e, list := range d.byEntity {
 		sum.Records[e] = len(list)
-	}
-	if o.Open != nil {
-		if err := a.writeAttachments(ctx, d, o.Open, &sum); err != nil {
-			return summary{}, err
-		}
 	}
 	if err := a.write("README.txt", readme(d, sum, o)); err != nil {
 		return summary{}, err
@@ -110,6 +113,7 @@ func (a *archive) writeAttachments(ctx context.Context, d *dataset, open func(co
 		r, err := open(ctx, att.ID)
 		if errors.Is(err, storage.ErrNotFound) {
 			sum.Missing++
+			delete(a.attPaths, att.ID) // 正文与附件列表中只写名称，不链接到不存在的文件
 			continue
 		}
 		if err != nil {
@@ -237,6 +241,10 @@ func readme(d *dataset, sum summary, o buildOptions) []byte {
 	default:
 		fmt.Fprintf(&b, "- 附件/：%d 个附件文件，Markdown 中的链接指向这里。\r\n", sum.Attachments)
 	}
-	b.WriteString("\r\n表格文件为 UTF-8 编码；CSV 带 BOM，可以直接用 Excel 打开。\r\n")
+	if sum.Skipped > 0 {
+		fmt.Fprintf(&b, "\r\n注意：有 %d 条记录无法读取，未包含在本次导出中。请稍后重试，或联系管理员。\r\n", sum.Skipped)
+	}
+	b.WriteString("\r\n表格文件为 UTF-8 编码；CSV 带 BOM，可以直接用 Excel 打开。")
+	b.WriteString("以 = + - @ 开头的文字在 CSV 中前面加了单引号，防止被 Excel 当作公式执行。\r\n")
 	return []byte(b.String())
 }

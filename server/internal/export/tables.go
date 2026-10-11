@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/xuri/excelize/v2"
@@ -70,6 +71,9 @@ func writeCSV(w io.Writer, t table) error {
 		rec := make([]string, len(row))
 		for i, v := range row {
 			rec[i] = cellText(v)
+			if _, isText := v.(string); isText {
+				rec[i] = neutralizeFormula(rec[i])
+			}
 		}
 		if err := cw.Write(rec); err != nil {
 			return err
@@ -77,6 +81,15 @@ func writeCSV(w io.Writer, t table) error {
 	}
 	cw.Flush()
 	return cw.Error()
+}
+
+// neutralizeFormula 防止 CSV 中的文字被 Excel 当作公式执行（CSV 注入）：以 = + - @ 制表符或回车开头时前置单引号。
+// 只用于文字，金额与数字保持原样；xlsx 中的文字以字符串类型写入，不会被当作公式。
+func neutralizeFormula(s string) string {
+	if s != "" && strings.ContainsRune("=+-@\t\r", rune(s[0])) {
+		return "'" + s
+	}
+	return s
 }
 
 // writeXLSX 把多张表写成一个 xlsx 文件，每张表一个工作表。

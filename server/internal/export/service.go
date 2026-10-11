@@ -109,6 +109,9 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, modules []Module
 	if rows == 0 {
 		return dbgen.Export{}, errInProgress
 	}
+	// 审计：导出的是解密后的全部数据
+	s.d.Logger.InfoContext(ctx, "export requested", "user_id", p.UserID, "device_id", p.DeviceID,
+		"export_id", id, "modules", mods, "attachments", attachments)
 	return s.Get(ctx, p, id)
 }
 
@@ -161,10 +164,16 @@ func (s *Service) DownloadURL(ctx context.Context, p auth.Principal, id uuid.UUI
 	if e.Status != statusDone || e.ObjectKey == nil || e.ExpiresAt == nil || !s.d.Now().Before(*e.ExpiresAt) {
 		return "", time.Time{}, errNotReady
 	}
-	return s.d.Store.PresignGet(ctx, *e.ObjectKey, downloadTTL)
+	url, expires, err := s.d.Store.PresignGet(ctx, *e.ObjectKey, downloadTTL)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	s.d.Logger.InfoContext(ctx, "export download issued", "user_id", p.UserID, "device_id", p.DeviceID, "export_id", id)
+	return url, expires, nil
 }
 
-// Delete 删除导出文件与记录。进行中的导出不能删除。
+// Delete 删除导出文件，并把记录标为已删除（不再显示）。记录保留到超过 24 小时才清除，
+// 仍计入每天的导出次数。进行中的导出不能删除。
 func (s *Service) Delete(ctx context.Context, p auth.Principal, id uuid.UUID) error {
 	e, err := s.Get(ctx, p, id)
 	if err != nil {
@@ -173,14 +182,15 @@ func (s *Service) Delete(ctx context.Context, p auth.Principal, id uuid.UUID) er
 	if e.Status == statusPending || e.Status == statusRunning {
 		return errInProgress
 	}
-	// 先删文件再删记录：删除文件失败时记录还在，过期清理仍会处理
+	// 先删文件再改记录：删除文件失败时记录还在，过期清理仍会处理
 	if e.ObjectKey != nil {
 		if err := s.d.Store.Delete(ctx, *e.ObjectKey); err != nil {
 			return err
 		}
 	}
-	if _, err := s.d.Tx.Queries().DeleteExport(ctx, dbgen.DeleteExportParams{ID: id, UserID: p.UserID}); err != nil && !db.IsNotFound(err) {
+	if _, err := s.d.Tx.Queries().MarkExportDeleted(ctx, dbgen.MarkExportDeletedParams{ID: id, UserID: p.UserID}); err != nil {
 		return fmt.Errorf("删除导出失败: %w", err)
 	}
+	s.d.Logger.InfoContext(ctx, "export deleted", "user_id", p.UserID, "export_id", id)
 	return nil
 }

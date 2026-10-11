@@ -31,7 +31,24 @@ func safeName(s, fallback string) string {
 	if name == "" {
 		return fallback
 	}
+	if reservedName(name) {
+		return "_" + name
+	}
 	return name
+}
+
+// reservedName 报告名字（不计扩展名）是否为 Windows 保留的设备名，如 CON、NUL、COM1。
+func reservedName(name string) bool {
+	stem := strings.ToUpper(name)
+	if i := strings.IndexByte(stem, '.'); i >= 0 {
+		stem = stem[:i]
+	}
+	switch stem {
+	case "CON", "PRN", "AUX", "NUL":
+		return true
+	}
+	return len(stem) == 4 && (strings.HasPrefix(stem, "COM") || strings.HasPrefix(stem, "LPT")) &&
+		stem[3] >= '1' && stem[3] <= '9'
 }
 
 // namer 为同一目录中的文件分配不重复的名字（不区分大小写，兼容 Windows 与 macOS）。

@@ -1,11 +1,13 @@
 package export
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 	_ "time/tzdata" // 运行镜像不一定带时区数据库，按设备时区显示导出中的时间
 
@@ -46,6 +48,7 @@ const (
 
 // Run 定期生成待处理的导出并清理过期文件，直到 ctx 取消。
 func (s *Service) Run(ctx context.Context) {
+	s.sweepTemp()
 	poll := time.NewTicker(PollInterval)
 	defer poll.Stop()
 	cleanup := time.NewTicker(cleanupInterval)
@@ -101,18 +104,18 @@ func (s *Service) claim(ctx context.Context) (dbgen.Export, bool, error) {
 // process 生成一次导出并记录结果。生成失败按重试策略处理，不作为错误返回。
 func (s *Service) process(ctx context.Context, job dbgen.Export) error {
 	log := s.d.Logger.With("export_id", job.ID, "user_id", job.UserID, "attempt", job.Attempts)
-	device := s.device(ctx, job)
 	if job.Attempts > maxAttempts {
 		// 之前的尝试中途崩溃（没有记录结果），不再继续
 		log.WarnContext(ctx, "export dropped: too many attempts")
-		return s.fail(ctx, job, device)
+		return s.fail(ctx, job)
 	}
 	genCtx, cancel := context.WithTimeout(ctx, lease-leaseMargin)
 	defer cancel()
-	key, size, err := s.generate(genCtx, job, device.loc)
+	key, size, err := s.safeGenerate(genCtx, job, s.location(ctx, job))
 	if err != nil {
 		if ctx.Err() != nil {
-			return ctx.Err() // 服务停止：留给重新领取
+			s.release(job) // 服务停止：交还领取，重启后立即重新生成
+			return ctx.Err()
 		}
 		log.ErrorContext(ctx, "export failed", "error", err)
 		if job.Attempts < maxAttempts {
@@ -121,25 +124,29 @@ func (s *Service) process(ctx context.Context, job dbgen.Export) error {
 			})
 			return wrapDB(err)
 		}
-		return s.fail(ctx, job, device)
+		return s.fail(ctx, job)
 	}
 	now := s.d.Now()
 	rows, err := s.d.Tx.Queries().CompleteExport(ctx, dbgen.CompleteExportParams{
 		ID: job.ID, Attempts: job.Attempts, ObjectKey: &key, Size: &size, FinishedAt: &now, ExpiresAt: ptr(now.Add(Retention)),
 	})
 	if err != nil {
+		s.discard(ctx, job) // 没有记录指向这个文件，过期清理找不到它
 		return wrapDB(err)
 	}
 	if rows == 0 {
-		log.WarnContext(ctx, "export result discarded: lease lost")
+		log.WarnContext(ctx, "export result discarded: lease lost or export removed")
+		s.discard(ctx, job)
 		return nil
 	}
 	log.InfoContext(ctx, "export done", "size", size)
-	s.notify(ctx, device, job.ID, "导出已完成", "数据导出文件已生成，24 小时内可以在 App 中下载。")
+	s.notify(ctx, job, "导出已完成", "数据导出文件已生成，24 小时内可以在 App 中下载。")
 	return nil
 }
 
-func (s *Service) fail(ctx context.Context, job dbgen.Export, device exportDevice) error {
+func (s *Service) fail(ctx context.Context, job dbgen.Export) error {
+	// 之前的尝试可能已经上传了文件（随后写结果失败），一并删除
+	s.discard(ctx, job)
 	rows, err := s.d.Tx.Queries().FailExport(ctx, dbgen.FailExportParams{
 		ID: job.ID, Attempts: job.Attempts, Error: ptr(failedMessage), FinishedAt: ptr(s.d.Now()),
 	})
@@ -147,9 +154,40 @@ func (s *Service) fail(ctx context.Context, job dbgen.Export, device exportDevic
 		return wrapDB(err)
 	}
 	if rows > 0 {
-		s.notify(ctx, device, job.ID, "导出失败", "数据导出没有完成，请稍后在 App 中重试。")
+		s.notify(ctx, job, "导出失败", "数据导出没有完成，请稍后在 App 中重试。")
 	}
 	return nil
+}
+
+// discard 删除没有记录指向的导出文件（明文不能留在对象存储中）。
+// 另一个实例已经完成同一导出时保留（同一对象键）。
+func (s *Service) discard(ctx context.Context, job dbgen.Export) {
+	status, err := s.d.Tx.Queries().GetExportStatus(ctx, job.ID)
+	if err == nil && status == statusDone {
+		return
+	}
+	if err := s.d.Store.Delete(ctx, ObjectKey(job.UserID, job.ID)); err != nil {
+		s.d.Logger.ErrorContext(ctx, "delete orphan export failed", "export_id", job.ID, "error", err)
+	}
+}
+
+// release 交还未完成的领取（服务停止时），不计入尝试次数。
+func (s *Service) release(job dbgen.Export) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.d.Tx.Queries().ReleaseExport(ctx, dbgen.ReleaseExportParams{ID: job.ID, Attempts: job.Attempts}); err != nil {
+		s.d.Logger.WarnContext(ctx, "release export failed", "export_id", job.ID, "error", err)
+	}
+}
+
+// safeGenerate 生成导出文件；生成过程中的 panic（如异常数据）按失败处理，不让整个服务退出。
+func (s *Service) safeGenerate(ctx context.Context, job dbgen.Export, loc *time.Location) (key string, size int64, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("生成导出文件时 panic: %v", r)
+		}
+	}()
+	return s.generate(ctx, job, loc)
 }
 
 // generate 生成 zip 并上传，返回对象键与大小。
@@ -168,7 +206,7 @@ func (s *Service) generate(ctx context.Context, job dbgen.Export, loc *time.Loca
 			return "", 0, err
 		}
 	}
-	tmp, err := os.CreateTemp(s.d.TempDir, "jikelog-export-*.zip")
+	tmp, err := os.CreateTemp(s.d.TempDir, tempPattern)
 	if err != nil {
 		return "", 0, fmt.Errorf("创建临时文件失败: %w", err)
 	}
@@ -217,29 +255,19 @@ func (s *Service) attachmentOpener(ctx context.Context, userID uuid.UUID) (func(
 	}, nil
 }
 
-// exportDevice 为发起导出的设备：推送标识（可能为空）与时区。
-type exportDevice struct {
-	token string
-	loc   *time.Location
-}
-
-func (s *Service) device(ctx context.Context, job dbgen.Export) exportDevice {
-	out := exportDevice{loc: location("")}
+// location 为发起导出的设备所在时区（导出中的日期时间按它显示）；查不到时使用默认时区。
+func (s *Service) location(ctx context.Context, job dbgen.Export) *time.Location {
 	if job.DeviceID == nil {
-		return out
+		return location("")
 	}
 	d, err := s.d.Tx.Queries().GetExportDevice(ctx, dbgen.GetExportDeviceParams{ID: *job.DeviceID, UserID: job.UserID})
 	if err != nil {
 		if !db.IsNotFound(err) {
 			s.d.Logger.WarnContext(ctx, "load export device failed", "export_id", job.ID, "error", err)
 		}
-		return out
+		return location("")
 	}
-	out.loc = location(d.TimeZone)
-	if d.PushToken != nil {
-		out.token = *d.PushToken
-	}
-	return out
+	return location(d.TimeZone)
 }
 
 func location(name string) *time.Location {
@@ -250,17 +278,23 @@ func location(name string) *time.Location {
 	return loc
 }
 
-// notify 向发起导出的设备推送一条通知（不含数据）。推送失败只写日志。
-func (s *Service) notify(ctx context.Context, d exportDevice, id uuid.UUID, title, body string) {
-	if d.token == "" {
+// notify 向账号所有已登录的设备推送一条通知（不含数据）：不只是发起导出的设备，
+// 其他设备也能知道发生了导出。推送失败只写日志。
+func (s *Service) notify(ctx context.Context, job dbgen.Export, title, body string) {
+	tokens, err := s.d.Tx.Queries().ListPushTokens(ctx, job.UserID)
+	if err != nil {
+		s.d.Logger.WarnContext(ctx, "load push tokens failed", "export_id", job.ID, "error", err)
 		return
 	}
-	err := s.d.Pusher.Push(ctx, pusher.Message{
-		Tokens: []string{d.token}, Title: title, Body: body, TTL: Retention, Channel: pusher.ChannelGeneral,
-		Extras: map[string]string{"type": "export", "exportId": id.String()},
+	if len(tokens) == 0 {
+		return
+	}
+	err = s.d.Pusher.Push(ctx, pusher.Message{
+		Tokens: tokens, Title: title, Body: body, TTL: Retention, Channel: pusher.ChannelGeneral,
+		Extras: map[string]string{"type": "export", "exportId": job.ID.String()},
 	})
 	if err != nil {
-		s.d.Logger.WarnContext(ctx, "export notification failed", "export_id", id, "error", err)
+		s.d.Logger.WarnContext(ctx, "export notification failed", "export_id", job.ID, "error", err)
 	}
 }
 
@@ -272,10 +306,14 @@ func (s *Service) Cleanup(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("查询过期导出失败: %w", err)
 	}
 	n := 0
+	var firstErr error
 	for _, e := range expired {
+		// 一个文件删除失败不影响其他文件：记下错误，继续处理
 		if e.ObjectKey != nil {
 			if err := s.d.Store.Delete(ctx, *e.ObjectKey); err != nil {
-				return n, err
+				s.d.Logger.WarnContext(ctx, "delete expired export failed", "export_id", e.ID, "error", err)
+				firstErr = cmp.Or(firstErr, err)
+				continue
 			}
 		}
 		if err := q.ExpireExport(ctx, e.ID); err != nil {
@@ -286,7 +324,28 @@ func (s *Service) Cleanup(ctx context.Context) (int, error) {
 	if _, err := q.PruneExports(ctx, s.d.Now().Add(-pruneAfter)); err != nil {
 		return n, fmt.Errorf("清除导出记录失败: %w", err)
 	}
-	return n, nil
+	return n, firstErr
+}
+
+// tempPattern 为生成中的临时文件名。
+const tempPattern = "jikelog-export-*.zip"
+
+// sweepTemp 删除异常退出（如被强制结束）留下的临时文件，其中是明文数据。
+func (s *Service) sweepTemp() {
+	dir := cmp.Or(s.d.TempDir, os.TempDir())
+	files, err := filepath.Glob(filepath.Join(dir, tempPattern))
+	if err != nil {
+		return
+	}
+	for _, f := range files {
+		// 同一目录可能有其他实例正在生成：只删超过领取期限的
+		if info, err := os.Stat(f); err != nil || time.Since(info.ModTime()) < lease {
+			continue
+		}
+		if err := os.Remove(f); err != nil {
+			s.d.Logger.Warn("remove stale export temp file failed", "error", err)
+		}
+	}
 }
 
 func wrapDB(err error) error {

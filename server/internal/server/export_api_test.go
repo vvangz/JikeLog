@@ -141,9 +141,9 @@ func TestExportGeneratesDecryptedZip(t *testing.T) {
 		}
 	}
 
-	// 只通知发起导出的设备，且通知中不含数据
+	// 通知账号的所有设备（其他设备也能知道发生了导出），通知中不含数据
 	sent := a.pushes.take()
-	if len(sent) != 1 || sent[0].Tokens[0] != "token-export-1" || sent[0].Channel != pusher.ChannelGeneral ||
+	if len(sent) != 1 || len(sent[0].Tokens) != 2 || sent[0].Channel != pusher.ChannelGeneral ||
 		sent[0].Extras["exportId"] != id || strings.Contains(sent[0].Body, "交房租") {
 		t.Fatalf("推送：%+v", sent)
 	}
@@ -175,20 +175,29 @@ func TestExportValidationLimitAndExpiry(t *testing.T) {
 	a.expect(a.createExport(s, []string{}, false), http.StatusUnprocessableEntity, "VALIDATION_FAILED")
 	a.expect(a.createExport(s, []string{"photos"}, false), http.StatusUnprocessableEntity, "VALIDATION_FAILED")
 
-	var first string
+	var first, second string
 	for i := 0; i < export.MaxPerDay; i++ {
 		r := a.createExport(s, []string{"memo", "memo"}, false)
 		a.expect(r, http.StatusAccepted, "")
 		if mods := r.data()["modules"].([]any); len(mods) != 1 {
 			t.Fatalf("重复的模块只算一次：%v", mods)
 		}
-		if i == 0 {
+		switch i {
+		case 0:
 			first = r.str("data", "id")
+		case 1:
+			second = r.str("data", "id")
 		}
 		a.runExports()
 		a.clock.Advance(time.Minute)
 	}
 	a.expect(a.createExport(s, []string{"memo"}, false), http.StatusTooManyRequests, export.CodeLimit)
+	// 删除已完成的导出不能绕过次数限制；删除后不再出现在列表中
+	a.expect(a.call(http.MethodDelete, "/api/v1/exports/"+first, nil, s.access), http.StatusOK, "")
+	a.expect(a.createExport(s, []string{"memo"}, false), http.StatusTooManyRequests, export.CodeLimit)
+	if items := a.call(http.MethodGet, "/api/v1/exports", nil, s.access).Body["data"].([]any); len(items) != export.MaxPerDay-1 {
+		t.Fatalf("删除的导出不再列出：%d", len(items))
+	}
 	// 没有注册推送的设备不发通知
 	if sent := a.pushes.take(); len(sent) != 0 {
 		t.Fatalf("不应推送：%v", sent)
@@ -198,21 +207,21 @@ func TestExportValidationLimitAndExpiry(t *testing.T) {
 	a.clock.Advance(24 * time.Hour)
 	n, err := a.app.Exports.Cleanup(context.Background())
 	s = a.relogin("export02", "install-a") // 访问令牌已过期
-	if err != nil || n != export.MaxPerDay {
-		t.Fatalf("应清理 %d 个文件：%d %v", export.MaxPerDay, n, err)
+	if err != nil || n != export.MaxPerDay-1 {
+		t.Fatalf("应清理 %d 个文件：%d %v", export.MaxPerDay-1, n, err)
 	}
-	got := a.call(http.MethodGet, "/api/v1/exports/"+first, nil, s.access)
+	got := a.call(http.MethodGet, "/api/v1/exports/"+second, nil, s.access)
 	if got.str("data", "status") != "expired" {
 		t.Fatalf("应为已过期：%v", got.data())
 	}
-	a.expect(a.call(http.MethodGet, "/api/v1/exports/"+first+"/download", nil, s.access), http.StatusConflict, export.CodeNotReady)
-	if _, err := a.store.Size(context.Background(), export.ObjectKey(a.userID(s), uuid.MustParse(first))); !errors.Is(err, storage.ErrNotFound) {
+	a.expect(a.call(http.MethodGet, "/api/v1/exports/"+second+"/download", nil, s.access), http.StatusConflict, export.CodeNotReady)
+	if _, err := a.store.Size(context.Background(), export.ObjectKey(a.userID(s), uuid.MustParse(second))); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("过期文件应已删除：%v", err)
 	}
 	a.expect(a.createExport(s, []string{"memo"}, false), http.StatusAccepted, "")
 
 	// 已过期的记录可以删除；30 天后自动清除
-	a.expect(a.call(http.MethodDelete, "/api/v1/exports/"+first, nil, s.access), http.StatusOK, "")
+	a.expect(a.call(http.MethodDelete, "/api/v1/exports/"+second, nil, s.access), http.StatusOK, "")
 	a.clock.Advance(31 * 24 * time.Hour)
 	if _, err := a.app.Exports.Cleanup(context.Background()); err != nil {
 		t.Fatal(err)
@@ -243,8 +252,8 @@ func (f *flakyStore) PutFile(ctx context.Context, key, path, contentType string)
 // noRecords 为没有任何记录的来源。
 type noRecords struct{}
 
-func (noRecords) EachRecord(context.Context, uuid.UUID, []string, func(syncer.Snapshot) error) error {
-	return nil
+func (noRecords) EachRecord(context.Context, uuid.UUID, []string, func(syncer.Snapshot) error) (int, error) {
+	return 0, nil
 }
 
 func TestExportRetriesThenFails(t *testing.T) {
@@ -317,4 +326,56 @@ func (a *testApp) relogin(username, installation string) session {
 	r := a.login(username, "secret123", installation)
 	a.expect(r, http.StatusOK, "")
 	return sessionFrom(r)
+}
+
+// hookRecords 在读取记录时执行 hook（模拟生成过程中发生的事）。
+type hookRecords struct{ hook func() }
+
+func (h hookRecords) EachRecord(context.Context, uuid.UUID, []string, func(syncer.Snapshot) error) (int, error) {
+	h.hook()
+	return 0, nil
+}
+
+func TestExportOrphanAndShutdown(t *testing.T) {
+	a := newTestApp(t)
+	s := a.register("export04", "secret123", "install-a")
+	newSvc := func(hook func()) *export.Service {
+		return export.NewService(export.Deps{
+			Tx: db.NewTxRunner(a.pool), Store: a.store, Records: hookRecords{hook: hook}, Pusher: a.pushes,
+			Logger: a.app.logger, Now: a.clock.Now, TempDir: t.TempDir(),
+		})
+	}
+
+	// 生成过程中账号被注销（导出记录随之删除）：上传的明文文件不能留在对象存储中
+	id := uuid.MustParse(a.createExport(s, []string{"memo"}, false).str("data", "id"))
+	svc := newSvc(func() {
+		if _, err := a.pool.Exec(context.Background(), "DELETE FROM exports WHERE id = $1", id); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if _, err := svc.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.store.Size(context.Background(), export.ObjectKey(a.userID(s), id)); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("没有记录的导出文件应删除：%v", err)
+	}
+
+	// 服务停止时交还领取：立即可以重新领取，不计入尝试次数
+	id2 := a.createExport(s, []string{"memo"}, false).str("data", "id")
+	ctx, cancel := context.WithCancel(context.Background())
+	svc = newSvc(cancel)
+	if _, err := svc.Tick(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("服务停止时返回 context.Canceled：%v", err)
+	}
+	var status string
+	var attempts int
+	if err := a.pool.QueryRow(context.Background(), "SELECT status, attempts FROM exports WHERE id = $1", id2).Scan(&status, &attempts); err != nil {
+		t.Fatal(err)
+	}
+	if status != "pending" || attempts != 0 {
+		t.Fatalf("应交还领取：%s %d", status, attempts)
+	}
+	if n := a.runExports(); n != 1 {
+		t.Fatalf("重启后立即重新生成：%d", n)
+	}
 }

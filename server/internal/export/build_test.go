@@ -27,18 +27,24 @@ func snap(entity string, id uuid.UUID, fields map[string]syncer.Value) syncer.Sn
 	return syncer.Snapshot{Entity: entity, ID: id, Fields: fields, UpdatedAt: exportTime}
 }
 
-// fakeRecords 为内存中的记录来源。
+// fakeRecords 为内存中的记录来源；Fields 为 nil 的记录视为无法解密，计入跳过数。
 type fakeRecords []syncer.Snapshot
 
-func (f fakeRecords) EachRecord(_ context.Context, _ uuid.UUID, entities []string, fn func(syncer.Snapshot) error) error {
+func (f fakeRecords) EachRecord(_ context.Context, _ uuid.UUID, entities []string, fn func(syncer.Snapshot) error) (int, error) {
+	skipped := 0
 	for _, s := range f {
-		if slices.Contains(entities, s.Entity) {
-			if err := fn(s); err != nil {
-				return err
-			}
+		if !slices.Contains(entities, s.Entity) {
+			continue
+		}
+		if s.Fields == nil {
+			skipped++
+			continue
+		}
+		if err := fn(s); err != nil {
+			return skipped, err
 		}
 	}
-	return nil
+	return skipped, nil
 }
 
 func ids(n int) []uuid.UUID {
@@ -387,5 +393,48 @@ func TestFolderCycleIsCut(t *testing.T) {
 	})
 	if paths[a.String()] != "B/A" || paths[b.String()] != "A/B" {
 		t.Fatalf("%v", paths)
+	}
+}
+
+func TestSkippedRecordsAndMissingAttachmentLinks(t *testing.T) {
+	recs, id := sample()
+	recs = append(recs, syncer.Snapshot{Entity: syncer.EntityNote, ID: uuid.New()}) // 无法解密
+	files, sum := buildZip(t, recs, []Module{ModuleNote, ModuleWorklog}, fileOpener(id["img"]))
+	if sum.Skipped != 1 || sum.Missing != 1 {
+		t.Fatalf("统计：%+v", sum)
+	}
+	if !strings.Contains(string(files["README.txt"]), "有 1 条记录无法读取") {
+		t.Errorf("README 应说明跳过的记录：%s", files["README.txt"])
+	}
+	note := string(files["笔记/工作/周报_月报/第 41 周.md"])
+	if strings.Contains(note, "附件/"+id["img"].String()) || !strings.Contains(note, "(attachment:"+id["img"].String()+")") {
+		t.Errorf("找不到的附件不链接到不存在的文件：\n%s", note)
+	}
+	if _, ok := files["附件/"+id["pdf"].String()+"/方案 (终版).pdf"]; !ok {
+		t.Error("其余附件照常导出")
+	}
+}
+
+func TestCSVNeutralizesFormulas(t *testing.T) {
+	var buf bytes.Buffer
+	err := writeCSV(&buf, table{name: "t", header: []string{"a", "b", "c"}, rows: [][]any{
+		{"=HYPERLINK(\"http://x\")", money(-1050), "-午饭"},
+		{"@SUM(A1)", int64(-3), "正常"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.TrimPrefix(buf.String(), string(utf8BOM))
+	want := "a,b,c\r\n\"'=HYPERLINK(\"\"http://x\"\")\",-10.50,'-午饭\r\n'@SUM(A1),-3,正常\r\n"
+	if got != want {
+		t.Fatalf("got %q\nwant %q", got, want)
+	}
+}
+
+func TestReservedNames(t *testing.T) {
+	for in, want := range map[string]string{"CON": "_CON", "nul.txt": "_nul.txt", "COM1": "_COM1", "COM10": "COM10", "console": "console"} {
+		if got := safeName(in, "x"); got != want {
+			t.Errorf("safeName(%q)=%q want %q", in, got, want)
+		}
 	}
 }

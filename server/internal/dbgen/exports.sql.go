@@ -96,6 +96,7 @@ type CountExportsSinceParams struct {
 	Since  time.Time
 }
 
+// 包含用户已删除的导出：删除不能用来绕过次数限制。
 func (q *Queries) CountExportsSince(ctx context.Context, arg CountExportsSinceParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countExportsSince, arg.UserID, arg.Since)
 	var count int64
@@ -136,25 +137,6 @@ func (q *Queries) CreateExport(ctx context.Context, arg CreateExportParams) (int
 	return result.RowsAffected(), nil
 }
 
-const deleteExport = `-- name: DeleteExport :one
-DELETE FROM exports
-WHERE id = $1 AND user_id = $2 AND status NOT IN ('pending', 'running')
-RETURNING object_key
-`
-
-type DeleteExportParams struct {
-	ID     uuid.UUID
-	UserID uuid.UUID
-}
-
-// 删除一条已结束的导出记录（进行中的不删除），返回需要删除的对象。
-func (q *Queries) DeleteExport(ctx context.Context, arg DeleteExportParams) (*string, error) {
-	row := q.db.QueryRow(ctx, deleteExport, arg.ID, arg.UserID)
-	var object_key *string
-	err := row.Scan(&object_key)
-	return object_key, err
-}
-
 const expireExport = `-- name: ExpireExport :exec
 UPDATE exports SET status = 'expired', object_key = NULL, lease_until = NULL WHERE id = $1 AND status = 'done'
 `
@@ -190,7 +172,7 @@ func (q *Queries) FailExport(ctx context.Context, arg FailExportParams) (int64, 
 }
 
 const getExport = `-- name: GetExport :one
-SELECT id, user_id, device_id, modules, attachments, status, attempts, lease_until, object_key, size, error, created_at, finished_at, expires_at FROM exports WHERE id = $1 AND user_id = $2
+SELECT id, user_id, device_id, modules, attachments, status, attempts, lease_until, object_key, size, error, created_at, finished_at, expires_at FROM exports WHERE id = $1 AND user_id = $2 AND status <> 'deleted'
 `
 
 type GetExportParams struct {
@@ -243,6 +225,18 @@ func (q *Queries) GetExportDevice(ctx context.Context, arg GetExportDeviceParams
 	return i, err
 }
 
+const getExportStatus = `-- name: GetExportStatus :one
+SELECT status FROM exports WHERE id = $1
+`
+
+// 后台任务核对导出是否仍在（账号可能已注销）。
+func (q *Queries) GetExportStatus(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getExportStatus, id)
+	var status string
+	err := row.Scan(&status)
+	return status, err
+}
+
 const listExpiredExports = `-- name: ListExpiredExports :many
 SELECT id, object_key FROM exports
 WHERE status = 'done' AND expires_at <= $1
@@ -281,7 +275,7 @@ func (q *Queries) ListExpiredExports(ctx context.Context, arg ListExpiredExports
 }
 
 const listExports = `-- name: ListExports :many
-SELECT id, user_id, device_id, modules, attachments, status, attempts, lease_until, object_key, size, error, created_at, finished_at, expires_at FROM exports WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
+SELECT id, user_id, device_id, modules, attachments, status, attempts, lease_until, object_key, size, error, created_at, finished_at, expires_at FROM exports WHERE user_id = $1 AND status <> 'deleted' ORDER BY created_at DESC LIMIT $2
 `
 
 type ListExportsParams struct {
@@ -317,6 +311,32 @@ func (q *Queries) ListExports(ctx context.Context, arg ListExportsParams) ([]Exp
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPushTokens = `-- name: ListPushTokens :many
+SELECT push_token::text FROM devices
+WHERE user_id = $1 AND revoked_at IS NULL AND push_token IS NOT NULL
+`
+
+// 账号所有已登录设备的推送标识：导出完成时都通知，其他设备也能知道发生了导出。
+func (q *Queries) ListPushTokens(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listPushTokens, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var push_token string
+		if err := rows.Scan(&push_token); err != nil {
+			return nil, err
+		}
+		items = append(items, push_token)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -407,17 +427,52 @@ func (q *Queries) ListUserRecords(ctx context.Context, arg ListUserRecordsParams
 	return items, nil
 }
 
-const pruneExports = `-- name: PruneExports :execrows
-DELETE FROM exports WHERE status IN ('failed', 'expired') AND created_at < $1
+const markExportDeleted = `-- name: MarkExportDeleted :execrows
+UPDATE exports SET status = 'deleted', object_key = NULL, lease_until = NULL
+WHERE id = $1 AND user_id = $2 AND status IN ('done', 'failed', 'expired')
 `
 
-// 已结束且文件已不存在的导出记录保留一段时间供查看，之后删除。
+type MarkExportDeletedParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+// 用户删除导出（文件已由调用方删除）。进行中的不能删除。
+func (q *Queries) MarkExportDeleted(ctx context.Context, arg MarkExportDeletedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markExportDeleted, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const pruneExports = `-- name: PruneExports :execrows
+DELETE FROM exports WHERE status IN ('failed', 'expired', 'deleted') AND created_at < $1
+`
+
+// 已结束且文件已不存在的导出记录保留一段时间供查看，之后删除（须长于 24 小时，以免影响次数限制）。
 func (q *Queries) PruneExports(ctx context.Context, before time.Time) (int64, error) {
 	result, err := q.db.Exec(ctx, pruneExports, before)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const releaseExport = `-- name: ReleaseExport :exec
+UPDATE exports SET status = 'pending', lease_until = NULL, attempts = attempts - 1
+WHERE id = $1 AND status = 'running' AND attempts = $2
+`
+
+type ReleaseExportParams struct {
+	ID       uuid.UUID
+	Attempts int32
+}
+
+// 服务停止时交还未完成的领取：立即可以重新领取，本次不计入尝试次数。
+func (q *Queries) ReleaseExport(ctx context.Context, arg ReleaseExportParams) error {
+	_, err := q.db.Exec(ctx, releaseExport, arg.ID, arg.Attempts)
+	return err
 }
 
 const retryExport = `-- name: RetryExport :execrows

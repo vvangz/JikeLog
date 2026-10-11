@@ -10,7 +10,8 @@ CREATE TABLE exports (
     modules     text[]      NOT NULL,
     -- 是否包含附件文件
     attachments boolean     NOT NULL,
-    -- pending 等待生成 / running 生成中 / done 已完成 / failed 失败 / expired 文件已删除
+    -- pending 等待生成 / running 生成中 / done 已完成 / failed 失败 / expired 文件已过期删除
+    -- deleted 用户已删除（记录保留到超过 24 小时，仍计入每天的导出次数）
     status      text        NOT NULL DEFAULT 'pending',
     -- 已尝试生成的次数
     attempts    integer     NOT NULL DEFAULT 0,
@@ -24,7 +25,7 @@ CREATE TABLE exports (
     finished_at timestamptz,
     -- 导出文件的删除时刻
     expires_at  timestamptz,
-    CONSTRAINT exports_status CHECK (status IN ('pending', 'running', 'done', 'failed', 'expired')),
+    CONSTRAINT exports_status CHECK (status IN ('pending', 'running', 'done', 'failed', 'expired', 'deleted')),
     CONSTRAINT exports_modules CHECK (
         cardinality(modules) BETWEEN 1 AND 4
         AND modules <@ ARRAY['worklog', 'note', 'memo', 'ledger']::text[]
