@@ -2,6 +2,28 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [0.8.0](https://github.com/vvangz/JikeLog/compare/v0.7.0...v0.8.0) (2026-10-11)
+
+
+### 新功能
+
+* **admin:** Web 管理后台：登录、仪表盘、用户、审计日志、管理员管理 ([c046930](https://github.com/vvangz/JikeLog/commit/c0469309308c2b86da817748563c4d427824df70))
+* **admin:** 侧栏改为点击左上角图标后从左向右展开，带过渡动画 ([e90a6e1](https://github.com/vvangz/JikeLog/commit/e90a6e164bd1ca0e69c73eb5262785eb31b3d86c))
+* **server:** 管理后台接口：独立的管理员账号与会话、只读的用户配置、审计日志 ([230a3a4](https://github.com/vvangz/JikeLog/commit/230a3a4200dd2a2284cebbfc8457b1f6c342a13e))
+
+
+### 问题修复
+
+* **admin:** 侧栏与内容区改为左右排列，修复内容被挤出可视区域 ([8f5aff4](https://github.com/vvangz/JikeLog/commit/8f5aff4ec54b6a7c9149b1fd7191faaa4c04c980))
+* **admin:** 本地预览与开发服务器明确监听 127.0.0.1 ([1ebfc76](https://github.com/vvangz/JikeLog/commit/1ebfc76288d31f0676059dab39f8577301beec1e))
+* **server:** jikelog-admin 校验失败时显示具体原因 ([0c93073](https://github.com/vvangz/JikeLog/commit/0c930738c1d84b582d8bb52894555c5c1bf7f7c8))
+* 处理 M7 审查意见 ([c6877b2](https://github.com/vvangz/JikeLog/commit/c6877b23d00480ba20a821ca65c9f6d666f28567))
+
+
+### 文档
+
+* v0.8.0 开发日志与审查记录 ([2a6b844](https://github.com/vvangz/JikeLog/commit/2a6b8447553f63b6c71395ae532267e9a8da6475))
+
 ## [0.7.0](https://github.com/vvangz/JikeLog/compare/v0.6.0...v0.7.0) (2026-10-11)
 
 
