@@ -57,6 +57,26 @@ func TestJPushSendsNotification(t *testing.T) {
 	}
 }
 
+func TestJPushChannelOverride(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &got)
+		_, _ = w.Write([]byte(`{"sendno":"0","msg_id":"1"}`))
+	}))
+	defer srv.Close()
+	p := NewJPush(JPushConfig{AppKey: "key", MasterSecret: "secret", Endpoint: srv.URL}, srv.Client())
+	m := msg
+	m.Channel = ChannelGeneral
+	if err := p.Push(context.Background(), m); err != nil {
+		t.Fatal(err)
+	}
+	android := got["notification"].(map[string]any)["android"].(map[string]any)
+	if android["channel_id"] != ChannelGeneral {
+		t.Errorf("channel_id = %v", android["channel_id"])
+	}
+}
+
 func TestJPushErrors(t *testing.T) {
 	cases := []struct {
 		name      string

@@ -15,6 +15,7 @@ import (
 	"github.com/vvangz/JikeLog/server/internal/apigen"
 	"github.com/vvangz/JikeLog/server/internal/attachment"
 	"github.com/vvangz/JikeLog/server/internal/auth"
+	"github.com/vvangz/JikeLog/server/internal/export"
 	"github.com/vvangz/JikeLog/server/internal/platform/config"
 	"github.com/vvangz/JikeLog/server/internal/platform/httpx"
 	"github.com/vvangz/JikeLog/server/internal/syncer"
@@ -28,6 +29,7 @@ type (
 	accountHandler    = account.Handler
 	syncHandler       = syncer.Handler
 	attachmentHandler = attachment.Handler
+	exportHandler     = export.Handler
 )
 
 // API 聚合所有模块处理器，实现生成的 StrictServerInterface。
@@ -37,6 +39,7 @@ type API struct {
 	*accountHandler
 	*syncHandler
 	*attachmentHandler
+	*exportHandler
 }
 
 var _ apigen.StrictServerInterface = API{}
@@ -48,13 +51,14 @@ type Handlers struct {
 	Account    *account.Handler
 	Sync       *syncer.Handler
 	Attachment *attachment.Handler
+	Export     *export.Handler
 }
 
 // NewAPI 创建 API。
 func NewAPI(h Handlers) API {
 	return API{
 		systemHandler: h.System, authHandler: h.Auth, accountHandler: h.Account,
-		syncHandler: h.Sync, attachmentHandler: h.Attachment,
+		syncHandler: h.Sync, attachmentHandler: h.Attachment, exportHandler: h.Export,
 	}
 }
 

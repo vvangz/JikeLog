@@ -36,6 +36,7 @@ class Sidebar extends StatelessWidget {
     required this.onSelect,
     required this.expanded,
     required this.onToggle,
+    required this.onSearch,
     this.userName,
   });
 
@@ -43,6 +44,9 @@ class Sidebar extends StatelessWidget {
   final ValueChanged<Destination> onSelect;
   final bool expanded;
   final VoidCallback onToggle;
+
+  /// 打开全局搜索。
+  final VoidCallback onSearch;
   final String? userName;
 
   @override
@@ -60,6 +64,14 @@ class Sidebar extends StatelessWidget {
               children: [
                 _Header(expanded: expanded, onToggle: onToggle),
                 const SizedBox(height: JkTokens.spacingSm),
+                _SidebarItem(
+                  itemKey: const Key('nav-search'),
+                  label: '搜索',
+                  icon: const Icon(Icons.search),
+                  selected: false,
+                  expanded: expanded,
+                  onTap: onSearch,
+                ),
                 for (final d in moduleDestinations) _item(d),
                 const Spacer(),
                 Divider(height: 1, color: c.divider),
@@ -76,7 +88,9 @@ class Sidebar extends StatelessWidget {
   }
 
   Widget _item(Destination d) => _SidebarItem(
-    destination: d,
+    itemKey: Key('nav-${d.path}'),
+    label: d.label,
+    icon: JkIcon(d.icon),
     selected: selectedPath == d.path,
     expanded: expanded,
     onTap: () => onSelect(d),
@@ -107,13 +121,19 @@ class _Header extends StatelessWidget {
 
 class _SidebarItem extends StatelessWidget {
   const _SidebarItem({
-    required this.destination,
+    required this.itemKey,
+    required this.label,
+    required this.icon,
     required this.selected,
     required this.expanded,
     required this.onTap,
   });
 
-  final Destination destination;
+  final Key itemKey;
+  final String label;
+
+  /// 图标（颜色由选中状态决定）。
+  final Widget icon;
   final bool selected;
   final bool expanded;
   final VoidCallback onTap;
@@ -122,14 +142,17 @@ class _SidebarItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.jkColors;
     final fg = selected ? c.onPrimaryContainer : c.textSecondary;
-    final icon = JkIcon(destination.icon, color: fg);
+    final icon = IconTheme(
+      data: IconThemeData(color: fg, size: 24),
+      child: this.icon,
+    );
     final content = expanded
         ? Row(
             children: [
               icon,
               const SizedBox(width: JkTokens.spacingMd),
               Text(
-                destination.label,
+                label,
                 style: Theme.of(context).textTheme.titleMedium
                     ?.copyWith(color: selected ? fg : c.textPrimary),
               ),
@@ -145,14 +168,14 @@ class _SidebarItem extends StatelessWidget {
       child: Semantics(
         selected: selected,
         button: true,
-        label: destination.label,
+        label: label,
         // 合并为单个语义节点，并保留点击动作，读屏（TalkBack）用户才能激活入口
         excludeSemantics: true,
         onTap: onTap,
         child: Tooltip(
-          message: expanded ? '' : destination.label,
+          message: expanded ? '' : label,
           child: InkWell(
-            key: Key('nav-${destination.path}'),
+            key: itemKey,
             borderRadius: BorderRadius.circular(JkTokens.radiusMd),
             onTap: onTap,
             child: AnimatedContainer(

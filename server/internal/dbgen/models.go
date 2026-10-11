@@ -50,6 +50,23 @@ type Device struct {
 	LocalUntil       *time.Time
 }
 
+type Export struct {
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	DeviceID    *uuid.UUID
+	Modules     []string
+	Attachments bool
+	Status      string
+	Attempts    int32
+	LeaseUntil  *time.Time
+	ObjectKey   *string
+	Size        *int64
+	Error       *string
+	CreatedAt   time.Time
+	FinishedAt  *time.Time
+	ExpiresAt   *time.Time
+}
+
 type MemoReminder struct {
 	MemoID     uuid.UUID
 	UserID     uuid.UUID

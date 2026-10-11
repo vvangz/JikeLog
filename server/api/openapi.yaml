@@ -29,6 +29,8 @@ tags:
     description: 多设备同步：推送、拉取、确认、修订历史与传输加密会话（ADR-005、ADR-006）
   - name: attachment
     description: 附件：对象存储直传直下
+  - name: export
+    description: 数据导出：服务端异步生成 zip，完成后下载（ADR-010）
 
 security:
   - bearerAuth: []
@@ -742,6 +744,95 @@ paths:
         default:
           $ref: '#/components/responses/Error'
 
+  /api/v1/exports:
+    get:
+      tags: [export]
+      operationId: listExports
+      summary: 最近的导出
+      description: 最近 10 次导出，新的在前。
+      responses:
+        '200':
+          description: 导出列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportListEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [export]
+      operationId: createExport
+      summary: 发起导出
+      description: |
+        在后台生成所选模块的 zip，完成后向发起导出的设备推送通知。导出文件保留 24 小时。
+        同一账号同时只能有一个进行中的导出（409 `EXPORT_IN_PROGRESS`），24 小时内最多发起 5 次（429 `EXPORT_LIMIT`）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '202':
+          description: 已排队
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/exports/{exportId}:
+    get:
+      tags: [export]
+      operationId: getExport
+      summary: 导出状态
+      parameters:
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        '200':
+          description: 导出
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [export]
+      operationId: deleteExport
+      summary: 删除导出
+      description: 删除导出文件与记录。进行中的导出不能删除（409 `EXPORT_IN_PROGRESS`）。
+      parameters:
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        '200':
+          description: 已删除
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AckEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /api/v1/exports/{exportId}/download:
+    get:
+      tags: [export]
+      operationId: getExportDownload
+      summary: 获取导出文件的下载地址
+      description: 只有已完成且未过期的导出可以下载，否则返回 409 `EXPORT_NOT_READY`。
+      parameters:
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        '200':
+          description: 预签名下载地址（10 分钟内有效）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentDownloadEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -750,6 +841,13 @@ components:
       bearerFormat: JWT
 
   parameters:
+    ExportId:
+      name: exportId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     E2ESessionHeader:
       name: X-JikeLog-E2E
       in: header
@@ -1719,3 +1817,77 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/AttachmentUsage'
+
+    ExportModule:
+      type: string
+      enum: [worklog, note, memo, ledger]
+
+    ExportRequest:
+      type: object
+      required: [modules, attachments]
+      properties:
+        modules:
+          type: array
+          minItems: 1
+          maxItems: 4
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/ExportModule'
+        attachments:
+          type: boolean
+          description: 是否包含工作日志与笔记的附件文件
+
+    Export:
+      type: object
+      required: [id, modules, attachments, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExportModule'
+        attachments:
+          type: boolean
+        status:
+          type: string
+          enum: [pending, running, done, failed, expired]
+          description: pending 排队中 / running 生成中 / done 可下载 / failed 失败 / expired 文件已删除
+        size:
+          type: integer
+          format: int64
+          description: zip 大小（字节），完成后才有
+        error:
+          type: string
+          description: 失败原因
+        createdAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          description: 导出文件的删除时刻
+
+    ExportEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: '#/components/schemas/Export'
+
+    ExportListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Export'

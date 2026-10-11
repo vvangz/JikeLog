@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -126,5 +127,32 @@ func TestDeletePrefix(t *testing.T) {
 		if exists := err == nil; exists != want {
 			t.Errorf("%s exists=%v want %v (err=%v)", k, exists, want, err)
 		}
+	}
+}
+
+func TestPutFileAndOpen(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	if _, err := s.Open(ctx, "x/missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("不存在的对象应返回 ErrNotFound，err=%v", err)
+	}
+	path := t.TempDir() + "/f.zip"
+	if err := os.WriteFile(path, []byte("zip body"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutFile(ctx, "x/f.zip", path, "application/zip"); err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.Open(ctx, "x/f.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(r)
+	_ = r.Close()
+	if err != nil || string(got) != "zip body" {
+		t.Fatalf("内容不一致：%q, %v", got, err)
+	}
+	if err := s.PutFile(ctx, "x/g.zip", path+".missing", "application/zip"); err == nil {
+		t.Fatal("本地文件不存在时应失败")
 	}
 }

@@ -602,6 +602,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 最近的导出
+         * @description 最近 10 次导出，新的在前。
+         */
+        get: operations["listExports"];
+        put?: never;
+        /**
+         * 发起导出
+         * @description 在后台生成所选模块的 zip，完成后向发起导出的设备推送通知。导出文件保留 24 小时。
+         *     同一账号同时只能有一个进行中的导出（409 `EXPORT_IN_PROGRESS`），24 小时内最多发起 5 次（429 `EXPORT_LIMIT`）。
+         */
+        post: operations["createExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exports/{exportId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 导出状态 */
+        get: operations["getExport"];
+        put?: never;
+        post?: never;
+        /**
+         * 删除导出
+         * @description 删除导出文件与记录。进行中的导出不能删除（409 `EXPORT_IN_PROGRESS`）。
+         */
+        delete: operations["deleteExport"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exports/{exportId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取导出文件的下载地址
+         * @description 只有已完成且未过期的导出可以下载，否则返回 409 `EXPORT_NOT_READY`。
+         */
+        get: operations["getExportDownload"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1103,6 +1169,46 @@ export interface components {
         AttachmentUsageEnvelope: components["schemas"]["EnvelopeBase"] & {
             data: components["schemas"]["AttachmentUsage"];
         };
+        /** @enum {string} */
+        ExportModule: "worklog" | "note" | "memo" | "ledger";
+        ExportRequest: {
+            modules: components["schemas"]["ExportModule"][];
+            /** @description 是否包含工作日志与笔记的附件文件 */
+            attachments: boolean;
+        };
+        Export: {
+            /** Format: uuid */
+            id: string;
+            modules: components["schemas"]["ExportModule"][];
+            attachments: boolean;
+            /**
+             * @description pending 排队中 / running 生成中 / done 可下载 / failed 失败 / expired 文件已删除
+             * @enum {string}
+             */
+            status: "pending" | "running" | "done" | "failed" | "expired";
+            /**
+             * Format: int64
+             * @description zip 大小（字节），完成后才有
+             */
+            size?: number;
+            /** @description 失败原因 */
+            error?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            finishedAt?: string;
+            /**
+             * Format: date-time
+             * @description 导出文件的删除时刻
+             */
+            expiresAt?: string;
+        };
+        ExportEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["Export"];
+        };
+        ExportListEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["Export"][];
+        };
     };
     responses: {
         /** @description 错误（4xx/5xx），统一使用错误信封 */
@@ -1116,6 +1222,7 @@ export interface components {
         };
     };
     parameters: {
+        ExportId: string;
         /** @description 传输加密会话 ID（见 createE2ESession）；请求或响应含敏感字段时必须携带 */
         E2ESessionHeader: string;
     };
@@ -1886,6 +1993,121 @@ export interface operations {
             header?: never;
             path: {
                 attachmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 预签名下载地址（10 分钟内有效） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentDownloadEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    listExports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 导出列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportListEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    createExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportRequest"];
+            };
+        };
+        responses: {
+            /** @description 已排队 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exportId: components["parameters"]["ExportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 导出 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    deleteExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exportId: components["parameters"]["ExportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已删除 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AckEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getExportDownload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exportId: components["parameters"]["ExportId"];
             };
             cookie?: never;
         };

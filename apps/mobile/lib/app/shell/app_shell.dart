@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/auth_controller.dart';
+import '../../features/search/search_repository.dart';
 import '../theme/app_theme.dart';
 import '../theme/jk_tokens.g.dart';
 import 'destinations.dart';
@@ -95,6 +96,13 @@ class _AppShellState extends ConsumerState<AppShell>
     }
   }
 
+  /// 打开全局搜索：在某个模块中打开时默认只搜该模块。
+  void _search() {
+    _closeOverlay();
+    final module = SearchModule.parse(destinationFor(widget.location)?.path);
+    context.push(module == null ? '/search' : '/search?module=${module.name}');
+  }
+
   @override
   Widget build(BuildContext context) {
     final layout = layoutFor(MediaQuery.sizeOf(context).width);
@@ -114,6 +122,7 @@ class _AppShellState extends ConsumerState<AppShell>
           onSelect: _select,
           expanded: expanded,
           onToggle: onToggle,
+          onSearch: _search,
           userName: userName,
         );
 
@@ -151,6 +160,14 @@ class _AppShellState extends ConsumerState<AppShell>
                   onPressed: _toggleOverlay,
                 ),
                 title: Text(destinationFor(widget.location)?.label ?? '即刻日志'),
+                actions: [
+                  IconButton(
+                    key: const Key('shell-search'),
+                    tooltip: '搜索',
+                    icon: const Icon(Icons.search),
+                    onPressed: _search,
+                  ),
+                ],
               )
             : null,
         // StackFit.expand：浮层收起时是 0 尺寸的子组件，若按非定位子组件定尺寸，Stack 会缩成 0×0，内容区将无法点击

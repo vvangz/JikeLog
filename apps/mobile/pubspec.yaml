@@ -34,6 +34,7 @@ dependencies:
   path_provider: ^2.1.6
   pdfx: ^2.11.0
   record: ^7.1.2
+  share_plus: ^13.3.1
   shared_preferences: ^2.5.6
   table_calendar: ^3.3.0
   timezone: ^0.11.1

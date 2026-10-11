@@ -1,5 +1,10 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:flutter/foundation.dart';
+
+import '../search/search_doc.dart';
 
 part 'database.g.dart';
 
@@ -107,7 +112,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'jikelog'));
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -119,6 +124,7 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('CREATE INDEX records_dirty ON records (dirty)');
       await customStatement('CREATE INDEX records_owner ON records (owner_id)');
       await _createRefsIndex();
+      await _createSearchTables();
     },
     onUpgrade: (m, from, to) async {
       // v1 → v2：笔记的关联索引（v1 中还没有笔记，无需回填）
@@ -128,12 +134,108 @@ class AppDatabase extends _$AppDatabase {
       }
       // v2 → v3：备忘录写入系统日历的对应关系
       if (from < 3) await m.createTable(calendarLinks);
+      // v3 → v4：全局搜索索引，由已有记录重建
+      if (from < 4) {
+        await _createSearchTables();
+        await rebuildSearchIndex();
+      }
     },
   );
 
   Future<void> _createRefsIndex() => customStatement(
     'CREATE INDEX record_refs_value ON record_refs (kind, value)',
   );
+
+  /// 搜索索引（ADR-010）：search_docs 存每条记录的索引内容，search_fts 是它的 FTS5 trigram 外部内容索引，
+  /// 由触发器保持一致。按记录 ID 增删改走 search_docs 的唯一索引，不需要扫描全文索引。
+  Future<void> _createSearchTables() async {
+    await customStatement('''
+      CREATE TABLE search_docs (
+        id INTEGER PRIMARY KEY,
+        record_id TEXT NOT NULL UNIQUE,
+        entity TEXT NOT NULL,
+        day TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL
+      )''');
+    await customStatement('''
+      CREATE VIRTUAL TABLE search_fts USING fts5(
+        title, body, content = 'search_docs', content_rowid = 'id', tokenize = 'trigram'
+      )''');
+    await customStatement('''
+      CREATE TRIGGER search_docs_ai AFTER INSERT ON search_docs BEGIN
+        INSERT INTO search_fts (rowid, title, body) VALUES (new.id, new.title, new.body);
+      END''');
+    await customStatement('''
+      CREATE TRIGGER search_docs_ad AFTER DELETE ON search_docs BEGIN
+        INSERT INTO search_fts (search_fts, rowid, title, body)
+          VALUES ('delete', old.id, old.title, old.body);
+      END''');
+    await customStatement('''
+      CREATE TRIGGER search_docs_au AFTER UPDATE ON search_docs BEGIN
+        INSERT INTO search_fts (search_fts, rowid, title, body)
+          VALUES ('delete', old.id, old.title, old.body);
+        INSERT INTO search_fts (rowid, title, body) VALUES (new.id, new.title, new.body);
+      END''');
+  }
+
+  /// 更新一条记录的搜索索引；[doc] 为 null 时移除（已删除或不参与搜索的记录）。
+  Future<void> setSearch(String recordId, String entity, SearchDoc? doc) {
+    if (doc == null) {
+      return customStatement('DELETE FROM search_docs WHERE record_id = ?', [
+        recordId,
+      ]);
+    }
+    // 内容未变时不改写，避免触发器重写全文索引
+    return customStatement(
+      '''
+      INSERT INTO search_docs (record_id, entity, day, title, body) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (record_id) DO UPDATE SET
+        entity = excluded.entity, day = excluded.day, title = excluded.title, body = excluded.body
+      WHERE entity IS NOT excluded.entity OR day IS NOT excluded.day
+        OR title IS NOT excluded.title OR body IS NOT excluded.body''',
+      [recordId, entity, doc.day, doc.title, doc.body],
+    );
+  }
+
+  /// 重建搜索索引时每批读取的记录数。
+  static const _rebuildBatch = 500;
+
+  /// 由全部记录重建搜索索引（本地库升级时）。按 ID 分批读取，不一次载入全部记录；
+  /// 无法解析的记录跳过（只是搜不到），不能让升级失败、App 无法打开。返回跳过的条数。
+  Future<int> rebuildSearchIndex() => transaction(() async {
+    await customStatement('DELETE FROM search_docs');
+    var after = '';
+    var skipped = 0;
+    while (true) {
+      final rows =
+          await (select(records)
+                ..where((t) => t.deleted.not() & t.id.isBiggerThanValue(after))
+                ..orderBy([(t) => OrderingTerm(expression: t.id)])
+                ..limit(_rebuildBatch))
+              .get();
+      for (final r in rows) {
+        try {
+          final doc = searchDocOf(
+            r.entity,
+            (jsonDecode(r.fields) as Map<String, dynamic>)
+                .cast<String, Object?>(),
+            {
+              for (final MapEntry(:key, :value)
+                  in (jsonDecode(r.clocks) as Map<String, dynamic>).entries)
+                if (value is String) key: value,
+            },
+          );
+          if (doc != null) await setSearch(r.id, r.entity, doc);
+        } on Object catch (e) {
+          skipped++;
+          debugPrint('跳过无法建立搜索索引的记录 ${r.id}: $e');
+        }
+      }
+      if (rows.length < _rebuildBatch) return skipped;
+      after = rows.last.id;
+    }
+  });
 
   /// 一条记录的全部引用。
   Future<List<RefRow>> refsOf(String recordId) =>
@@ -164,6 +266,7 @@ class AppDatabase extends _$AppDatabase {
     await delete(localFiles).go();
     await delete(recordRefs).go();
     await delete(calendarLinks).go();
+    await customStatement('DELETE FROM search_docs');
   });
 
   Future<String?> meta(String key) async => (await (select(

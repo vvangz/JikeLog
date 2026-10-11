@@ -63,6 +63,9 @@ void main() {
   testWidgets('关于页面：版本、字体说明与政策', (tester) async {
     await pumpApp(tester);
     await _open(tester, '/settings');
+    // 设置页较长，"关于"在屏幕之外：先滚动并重新布局，再点按
+    await tester.ensureVisible(find.text('关于即刻日志'));
+    await tester.pump();
     await tapAndSettle(tester, find.text('关于即刻日志'));
     expect(find.textContaining('MiSans'), findsOneWidget);
     expect(find.textContaining('版本'), findsOneWidget);
@@ -101,6 +104,11 @@ void main() {
     await tapAndSettle(tester, find.text('退出'));
     expect(find.byType(LoginPage), findsOneWidget);
     expectRequestCount(b, 'POST', '/api/v1/auth/logout', 1);
+    expect(
+      TestHooks.exportFiles.cleared,
+      greaterThan(0),
+      reason: '退出登录时删除本机的导出文件',
+    );
   });
 
   testWidgets('登录设备：加载、下线其他设备、加载失败重试', (tester) async {

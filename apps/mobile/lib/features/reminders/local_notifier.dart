@@ -6,6 +6,9 @@ import 'package:timezone/timezone.dart' as tz;
 
 /// 提醒通知的 Android 渠道（与服务端推送使用同一渠道，见 server/internal/platform/pusher）。
 const reminderChannelId = 'memo_reminders';
+
+/// 其他通知的渠道 ID。
+const generalChannelId = 'general';
 const reminderChannelName = '备忘提醒';
 
 /// 默认时区：读取设备时区失败时使用。
@@ -136,6 +139,14 @@ class PluginLocalNotifier implements LocalNotifier {
         reminderChannelName,
         description: '备忘录的提前提醒',
         importance: Importance.high,
+      ),
+    );
+    // 服务端推送的其他通知（如数据导出完成）使用的渠道，ID 与服务端 pusher.ChannelGeneral 一致
+    await _android?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        generalChannelId,
+        '其他通知',
+        description: '数据导出完成等通知',
       ),
     );
     _ready = true;
