@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/vvangz/JikeLog/server/internal/account"
+	"github.com/vvangz/JikeLog/server/internal/admin"
 	"github.com/vvangz/JikeLog/server/internal/apigen"
 	"github.com/vvangz/JikeLog/server/internal/attachment"
 	"github.com/vvangz/JikeLog/server/internal/auth"
@@ -30,6 +31,7 @@ type (
 	syncHandler       = syncer.Handler
 	attachmentHandler = attachment.Handler
 	exportHandler     = export.Handler
+	adminHandler      = admin.Handler
 )
 
 // API 聚合所有模块处理器，实现生成的 StrictServerInterface。
@@ -40,6 +42,7 @@ type API struct {
 	*syncHandler
 	*attachmentHandler
 	*exportHandler
+	*adminHandler
 }
 
 var _ apigen.StrictServerInterface = API{}
@@ -52,6 +55,7 @@ type Handlers struct {
 	Sync       *syncer.Handler
 	Attachment *attachment.Handler
 	Export     *export.Handler
+	Admin      *admin.Handler
 }
 
 // NewAPI 创建 API。
@@ -59,6 +63,7 @@ func NewAPI(h Handlers) API {
 	return API{
 		systemHandler: h.System, authHandler: h.Auth, accountHandler: h.Account,
 		syncHandler: h.Sync, attachmentHandler: h.Attachment, exportHandler: h.Export,
+		adminHandler: h.Admin,
 	}
 }
 
@@ -71,9 +76,10 @@ const (
 	wsRoute = "/api/v1/sync/ws"
 )
 
-// NewRouter 创建 Gin 引擎并注册全部路由。authn 用于默认拒绝的认证中间件：除公开路由外都必须登录。
+// NewRouter 创建 Gin 引擎并注册全部路由。认证默认拒绝：除公开路由外都必须登录，
+// 管理接口（/api/admin/）只接受管理员令牌，其余接口只接受用户令牌（见 authenticate）。
 // ws 为 WebSocket 处理器，为 nil 时不注册。
-func NewRouter(cfg config.Config, logger *slog.Logger, api API, authn *auth.Service, ws gin.HandlerFunc) (*gin.Engine, error) {
+func NewRouter(cfg config.Config, logger *slog.Logger, api API, authn *auth.Service, admins *admin.Service, ws gin.HandlerFunc) (*gin.Engine, error) {
 	r := gin.New()
 	// 让 *gin.Context 作为 context.Context 时继承请求的取消与截止时间（客户端断开即取消下游调用）
 	r.ContextWithFallback = true
@@ -85,7 +91,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, api API, authn *auth.Serv
 		httpx.RequestID(), httpx.SecurityHeaders(), httpx.AccessLog(logger), httpx.Recovery(logger),
 		httpx.CORS(cfg.HTTP.CORSOrigins), httpx.ClientIP(),
 		httpx.BodyLimit(maxBodyBytes, map[string]int64{"/api/v1/sync/push": maxPushBodyBytes}),
-		auth.Middleware(authn, isPublicRoute),
+		authenticate(authn, admins),
 	)
 	r.NoRoute(func(c *gin.Context) {
 		httpx.Fail(c, http.StatusNotFound, httpx.CodeNotFound, httpx.MsgNotFound)
@@ -166,4 +172,23 @@ func ListenAndServe(ctx context.Context, handler http.Handler, cfg config.HTTP, 
 		return fmt.Errorf("监听 %s 失败: %w", cfg.Addr, err)
 	}
 	return Serve(ctx, ln, handler, cfg, logger)
+}
+
+// authenticate 按路由分流认证（ADR-011）：
+//   - 管理接口只接受管理员令牌；
+//   - 用户接口只接受用户令牌，携带管理员令牌时返回 403——管理员看不到任何用户内容。
+func authenticate(users *auth.Service, admins *admin.Service) gin.HandlerFunc {
+	userAuth := auth.Middleware(users, isPublicRoute)
+	adminAuth := admin.Middleware(admins, isPublicRoute)
+	return func(c *gin.Context) {
+		route := c.FullPath()
+		switch {
+		case admin.IsAdminRoute(route):
+			adminAuth(c)
+		case route != "" && !isPublicRoute(c.Request.Method, route) && admins.IsAdminToken(c.GetHeader("Authorization")):
+			httpx.WriteError(c, admin.ErrAdminOnUserRoute)
+		default:
+			userAuth(c)
+		}
+	}
 }

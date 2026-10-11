@@ -1,5 +1,6 @@
 .root {
-  min-height: 100%;
+  /* 整页固定为视口高度：侧栏与内容区各自滚动，下方的设置、账号入口始终可见 */
+  height: 100vh;
 }
 
 .header {
@@ -25,6 +26,8 @@
 
 .body {
   position: relative;
+  flex: 1;
+  min-height: 0;
 }
 
 .nav {
@@ -32,6 +35,8 @@
   flex-direction: column;
   justify-content: space-between;
   width: 220px;
+  height: 100%;
+  overflow-y: auto;
   background: var(--jk-color-surface);
   border-right: 1px solid var(--jk-color-divider);
   animation: jk-nav-unfold var(--jk-motion-duration-slow) cubic-bezier(0.2, 0, 0, 1);
@@ -42,6 +47,8 @@
 }
 
 .content {
+  min-width: 0;
+  overflow-y: auto;
   padding: var(--jk-spacing-xl) var(--jk-spacing-lg);
 }
 
@@ -55,15 +62,45 @@
   }
 }
 
-/* 手机宽度：侧栏浮层覆盖内容 */
-@media (max-width: 599px) {
+/* 窄屏：侧栏在抽屉中，占满抽屉 */
+@media (max-width: 839px) {
   .nav {
-    position: absolute;
-    inset: 0 auto 0 0;
-    z-index: 10;
-    width: min(80vw, 280px);
-    box-shadow: 0 8px 24px var(--jk-color-scrim);
+    position: static;
+    width: 100%;
+    height: 100%;
+    border-right: none;
+    animation: none;
   }
+
+  .content {
+    padding: var(--jk-spacing-lg) var(--jk-spacing-md);
+  }
+}
+
+.who {
+  max-width: 30vw;
+}
+
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.pageTitle {
+  margin-top: 0 !important;
+}
+
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--jk-spacing-lg);
+  background: var(--jk-color-background);
+}
+
+.loginCard {
+  width: min(100%, 380px);
 }
 
 @media (prefers-reduced-motion: reduce) {

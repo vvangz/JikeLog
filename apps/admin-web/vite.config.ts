@@ -6,12 +6,18 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // 本地开发时把接口请求转发到 Go 服务
+      // 本地开发时把接口请求转发到 Go 服务（同源，管理员 Refresh Cookie 才能发送）
+      '/api': 'http://127.0.0.1:8080',
+    },
+  },
+  preview: {
+    proxy: {
       '/api': 'http://127.0.0.1:8080',
     },
   },
   test: {
     environment: 'jsdom',
+    include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],
     css: false,
     coverage: {
