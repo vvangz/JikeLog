@@ -11,6 +11,7 @@ import 'package:jikelog/core/api/models.dart';
 import 'package:jikelog/core/storage/stores.dart';
 import 'package:jikelog/core/sync/e2e.dart';
 import 'package:jikelog/core/sync/sync_api.dart';
+import 'package:jikelog/features/export/export_api.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:yaml/yaml.dart';
 
@@ -98,6 +99,7 @@ void main() {
     final auth = AuthApi(client, testDevice);
     final account = AccountApi(client);
     final sync = SyncApi(client);
+    final exports = ExportApi(client);
     final session = E2ESession(
       id: 's',
       key: SecretKey(List.filled(32, 1)),
@@ -202,6 +204,11 @@ void main() {
           size: 1,
           sha256: 'a' * 64,
         ),
+      ),
+      (
+        'POST',
+        '/api/v1/exports',
+        () => exports.create({ExportModule.memo}, attachments: true),
       ),
     ];
     for (final (method, path, call) in calls) {
@@ -310,6 +317,22 @@ void main() {
     ]) {
       expect(_schema(name)['properties'], isNotNull, reason: name);
     }
+  });
+
+  test('导出模型与契约一致', () {
+    final job = ExportJob.fromJson(
+      _sample(_schema('Export'))! as Map<String, dynamic>,
+    );
+    expect(job.size, isNull);
+    final export = _schema('Export');
+    expect(
+      (_resolve(export['properties']['status'] as Map)['enum'] as List).toSet(),
+      ExportStatus.values.map((s) => s.name).toSet(),
+    );
+    expect(
+      (_schema('ExportModule')['enum'] as List).toSet(),
+      ExportModule.values.map((m) => m.name).toSet(),
+    );
   });
 
   test('验证码用途与契约枚举一致', () {

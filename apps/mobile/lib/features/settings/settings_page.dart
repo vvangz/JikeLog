@@ -125,6 +125,15 @@ class SettingsPage extends ConsumerWidget {
         JkCard(
           children: [
             ListTile(
+              key: const Key('settings-export'),
+              leading: const Icon(Icons.archive_outlined),
+              title: const Text('数据导出'),
+              subtitle: const Text('导出为表格、Markdown 和日历文件'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/settings/export'),
+            ),
+            const Divider(height: 1),
+            ListTile(
               leading: const Icon(Icons.info_outline),
               title: const Text('关于即刻日志'),
               trailing: const Icon(Icons.chevron_right),

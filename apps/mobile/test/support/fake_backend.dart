@@ -20,6 +20,7 @@ import 'package:flutter/widgets.dart' show Text;
 import 'package:jikelog/features/attachments/attachment_providers.dart';
 import 'package:jikelog/features/attachments/attachment_viewers.dart';
 import 'package:jikelog/features/attachments/media.dart';
+import 'package:jikelog/features/export/export_api.dart';
 import 'package:jikelog/features/notes/editor/rich_editor_view.dart';
 import 'package:jikelog/features/notes/note_editor_page.dart';
 import 'package:jikelog/features/reminders/reminder_coordinator.dart';
@@ -216,6 +217,7 @@ List<Override> testOverrides({
   pushClientProvider.overrideWith((_) => TestHooks.push),
   systemCalendarProvider.overrideWith((_) => TestHooks.calendar),
   deviceTimeZoneProvider.overrideWith((_) => TestHooks.timeZone),
+  exportFilesProvider.overrideWith((_) => TestHooks.exportFiles),
 ];
 
 /// 组件测试中可替换的平台行为（每个测试结束后由 [TestHooks.reset] 恢复）。
@@ -228,6 +230,7 @@ abstract final class TestHooks {
   static FakePushClient push = FakePushClient();
   static FakeSystemCalendar calendar = FakeSystemCalendar();
   static FakeTimeZone timeZone = FakeTimeZone();
+  static FakeExportFiles exportFiles = FakeExportFiles();
   static final launched = <Uri>[];
   static final opened = <String>[];
 
@@ -247,6 +250,7 @@ abstract final class TestHooks {
     push = FakePushClient();
     calendar = FakeSystemCalendar();
     timeZone = FakeTimeZone();
+    exportFiles = FakeExportFiles();
     FakeRichEditor.autoReady = true;
     FakeRichEditor.silent = false;
     pickImage = _none;
@@ -292,3 +296,15 @@ Future<void> eventually(bool Function() condition, {String reason = ''}) async {
 
 void expectRequestCount(FakeBackend b, String method, String path, int n) =>
     expect(b.count(method, path), n, reason: '$method $path 请求次数');
+
+/// 记录导出文件的下载与分享；[fail] 不为空时下载失败。
+class FakeExportFiles implements ExportFiles {
+  final shared = <(String, String)>[];
+  Object? fail;
+
+  @override
+  Future<void> downloadAndShare(String url, String fileName) async {
+    if (fail != null) throw fail!;
+    shared.add((url, fileName));
+  }
+}

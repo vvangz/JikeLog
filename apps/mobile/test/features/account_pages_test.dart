@@ -63,6 +63,9 @@ void main() {
   testWidgets('关于页面：版本、字体说明与政策', (tester) async {
     await pumpApp(tester);
     await _open(tester, '/settings');
+    // 设置页较长，"关于"在屏幕之外：先滚动并重新布局，再点按
+    await tester.ensureVisible(find.text('关于即刻日志'));
+    await tester.pump();
     await tapAndSettle(tester, find.text('关于即刻日志'));
     expect(find.textContaining('MiSans'), findsOneWidget);
     expect(find.textContaining('版本'), findsOneWidget);

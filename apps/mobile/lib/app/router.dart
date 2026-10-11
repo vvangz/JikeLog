@@ -24,6 +24,7 @@ import '../features/settings/settings_page.dart';
 import '../features/notes/note_editor_page.dart';
 import '../features/notes/notes_list_page.dart';
 import '../features/revisions/revisions_page.dart';
+import '../features/export/export_page.dart';
 import '../features/search/search_page.dart';
 import '../features/search/search_repository.dart';
 import '../features/worklog/worklog_editor_page.dart';
@@ -188,6 +189,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(path: '/settings/about', builder: (_, _) => const AboutPage()),
+      GoRoute(path: '/settings/export', builder: (_, _) => const ExportPage()),
       GoRoute(path: '/account/phone', builder: (_, _) => const PhonePage()),
       GoRoute(
         path: '/account/password',
