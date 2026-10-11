@@ -42,6 +42,7 @@
 }
 
 .content {
+  min-width: 0;
   padding: var(--jk-spacing-xl) var(--jk-spacing-lg);
 }
 
@@ -55,8 +56,8 @@
   }
 }
 
-/* 手机宽度：侧栏浮层覆盖内容 */
-@media (max-width: 599px) {
+/* 窄屏：侧栏为浮层覆盖内容，背后是半透明遮罩，点击遮罩收起 */
+@media (max-width: 839px) {
   .nav {
     position: absolute;
     inset: 0 auto 0 0;
@@ -64,6 +65,39 @@
     width: min(80vw, 280px);
     box-shadow: 0 8px 24px var(--jk-color-scrim);
   }
+
+  .content {
+    padding: var(--jk-spacing-lg) var(--jk-spacing-md);
+  }
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  background: var(--jk-color-scrim);
+}
+
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.pageTitle {
+  margin-top: 0 !important;
+}
+
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--jk-spacing-lg);
+  background: var(--jk-color-background);
+}
+
+.loginCard {
+  width: min(100%, 380px);
 }
 
 @media (prefers-reduced-motion: reduce) {
