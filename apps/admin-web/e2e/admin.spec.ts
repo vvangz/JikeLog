@@ -61,11 +61,16 @@ test('宽屏：点击左上角图标，侧栏向右展开或收起（有过渡�
   const width = () => rail.evaluate((el) => el.getBoundingClientRect().width);
   await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible();
   expect(await width()).toBe(220);
+  // 侧栏与内容左右排列：内容在可视区域内，并且在侧栏右侧
+  const heading = page.getByRole('heading', { name: '仪表盘' });
+  await expect(heading).toBeInViewport();
+  expect((await heading.boundingBox())!.x).toBeGreaterThanOrEqual(220);
 
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await expect.poll(width).toBe(0);
   await expect(page.getByRole('navigation', { name: '主导航' })).toBeHidden();
+  await expect(heading).toBeInViewport();
 
   // 展开过程中宽度逐渐增加
   await toggle.click();

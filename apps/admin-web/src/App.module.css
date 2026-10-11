@@ -28,6 +28,8 @@
   position: relative;
   flex: 1;
   min-height: 0;
+  /* 侧栏与内容区左右排列。Ant Design 的 Layout 只在子元素有 Sider 时才横向排列，这里显式指定 */
+  flex-direction: row !important;
 }
 
 /* 宽屏侧栏的容器：点击左上角入口图标时宽度在 0 与 220px 之间过渡，菜单从左向右展开 */
