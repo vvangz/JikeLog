@@ -21,3 +21,13 @@ if (!window.matchMedia) {
     }),
   });
 }
+
+// jsdom 未实现 ResizeObserver，Ant Design 的表格、菜单等组件依赖它
+if (!('ResizeObserver' in window)) {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  Object.defineProperty(window, 'ResizeObserver', { writable: true, value: ResizeObserverStub });
+}

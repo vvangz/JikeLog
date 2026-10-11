@@ -1,5 +1,6 @@
 .root {
-  min-height: 100%;
+  /* 整页固定为视口高度：侧栏与内容区各自滚动，下方的设置、账号入口始终可见 */
+  height: 100vh;
 }
 
 .header {
@@ -25,6 +26,25 @@
 
 .body {
   position: relative;
+  flex: 1;
+  min-height: 0;
+  /* 侧栏与内容区左右排列。Ant Design 的 Layout 只在子元素有 Sider 时才横向排列，这里显式指定 */
+  flex-direction: row !important;
+}
+
+/* 宽屏侧栏的容器：点击左上角入口图标时宽度在 0 与 220px 之间过渡，菜单从左向右展开 */
+.navRail {
+  flex: none;
+  width: 220px;
+  height: 100%;
+  overflow: hidden;
+  border-right: 1px solid var(--jk-color-divider);
+  transition: width var(--jk-motion-duration-slow) cubic-bezier(0.2, 0, 0, 1);
+}
+
+.navRail[data-open='false'] {
+  width: 0;
+  border-right-width: 0;
 }
 
 .nav {
@@ -32,9 +52,24 @@
   flex-direction: column;
   justify-content: space-between;
   width: 220px;
+  height: 100%;
+  overflow-y: auto;
   background: var(--jk-color-surface);
-  border-right: 1px solid var(--jk-color-divider);
-  animation: jk-nav-unfold var(--jk-motion-duration-slow) cubic-bezier(0.2, 0, 0, 1);
+  /* 菜单随容器展开从左侧滑入、渐显 */
+  transition:
+    transform var(--jk-motion-duration-slow) cubic-bezier(0.2, 0, 0, 1),
+    opacity var(--jk-motion-duration-slow);
+}
+
+.navRail[data-open='false'] .nav {
+  transform: translateX(-40px);
+  opacity: 0;
+  /* 收起动画结束后再隐藏；展开时立即显示 */
+  visibility: hidden;
+  transition:
+    transform var(--jk-motion-duration-slow) cubic-bezier(0.2, 0, 0, 1),
+    opacity var(--jk-motion-duration-slow),
+    visibility 0s linear var(--jk-motion-duration-slow);
 }
 
 .navBottom {
@@ -42,32 +77,53 @@
 }
 
 .content {
+  min-width: 0;
+  overflow-y: auto;
   padding: var(--jk-spacing-xl) var(--jk-spacing-lg);
 }
 
-/* 侧栏自上而下展开 */
-@keyframes jk-nav-unfold {
-  from {
-    clip-path: inset(0 0 100% 0);
+/* 窄屏：侧栏在抽屉中，占满抽屉 */
+@media (max-width: 839px) {
+  .nav {
+    position: static;
+    width: 100%;
+    height: 100%;
   }
-  to {
-    clip-path: inset(0 0 0 0);
+
+  .content {
+    padding: var(--jk-spacing-lg) var(--jk-spacing-md);
   }
 }
 
-/* 手机宽度：侧栏浮层覆盖内容 */
-@media (max-width: 599px) {
-  .nav {
-    position: absolute;
-    inset: 0 auto 0 0;
-    z-index: 10;
-    width: min(80vw, 280px);
-    box-shadow: 0 8px 24px var(--jk-color-scrim);
-  }
+.who {
+  max-width: 30vw;
+}
+
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.pageTitle {
+  margin-top: 0 !important;
+}
+
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--jk-spacing-lg);
+  background: var(--jk-color-background);
+}
+
+.loginCard {
+  width: min(100%, 380px);
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .navRail,
   .nav {
-    animation: none;
+    transition: none;
   }
 }

@@ -668,6 +668,233 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 管理员登录
+         * @description 成功时返回 Access Token（15 分钟），Refresh Token 写入 HttpOnly Cookie。
+         *     同一账号连续 5 次失败锁定 15 分钟（423 `ADMIN_LOCKED`）；用户名或密码错误统一返回 401 `INVALID_CREDENTIALS`。
+         */
+        post: operations["adminLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/v1/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 刷新管理员会话
+         * @description 用 Cookie 中的 Refresh Token 换取新的 Access Token，Refresh Token 同时轮换。
+         */
+        post: operations["adminRefresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 管理员退出 */
+        post: operations["adminLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 当前管理员 */
+        get: operations["adminMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/v1/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 修改自己的密码
+         * @description 修改后其他会话全部失效，当前会话保留。
+         */
+        put: operations["adminChangePassword"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/v1/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 仪表盘 */
+        get: operations["adminDashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 用户列表
+         * @description 按用户名、昵称搜索；输入恰好 4 位数字时也匹配手机号末 4 位。手机号脱敏返回。
+         */
+        get: operations["adminListUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/v1/users/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 用户详情（只有配置，不含内容） */
+        get: operations["adminGetUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/v1/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 审计日志 */
+        get: operations["adminListAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/v1/admins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 管理员列表（仅超级管理员） */
+        get: operations["adminListAdmins"];
+        put?: never;
+        /**
+         * 新建管理员（仅超级管理员）
+         * @description 新管理员第一次登录时必须修改密码。用户名已存在时返回 409 `USERNAME_TAKEN`。
+         */
+        post: operations["adminCreateAdmin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/v1/admins/{adminId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 修改角色或停用（仅超级管理员）
+         * @description 不能修改自己；不能停用或降级最后一个超级管理员（409 `LAST_SUPER_ADMIN`）。停用后该管理员的会话立即失效。
+         */
+        patch: operations["adminUpdateAdmin"];
+        trace?: never;
+    };
+    "/api/admin/v1/admins/{adminId}/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 重置管理员密码（仅超级管理员）
+         * @description 该管理员的会话全部失效，下次登录必须修改密码。不能用于自己（请使用修改密码）。
+         */
+        post: operations["adminResetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1209,6 +1436,194 @@ export interface components {
         ExportListEnvelope: components["schemas"]["EnvelopeBase"] & {
             data: components["schemas"]["Export"][];
         };
+        /** @enum {string} */
+        AdminRole: "super_admin" | "viewer";
+        AdminProfile: {
+            /** Format: uuid */
+            id: string;
+            username: string;
+            role: components["schemas"]["AdminRole"];
+            disabled: boolean;
+            /** @description 为 true 时必须先修改密码，其他接口返回 403 `PASSWORD_CHANGE_REQUIRED` */
+            mustChangePassword: boolean;
+            /** Format: date-time */
+            lastLoginAt?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminProfileEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["AdminProfile"];
+        };
+        AdminProfileListEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["AdminProfile"][];
+        };
+        AdminLoginRequest: {
+            username: string;
+            password: string;
+        };
+        AdminSession: {
+            accessToken: string;
+            /** Format: date-time */
+            expiresAt: string;
+            admin: components["schemas"]["AdminProfile"];
+        };
+        AdminSessionEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["AdminSession"];
+        };
+        AdminChangePasswordRequest: {
+            currentPassword: string;
+            newPassword: string;
+        };
+        AdminCreateRequest: {
+            username: string;
+            role: components["schemas"]["AdminRole"];
+            /** @description 初始密码，对方第一次登录时必须修改 */
+            password: string;
+        };
+        AdminUpdateRequest: {
+            role?: components["schemas"]["AdminRole"];
+            disabled?: boolean;
+        };
+        AdminResetPasswordRequest: {
+            password: string;
+        };
+        AdminDashboard: {
+            /** Format: int64 */
+            totalUsers: number;
+            /** Format: int64 */
+            newUsersToday: number;
+            /**
+             * Format: int64
+             * @description 今天有设备活动的用户数（按北京时间）
+             */
+            activeToday: number;
+            /**
+             * Format: int64
+             * @description 最近 7 天有设备活动的用户数
+             */
+            activeWeek: number;
+            /**
+             * Format: int64
+             * @description 最近 30 天有设备活动的用户数
+             */
+            activeMonth: number;
+            /**
+             * Format: int64
+             * @description 全部用户的附件总用量
+             */
+            storageBytes: number;
+            /** @description 最近 30 天每天新增的用户数（含今天，没有新增的日期为 0） */
+            newUsersDaily: components["schemas"]["DailyCount"][];
+            /** @description 最近 30 天活跃的已登录设备的平台分布 */
+            platforms: components["schemas"]["PlatformCount"][];
+        };
+        DailyCount: {
+            /** Format: date */
+            day: string;
+            /** Format: int64 */
+            count: number;
+        };
+        PlatformCount: {
+            platform: string;
+            /** Format: int64 */
+            devices: number;
+        };
+        AdminDashboardEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["AdminDashboard"];
+        };
+        AdminUserSummary: {
+            /** Format: uuid */
+            id: string;
+            username: string;
+            nickname: string;
+            /** @description 脱敏的手机号，如 +86 138****5678；未绑定时省略 */
+            phoneMasked?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            lastActiveAt?: string;
+            /**
+             * Format: int64
+             * @description 已登录的设备数
+             */
+            deviceCount: number;
+            /** Format: int64 */
+            storageBytes: number;
+        };
+        AdminUserListEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["AdminUserSummary"][];
+        };
+        AdminUserDevice: {
+            /** Format: uuid */
+            id: string;
+            platform: string;
+            model: string;
+            osVersion: string;
+            appVersion: string;
+            /** Format: date-time */
+            lastActiveAt: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description false 表示已退出登录或被下线 */
+            signedIn: boolean;
+            /** @description 设备能否自己按时弹出提醒 */
+            localReminders: boolean;
+            /** @description 是否注册了推送 */
+            pushEnabled: boolean;
+            /**
+             * Format: int64
+             * @description 设备已同步到的序号
+             */
+            ackSeq: number;
+        };
+        AdminUserDetail: {
+            user: components["schemas"]["AdminUserSummary"];
+            settings: components["schemas"]["Settings"];
+            devices: components["schemas"]["AdminUserDevice"][];
+            sync: {
+                /**
+                 * Format: int64
+                 * @description 服务端最新的同步序号；设备的 ackSeq 小于它表示还有未同步的修改
+                 */
+                serverSeq: number;
+                /**
+                 * Format: date-time
+                 * @description 最后一次有数据写入服务端的时间
+                 */
+                lastSyncAt?: string;
+            };
+            storage: {
+                /** Format: int64 */
+                used: number;
+                /** Format: int64 */
+                quota: number;
+            };
+        };
+        AdminUserDetailEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["AdminUserDetail"];
+        };
+        /** @enum {string} */
+        AuditAction: "login" | "login_failed" | "logout" | "view_dashboard" | "list_users" | "view_user" | "change_password" | "create_admin" | "update_admin" | "reset_password" | "list_audit_logs" | "list_admins";
+        AuditLog: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            adminId?: string;
+            username: string;
+            action: components["schemas"]["AuditAction"];
+            targetType: string;
+            targetId: string;
+            ip: string;
+            userAgent: string;
+            detail: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AuditLogListEnvelope: components["schemas"]["EnvelopeBase"] & {
+            data: components["schemas"]["AuditLog"][];
+        };
     };
     responses: {
         /** @description 错误（4xx/5xx），统一使用错误信封 */
@@ -1222,6 +1637,13 @@ export interface components {
         };
     };
     parameters: {
+        AdminId: string;
+        /** @description 固定为 1。跨站页面不能随意设置自定义请求头，以此防止跨站请求伪造 */
+        AdminCsrfHeader: "1";
+        AdminRefreshCookie: string;
+        /** @description 页码，从 1 开始 */
+        Page: number;
+        PageSize: number;
         ExportId: string;
         /** @description 传输加密会话 ID（见 createE2ESession）；请求或响应含敏感字段时必须携带 */
         E2ESessionHeader: string;
@@ -2120,6 +2542,333 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AttachmentDownloadEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    adminLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description 登录成功 */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSessionEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    adminRefresh: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 固定为 1。跨站页面不能随意设置自定义请求头，以此防止跨站请求伪造 */
+                "X-JikeLog-Admin": components["parameters"]["AdminCsrfHeader"];
+            };
+            path?: never;
+            cookie?: {
+                jikelog_admin_refresh?: components["parameters"]["AdminRefreshCookie"];
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 新的会话 */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSessionEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    adminLogout: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 固定为 1。跨站页面不能随意设置自定义请求头，以此防止跨站请求伪造 */
+                "X-JikeLog-Admin": components["parameters"]["AdminCsrfHeader"];
+            };
+            path?: never;
+            cookie?: {
+                jikelog_admin_refresh?: components["parameters"]["AdminRefreshCookie"];
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已退出 */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AckEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    adminMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前管理员 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProfileEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    adminChangePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description 已修改 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AckEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    adminDashboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 统计数据 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDashboardEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    adminListUsers: {
+        parameters: {
+            query?: {
+                q?: string;
+                /** @description 页码，从 1 开始 */
+                page?: components["parameters"]["Page"];
+                pageSize?: components["parameters"]["PageSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 用户 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserListEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    adminGetUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 用户配置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserDetailEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    adminListAuditLogs: {
+        parameters: {
+            query?: {
+                adminId?: string;
+                action?: components["schemas"]["AuditAction"];
+                /** @description 起始时刻（含） */
+                from?: string;
+                /** @description 截止时刻（不含） */
+                to?: string;
+                /** @description 页码，从 1 开始 */
+                page?: components["parameters"]["Page"];
+                pageSize?: components["parameters"]["PageSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 审计日志，新的在前 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLogListEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    adminListAdmins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 管理员 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProfileListEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    adminCreateAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 已创建 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProfileEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    adminUpdateAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adminId: components["parameters"]["AdminId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description 已修改 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProfileEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    adminResetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adminId: components["parameters"]["AdminId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description 已重置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AckEnvelope"];
                 };
             };
             default: components["responses"]["Error"];

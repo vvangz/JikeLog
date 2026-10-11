@@ -108,6 +108,18 @@ jobs:
           pnpm typecheck
           pnpm test:coverage
           pnpm build
+      - name: 管理后台 端到端测试（Playwright，接口在浏览器层模拟）
+        working-directory: apps/admin-web
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm e2e
+      - name: 上传端到端测试报告
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-report
+          path: apps/admin-web/playwright-report
+          retention-days: 7
 
   mobile:
     name: 移动端（Flutter）

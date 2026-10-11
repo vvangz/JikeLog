@@ -1,0 +1,13 @@
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 160px;
+}
+
+.bar {
+  flex: 1;
+  min-width: 2px;
+  border-radius: var(--jk-radius-sm) var(--jk-radius-sm) 0 0;
+  background: var(--jk-color-primary);
+}

@@ -2,12 +2,16 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'sha256-scUe2UeG8RnsFqYj13yRjOJtLo+m0wDaTnTOpJ9zKtM='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <title>即刻日志管理后台</title>
     <!-- 首次绘制前确定主题，避免深色用户看到浅色闪烁；之后由 useThemeMode 接管。
-         键名与取值须与 src/theme/themeMode.ts 一致。v0.8.0 启用 CSP 时需为此脚本添加 hash。 -->
+         键名与取值须与 src/theme/themeMode.ts 一致。修改此脚本后须同步更新上方 CSP 中的 sha256（src/csp.test.ts 会校验）。 -->
     <script>
       (function () {
         var mode = 'system';
