@@ -2,6 +2,28 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [0.7.0](https://github.com/vvangz/JikeLog/compare/v0.6.0...v0.7.0) (2026-10-11)
+
+
+### 新功能
+
+* **mobile:** 全局搜索：本地 FTS5 trigram 索引，按模块和时间筛选 ([dcd9051](https://github.com/vvangz/JikeLog/commit/dcd90510d60601606d29263bef21d81f32d8bd51))
+* **mobile:** 数据导出页面：选择模块发起导出、查看进度、下载后分享或保存 ([27a2441](https://github.com/vvangz/JikeLog/commit/27a2441c544e90a862823907543d18db9f598d4c))
+* **server:** 数据导出：后台生成 zip（xlsx、Markdown、ICS、CSV、JSON 与附件），保留 24 小时 ([7fe0b85](https://github.com/vvangz/JikeLog/commit/7fe0b85f60d5277517dea06560db5f6aec6a671e))
+
+
+### 问题修复
+
+* **deps:** excelize 升级到 v2.11.0（GO-2026-5960） ([4f82414](https://github.com/vvangz/JikeLog/commit/4f82414b1019461dfc38a9610f5146cdea676963))
+* **mobile:** 处理 M6 审查意见 ([fa32575](https://github.com/vvangz/JikeLog/commit/fa325752d2dfc87769f814db98ba087e62c7c36c))
+* **server:** 处理 M6 审查意见 ([31f85ff](https://github.com/vvangz/JikeLog/commit/31f85ffcd9e18015c72ff93f6dc36acf6ba5456f))
+
+
+### 文档
+
+* ADR-010 全局搜索与数据导出 ([f58e657](https://github.com/vvangz/JikeLog/commit/f58e657eb682615279accda0ba8b7cd079c35ed2))
+* 使用说明 08 搜索与导出；架构总览补充搜索与导出 ([7fb05de](https://github.com/vvangz/JikeLog/commit/7fb05de7f6902ec337e82f1abf90d023d6f5d821))
+
 ## [0.6.0](https://github.com/vvangz/JikeLog/compare/v0.5.0...v0.6.0) (2026-10-10)
 
 
