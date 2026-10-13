@@ -104,9 +104,14 @@ jobs:
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh_run() { ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "root@$DEPLOY_HOST" "$@"; }
+          # 从 Windows 复制粘贴的值可能带 CRLF，OpenSSH 读私钥时会报 error in libcrypto
+          (umask 077 && printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key)
+          printf '%s\n' "$KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/deploy_key >/dev/null ||
+            { echo "::error::DEPLOY_SSH_KEY 不是有效的私钥：用 gh secret set DEPLOY_SSH_KEY --env production < 私钥文件 重新设置"; exit 1; }
+          ssh_run() { ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes "root@$DEPLOY_HOST" "$@"; }
+          # 先确认能登录，否则下面检查镜像时每次都失败，会误判为服务器缺少全部镜像
+          ssh_run true || { echo "::error::无法 SSH 登录服务器：检查 DEPLOY_HOST、DEPLOY_KNOWN_HOSTS 与服务器上的公钥"; exit 1; }
           # 服务器无法访问 Docker Hub：把它缺少的第三方镜像（首次部署、升级了基础镜像）一并上传
           missing=()
           for img in $(grep -oE '^\s+image: [^$]+$' deploy/production/compose.yml | awk '{print $2}'); do
