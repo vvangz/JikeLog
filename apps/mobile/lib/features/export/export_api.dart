@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../app/providers.dart';
 import '../../core/api/api_client.dart';
+import '../../core/net/tls.dart';
 
 /// 可以导出的模块（与接口中的 ExportModule 一致）。
 enum ExportModule {
@@ -141,16 +142,15 @@ abstract class ExportFiles {
 }
 
 class ShareExportFiles implements ExportFiles {
-  ShareExportFiles({Dio? dio})
-    : _dio =
-          dio ??
-          Dio(
-            BaseOptions(
-              connectTimeout: const Duration(seconds: 15),
-              // 两次收到数据的最长间隔，不限制整个下载的时长
-              receiveTimeout: const Duration(seconds: 60),
-            ),
-          );
+  /// [tls] 来自 tlsPolicyProvider；测试可以直接传入 [dio]。
+  ShareExportFiles({required TlsPolicy tls, Dio? dio})
+    : _dio = dio ?? tls.dio(options);
+
+  static final options = BaseOptions(
+    connectTimeout: const Duration(seconds: 15),
+    // 两次收到数据的最长间隔，不限制整个下载的时长
+    receiveTimeout: const Duration(seconds: 60),
+  );
 
   final Dio _dio;
 
@@ -184,7 +184,9 @@ class ShareExportFiles implements ExportFiles {
   }
 }
 
-final exportFilesProvider = Provider<ExportFiles>((_) => ShareExportFiles());
+final exportFilesProvider = Provider<ExportFiles>(
+  (ref) => ShareExportFiles(tls: ref.watch(tlsPolicyProvider)),
+);
 
 /// 最近的导出（新的在前）。
 final exportsProvider = FutureProvider.autoDispose<List<ExportJob>>(

@@ -77,6 +77,7 @@ final realtimeClientProvider = Provider<RealtimeLink>((ref) {
     deviceId: () => store.getString(deviceIdKey),
     // 设备已下线：发起一次请求，由 ApiClient 的刷新逻辑把登录态切换为未登录
     onRevoked: () => unawaited(engine.sync()),
+    connect: RealtimeClient.ioConnect(ref.watch(tlsPolicyProvider)),
   );
   ref.onDispose(client.stop);
   return client;
