@@ -120,7 +120,7 @@ jobs:
           ssh_run mkdir -p "/root/jikelog/releases/$VERSION"
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes dist/*.tar.gz "root@$DEPLOY_HOST:/root/jikelog/releases/$VERSION/"
           # 先解出部署脚本（首次部署时服务器上还没有）。版本已校验，只含数字、字母与 . -
-          ssh_run "cd /root/jikelog && tar -xzf releases/$VERSION/config.tar.gz scripts && bash scripts/deploy.sh $VERSION"
+          ssh_run "cd /root/jikelog && tar --no-same-owner -xzf releases/$VERSION/config.tar.gz scripts && bash scripts/deploy.sh $VERSION"
 
       - name: 保留发布包
         if: failure() && env.VERSION != ''
