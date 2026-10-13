@@ -20,11 +20,26 @@ SELECT * FROM records WHERE id = @id AND user_id = @user_id FOR UPDATE;
 -- ID 是否已被使用（任意账号）。不加锁，只用于判断 ID 冲突。
 SELECT EXISTS (SELECT 1 FROM records WHERE id = @id)::boolean AS taken;
 
+-- name: ListRecordsForUpdate :many
+-- 一次读取并锁定一批推送涉及的本账号记录。按 ID 顺序加锁；同一账号的推送已由同步游标串行，不会互相等待。
+SELECT * FROM records WHERE user_id = @user_id AND id = ANY(@ids::uuid[]) ORDER BY id FOR UPDATE;
+
+-- name: ListForeignRecordIDs :many
+-- 一批 ID 中已被其他账号使用的。不加锁，只用于判断 ID 冲突。
+SELECT id FROM records WHERE id = ANY(@ids::uuid[]) AND user_id <> @user_id;
+
 -- name: InsertRecord :execrows
 -- 两个账号并发插入同一 ID 时，后到者影响 0 行，由调用方报告 ID 冲突。
 INSERT INTO records (id, user_id, entity, version, server_seq, fields, clocks, absorbed, deleted, device_id)
 VALUES (@id, @user_id, @entity, 1, @server_seq, @fields, @clocks, @absorbed, @deleted, sqlc.narg(device_id))
 ON CONFLICT (id) DO NOTHING;
+
+-- name: InsertRecordBatch :batchone
+-- 推送中的新记录：整批一次往返发送（pgx 管道），代替逐条插入。ID 被其他账号并发占用时不返回行。
+INSERT INTO records (id, user_id, entity, version, server_seq, fields, clocks, absorbed, deleted, device_id)
+VALUES (@id, @user_id, @entity, 1, @server_seq, @fields, @clocks, @absorbed, @deleted, sqlc.narg(device_id))
+ON CONFLICT (id) DO NOTHING
+RETURNING id;
 
 -- name: UpdateRecord :exec
 UPDATE records

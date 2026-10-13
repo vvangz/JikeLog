@@ -118,16 +118,23 @@ func (s *Service) Push(ctx context.Context, p auth.Principal, tr Transport, in [
 	var cursor int64
 	advanced := false
 	err := s.d.Tx.InTx(ctx, func(q *dbgen.Queries) error {
-		w := &writer{s: s, q: q, p: p, tr: tr}
+		w := &writer{s: s, q: q, p: p, tr: tr, results: results, batch: true}
 		seq, err := q.LockSyncCursor(ctx, p.UserID)
 		if err != nil {
 			return fmt.Errorf("锁定同步游标失败: %w", err)
 		}
 		w.seq = seq
+		if err := w.prefetch(ctx, valid); err != nil {
+			return err
+		}
 		for _, d := range valid {
+			w.cur = d.idx
 			if results[d.idx], err = w.apply(ctx, d); err != nil {
 				return err
 			}
+		}
+		if err := w.flush(ctx); err != nil {
+			return err
 		}
 		cursor = w.seq
 		advanced = w.seq != seq
@@ -153,6 +160,98 @@ type writer struct {
 	tr  Transport
 	seq int64
 	key []byte
+	// prefetch 预读的本账号记录与被其他账号占用的 ID；touched 为本批已处理过的 ID，
+	// 同一 ID 在一批中再次出现时，预读结果已过期，改为逐条查询。
+	known   map[uuid.UUID]dbgen.Record
+	foreign map[uuid.UUID]bool
+	touched map[uuid.UUID]bool
+	// batch 为 true 时（推送），新记录的插入排进 pending，由 flush 一次性发送，发送后才知道是否与其他账号的 ID 冲突；
+	// results 为整批的逐条结果，cur 为正在处理的变更的下标。
+	batch   bool
+	results []Result
+	cur     int
+	pending []pendingInsert
+}
+
+type pendingInsert struct {
+	idx    int
+	params dbgen.InsertRecordBatchParams
+}
+
+// flush 一次往返发送排队的新记录插入；ID 已被其他账号并发占用的，结果改为 ID 冲突（序号留空，不影响增量拉取）。
+func (w *writer) flush(ctx context.Context) error {
+	if len(w.pending) == 0 {
+		return nil
+	}
+	params := make([]dbgen.InsertRecordBatchParams, len(w.pending))
+	for i, p := range w.pending {
+		params[i] = p.params
+	}
+	var ferr error
+	w.q.InsertRecordBatch(ctx, params).QueryRow(func(i int, _ uuid.UUID, err error) {
+		switch {
+		case err == nil:
+		case db.IsNotFound(err):
+			w.results[w.pending[i].idx] = idConflict(params[i].ID)
+		case ferr == nil:
+			ferr = fmt.Errorf("写入记录失败: %w", err)
+		}
+	})
+	w.pending = nil
+	return ferr
+}
+
+// prefetch 用两次查询取得整批变更涉及的记录，代替逐条的"读取并锁定 + 检查 ID 占用"。
+func (w *writer) prefetch(ctx context.Context, valid []decoded) error {
+	ids := make([]uuid.UUID, len(valid))
+	for i, d := range valid {
+		ids[i] = d.id
+	}
+	w.known = make(map[uuid.UUID]dbgen.Record, len(valid))
+	w.foreign = map[uuid.UUID]bool{}
+	w.touched = make(map[uuid.UUID]bool, len(valid))
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := w.q.ListRecordsForUpdate(ctx, dbgen.ListRecordsForUpdateParams{UserID: w.p.UserID, Ids: ids})
+	if err != nil {
+		return fmt.Errorf("读取记录失败: %w", err)
+	}
+	for _, r := range rows {
+		w.known[r.ID] = r
+	}
+	taken, err := w.q.ListForeignRecordIDs(ctx, dbgen.ListForeignRecordIDsParams{UserID: w.p.UserID, Ids: ids})
+	if err != nil {
+		return fmt.Errorf("检查记录 ID 失败: %w", err)
+	}
+	for _, id := range taken {
+		w.foreign[id] = true
+	}
+	return nil
+}
+
+// lookup 返回记录的当前状态（exists），以及不存在时该 ID 是否已被其他账号使用（taken）。
+func (w *writer) lookup(ctx context.Context, id uuid.UUID) (row dbgen.Record, exists, taken bool, err error) {
+	if !w.touched[id] {
+		w.touched[id] = true
+		row, exists = w.known[id]
+		return row, exists, !exists && w.foreign[id], nil
+	}
+	// 同一 ID 再次出现：先发出排队的插入，才能读到本批刚写入的记录
+	if err := w.flush(ctx); err != nil {
+		return row, false, false, err
+	}
+	row, err = w.q.GetRecordForUpdate(ctx, dbgen.GetRecordForUpdateParams{ID: id, UserID: w.p.UserID})
+	if err == nil {
+		return row, true, false, nil
+	}
+	if !db.IsNotFound(err) {
+		return row, false, false, fmt.Errorf("读取记录失败: %w", err)
+	}
+	if taken, err = w.q.RecordIDTaken(ctx, id); err != nil {
+		return row, false, false, fmt.Errorf("检查记录 ID 失败: %w", err)
+	}
+	return row, false, taken, nil
 }
 
 func (w *writer) dataKey(ctx context.Context) ([]byte, error) {
@@ -169,19 +268,12 @@ func (w *writer) dataKey(ctx context.Context) ([]byte, error) {
 func (w *writer) apply(ctx context.Context, d decoded) (Result, error) {
 	id := d.id
 	res := Result{ID: id}
-	row, err := w.q.GetRecordForUpdate(ctx, dbgen.GetRecordForUpdateParams{ID: id, UserID: w.p.UserID})
-	exists := err == nil
-	if err != nil && !db.IsNotFound(err) {
-		return res, fmt.Errorf("读取记录失败: %w", err)
+	row, exists, taken, err := w.lookup(ctx, id)
+	if err != nil {
+		return res, err
 	}
-	if !exists {
-		taken, err := w.q.RecordIDTaken(ctx, id)
-		if err != nil {
-			return res, fmt.Errorf("检查记录 ID 失败: %w", err)
-		}
-		if taken {
-			return idConflict(id), nil // 不透露该 ID 属于其他账号
-		}
+	if taken {
+		return idConflict(id), nil // 不透露该 ID 属于其他账号
 	}
 	if exists && row.Entity != d.entity.Name {
 		return idConflict(id), nil
