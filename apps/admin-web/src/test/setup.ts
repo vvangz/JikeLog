@@ -1,9 +1,12 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterEach } from 'vitest';
 
 // 未启用 vitest globals，需手动在每个用例后卸载渲染结果
 afterEach(cleanup);
+
+// CI 机器较慢，首次渲染 Ant Design 表格可能超过默认的 1 秒等待
+configure({ asyncUtilTimeout: 5000 });
 
 // jsdom 未实现 matchMedia，Ant Design 的响应式能力依赖它
 if (!window.matchMedia) {
