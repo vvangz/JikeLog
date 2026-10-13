@@ -165,7 +165,7 @@ func newAuthService(ctx context.Context, o Options, tx db.TxRunner, limiter *rat
 		return nil, nil, err
 	}
 	if o.Config.Captcha.Provider != config.CaptchaProviderNone {
-		return nil, nil, errors.New("阿里云验证码将在 v0.9.0 接入，当前版本请使用 JIKELOG_CAPTCHA_PROVIDER=none")
+		return nil, nil, errors.New("阿里云验证码尚未接入；短信未开通（JIKELOG_SMS_PROVIDER=disabled）时不需要人机验证，请使用 JIKELOG_CAPTCHA_PROVIDER=none")
 	}
 	params := auth.DefaultArgon2Params
 	if o.Argon2 != nil {
@@ -225,7 +225,7 @@ func newKeyWrapper(cfg config.KMS) (crypto.KeyWrapper, error) {
 	case config.KMSProviderLocal:
 		return crypto.NewLocalKeyWrapper(cfg.LocalMasterKey)
 	case config.KMSProviderAliyun:
-		return nil, errors.New("阿里云 KMS 将在 v0.9.0 接入，当前版本请使用 JIKELOG_KMS_PROVIDER=local")
+		return nil, errors.New("阿里云 KMS 尚未接入，单机自托管使用 JIKELOG_KMS_PROVIDER=local（ADR-012）")
 	default:
 		return nil, fmt.Errorf("未知 KMS 通道 %q", cfg.Provider)
 	}
