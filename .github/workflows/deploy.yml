@@ -15,7 +15,7 @@ on:
       version:
         description: 要部署的版本（如 0.9.0），留空则取 version.txt
         required: false
-  # 被调用时不接收 Secrets：部署用的 Secrets 按 production 环境读取
+  # 被调用时，调用方须写 secrets: inherit，否则读不到 production 环境的 Secrets
   workflow_call:
     inputs:
       version:
@@ -90,18 +90,15 @@ jobs:
       - name: 打包部署配置
         run: tar -czf dist/config.tar.gz -C deploy/production compose.yml caddy scripts
 
+      # 读不到部署密钥时让任务失败，而不是只构建、显示成功（发布包仍保存为产物）
       - name: 检查部署配置
-        id: check
         run: |
           if [ -z "$DEPLOY_HOST" ]; then
-            echo "::warning::尚未配置 DEPLOY_HOST 等部署密钥，只构建、不部署"
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "::error::读不到 DEPLOY_HOST 等部署密钥：检查 production 环境的 Secrets；被调用时调用方须写 secrets: inherit"
+            exit 1
           fi
 
       - name: 上传并部署
-        if: steps.check.outputs.ready == 'true'
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
@@ -126,7 +123,7 @@ jobs:
           ssh_run "cd /root/jikelog && tar -xzf releases/$VERSION/config.tar.gz scripts && bash scripts/deploy.sh $VERSION"
 
       - name: 保留发布包
-        if: steps.check.outputs.ready != 'true'
+        if: failure() && env.VERSION != ''
         uses: actions/upload-artifact@v5
         with:
           name: jikelog-${{ env.VERSION }}
