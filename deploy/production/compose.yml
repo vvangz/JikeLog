@@ -1,0 +1,100 @@
+# 即刻日志正式环境（单机自托管，ADR-012）。部署目录：服务器上的 /root/jikelog。
+# 机密全部在同目录的 .env 中（权限 600），由 scripts/init-env.sh 生成；版本由 .env 中的 JIKELOG_VERSION 决定。
+name: jikelog
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "20m", max-file: "5" }
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    logging: *logging
+    environment: { POSTGRES_DB: jikelog, POSTGRES_USER: jikelog, POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}", TZ: Asia/Shanghai }
+    # 1.7G 内存的单机：限制共享缓冲与连接数
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=50", "-c", "work_mem=4MB"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U jikelog -d jikelog"], interval: 5s, retries: 10 }
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    logging: *logging
+    # 只淘汰设置了过期时间的键（限流计数、验证码等），不丢其他数据
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-lru"]
+    environment: { REDIS_PASSWORD: "${REDIS_PASSWORD}" }
+    volumes: [redisdata:/data]
+    healthcheck: { test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep PONG"], interval: 5s, retries: 10 }
+
+  objectstore:
+    image: rustfs/rustfs:1.0.1
+    restart: unless-stopped
+    logging: *logging
+    environment: { RUSTFS_ACCESS_KEY: "${S3_ACCESS_KEY}", RUSTFS_SECRET_KEY: "${S3_SECRET_KEY}" }
+    # 不对外开放端口：预签名的上传与下载经 Caddy 的 /<存储桶>/ 路径转发
+    volumes: [objdata:/data]
+
+  api:
+    image: jikelog-api:${JIKELOG_VERSION}
+    restart: unless-stopped
+    logging: *logging
+    env_file: .env
+    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy }, objectstore: { condition: service_started } }
+    ports: ["127.0.0.1:8080:8080"]      # 只供本机排查与 SSH 隧道，不对外开放
+
+  backup:
+    image: jikelog-backup:${JIKELOG_VERSION}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      TZ: Asia/Shanghai
+      PGHOST: postgres
+      PGUSER: jikelog
+      PGDATABASE: jikelog
+      PGPASSWORD: "${POSTGRES_PASSWORD}"
+      BACKUP_INTERVAL_DAYS: "${BACKUP_INTERVAL_DAYS:-14}"
+      BACKUP_KEEP: "${BACKUP_KEEP:-6}"
+      BACKUP_AGE_RECIPIENT: "${BACKUP_AGE_RECIPIENT}"
+      STORAGE_BUCKET: "${JIKELOG_STORAGE_BUCKET}"
+      # 本机对象存储（附件）
+      RCLONE_CONFIG_SRC_TYPE: s3
+      RCLONE_CONFIG_SRC_PROVIDER: Other
+      RCLONE_CONFIG_SRC_ENDPOINT: http://objectstore:9000
+      RCLONE_CONFIG_SRC_ACCESS_KEY_ID: "${S3_ACCESS_KEY}"
+      RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY: "${S3_SECRET_KEY}"
+      RCLONE_CONFIG_SRC_FORCE_PATH_STYLE: "true"
+      # 异地 OSS（未配置时只保留本地备份）：地址、存储桶与 AccessKey 在 backup.env 中，只有本服务能读到
+      RCLONE_CONFIG_OSS_TYPE: s3
+      RCLONE_CONFIG_OSS_PROVIDER: Alibaba
+      BACKUP_OSS_PRUNE: "${BACKUP_OSS_PRUNE:-false}"
+    env_file: backup.env
+    depends_on: { postgres: { condition: service_healthy } }
+    volumes:
+      - ./backups:/backups
+      # 主密钥等机密随备份加密保存：没有它，数据库中的敏感字段无法解开
+      - ./.env:/config/env:ro
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    logging: *logging
+    depends_on: [api]
+    environment:
+      SITE_DOMAIN: "${SITE_DOMAIN}"
+      SITE_DOMAIN_APEX: "${SITE_DOMAIN_APEX}"
+      ACME_EMAIL: "${ACME_EMAIL}"
+      STORAGE_BUCKET: "${JIKELOG_STORAGE_BUCKET}"
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      # 挂载目录而不是单个文件：部署时替换 Caddyfile 后，容器能看到新内容（caddy reload 生效）
+      - ./caddy:/etc/caddy:ro
+      - ./admin:/srv/admin:ro            # 管理后台静态文件，current 指向当前版本
+      - caddy_data:/data                 # 证书保存在这里，不要删
+      - caddy_config:/config
+
+networks:
+  default:
+    ipam: { config: [{ subnet: 172.30.0.0/24 }] }   # 与 JIKELOG_HTTP_TRUSTED_PROXIES 保持一致
+
+volumes: { pgdata: {}, redisdata: {}, objdata: {}, caddy_data: {}, caddy_config: {} }
