@@ -2,6 +2,31 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [0.9.0](https://github.com/vvangz/JikeLog/compare/v0.8.0...v0.9.0) (2026-10-13)
+
+
+### 新功能
+
+* **deploy:** 单机正式部署、GitHub Actions 发布与 14 天加密备份（ADR-012） ([196ec25](https://github.com/vvangz/JikeLog/commit/196ec25319495af928fa78917edf188daa144e2a))
+* **mobile:** 正式版只信任 Let's Encrypt 根证书（锁定 CA） ([a89c42b](https://github.com/vvangz/JikeLog/commit/a89c42b5e767e1f430967bb4c6a09e39e05fd139))
+* 短信未开通的模式与服务端功能开关 ([380e7ce](https://github.com/vvangz/JikeLog/commit/380e7ce0514081ec9b771e0d75b3764ad892dd2d))
+
+
+### 问题修复
+
+* **deploy:** 只能写入的 OSS AccessKey 上传备份时不做 HEAD 校验 ([40b55c0](https://github.com/vvangz/JikeLog/commit/40b55c03815f947bc3669acdb56000c1cdf21eaf))
+
+
+### 性能优化
+
+* **server:** 推送整批预读记录并以管道批量插入 ([4a230cd](https://github.com/vvangz/JikeLog/commit/4a230cd78e1f44c412e23aa4ee04c212f37e0865))
+
+
+### 文档
+
+* v0.9.0 开发日志（M8 上线准备） ([3b78b19](https://github.com/vvangz/JikeLog/commit/3b78b191693a4bf18a25c69848c09fdcd23af80d))
+* 记录一次性准备已完成，推送 500 条暂时接受现状 ([5e791eb](https://github.com/vvangz/JikeLog/commit/5e791ebe3cac16cac7681fcebe8be42aafe0589c))
+
 ## [0.8.0](https://github.com/vvangz/JikeLog/compare/v0.7.0...v0.8.0) (2026-10-11)
 
 
