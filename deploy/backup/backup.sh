@@ -87,8 +87,8 @@ if [ -n "${BACKUP_OSS_BUCKET:-}" ]; then
   export RCLONE_CONFIG_OSS_ACCESS_KEY_ID="${BACKUP_OSS_ACCESS_KEY_ID:-}"
   export RCLONE_CONFIG_OSS_SECRET_ACCESS_KEY="${BACKUP_OSS_ACCESS_KEY_SECRET:-}"
   log "上传到 OSS：${BACKUP_OSS_BUCKET}"
-  # 只需要写入权限：不检查存储桶与目标文件是否存在
-  rclone copyto "$DIR/$name" "oss:${BACKUP_OSS_BUCKET}/$name" --s3-no-check-bucket --no-check-dest --quiet ||
+  # 只需要写入权限：不检查存储桶与目标文件是否存在，上传后也不 HEAD 校验（HEAD 需要读取权限，会 403）
+  rclone copyto "$DIR/$name" "oss:${BACKUP_OSS_BUCKET}/$name" --s3-no-check-bucket --no-check-dest --s3-no-head --quiet ||
     fail "上传 OSS 失败（本地备份已保留：$name）"
   if [ "${BACKUP_OSS_PRUNE:-false}" = true ]; then
     rclone lsf "oss:${BACKUP_OSS_BUCKET}/" --include 'jikelog-*.tar.age' | sort -r | tail -n +$((KEEP + 1)) | while read -r old; do
