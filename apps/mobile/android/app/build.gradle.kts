@@ -6,14 +6,15 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// 正式签名：keystore 与 key.properties 不入库。CI 发布时由 Secrets 写入 android/key.properties
-// （或用环境变量 JIKELOG_KEY_PROPERTIES 指定路径）；没有时 release 构建用调试签名，便于本机 flutter run --release。
-// 发布工作流会核对 APK 的签名证书指纹，不会把调试签名的 APK 发布出去。
+// 本机构建正式签名的 APK：keystore 与 key.properties 不入库，放在 android/key.properties，
+// 或用环境变量 JIKELOG_KEY_PROPERTIES 指定路径（storeFile 相对于该文件）。没有时 release 构建用调试签名，
+// 便于本机 flutter run --release。CI 发布时不用这里：构建任务没有密钥，另一个任务用 apksigner 换成正式签名。
 val keyProperties = Properties().apply {
     val file = System.getenv("JIKELOG_KEY_PROPERTIES")?.let(::File) ?: rootProject.file("key.properties")
     if (file.isFile) {
         file.inputStream().use(::load)
-        setProperty("storeFile", file.parentFile.resolve(getProperty("storeFile")).path)
+        val storeFile = getProperty("storeFile") ?: throw GradleException("$file 中缺少 storeFile")
+        setProperty("storeFile", file.absoluteFile.parentFile.resolve(storeFile).path)
     }
 }
 

@@ -7,13 +7,12 @@
 ## 1. 流程
 
 1. 合并 Release Please 的发布 PR 后，`release-please.yml` 打上 `v<版本>` 标签并创建 Release。
-2. 随后调用 `release-apk.yml`（与部署并行）：
-   1. 检出该版本的标签，下载字体，构建 `flutter build apk --release`；
-   2. 核对 APK 的签名证书指纹与仓库变量 `APK_CERT_SHA256` 一致，不一致就不发布（防止误发调试签名的包）；
-   3. 把 `jikelog-<版本>.apk` 和 `jikelog-<版本>.apk.sha256` 上传到 Release。
+2. 随后调用 `release-apk.yml`（与部署并行），分两个任务，签名密钥不与仓库代码同处一台机器：
+   1. **构建**（没有密钥、只读权限）：检出该版本的标签，确认标签指向的提交在 `main` 上，构建 `flutter build apk --release`（Gradle 用调试密钥签名），作为产物交给下一步；
+   2. **签名并上传**（`apk-signing` 环境）：不检出仓库代码，只用 `apksigner` 把签名换成正式密钥，核对签名证书指纹与仓库变量 `APK_CERT_SHA256` 一致后，把 `jikelog-<版本>.apk` 和 `jikelog-<版本>.apk.sha256` 上传到 Release。
 3. 用户从 Release 页面下载安装，新版本直接覆盖安装。
 
-`versionCode` 由版本号推出：`1.2.3` → `10203`，保证每次升级递增。
+`versionCode` 由版本号推出：`1.2.3` → `10203`，保证每次升级递增。因此只为正式版本（不带 `-rc` 等后缀）构建 APK，次版本号与修订号不超过 99。
 
 ## 2. 签名密钥
 
@@ -31,11 +30,11 @@
 | 密码 | 在同目录的 `key.properties` 中（storePassword 与 keyPassword 相同） |
 | 证书 SHA-256 | `0B:34:89:42:D7:97:4D:35:59:70:41:64:86:4F:73:C3:2C:8C:0E:93:BD:BA:C8:E3:83:44:58:0B:95:BE:EE:73` |
 
-备份方法：把 `jikelog-release.jks` 和 `key.properties` 两个文件一起存进密码管理器（作为附件）或加密 U 盘，至少两处。
+备份方法：把 `jikelog-release.jks` 和 `key.properties` 两个文件一起存进密码管理器（作为附件）或加密 U 盘，至少两处。上传到 GitHub、完成备份后，删除电脑上其他位置的明文副本（如下载目录）。
 
 ## 3. GitHub 配置
 
-**环境 `apk-signing`**（Settings → Environments）：只允许 `main` 分支与 `v*` 标签。Secrets 用命令从文件设置，不要从终端复制粘贴（Windows 换行符会让密钥无法读取）：
+**环境 `apk-signing`**（Settings → Environments）：只允许 `main` 分支（不要加 `v*` 标签：从标签运行时，工作流文件取自标签，能推送标签的人就能改写它）。Secrets 用命令从文件设置，不要从终端复制粘贴（Windows 换行符会让密钥无法读取）：
 
 ```bash
 cd <keystore 所在目录>

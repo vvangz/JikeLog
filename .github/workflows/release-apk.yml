@@ -1,15 +1,19 @@
 name: 发布 APK
 
 # 构建正式签名的 Android APK 并附到 GitHub Release（docs/部署运维/发布APK.md）。
-# Release Please 发布新版本后由 release-please.yml 调用；也可以在 Actions 页面手动运行，为已发布的版本重新构建。
+# Release Please 发布新版本后由 release-please.yml 调用；也可以在 Actions 页面从 main 手动运行，为已发布的版本重新构建。
 #
-# 需要在仓库的 apk-signing 环境中配置（只放在环境中，环境只允许 main 分支与 v* 标签）：
+# 分两个任务，签名密钥不与仓库代码同处一台机器：
+#   build  无密钥、只读权限：确认标签在 main 上，构建 APK（Gradle 用调试密钥签名），作为产物传给下一步。
+#   sign   apk-signing 环境（只允许 main）：不检出仓库代码，只用 apksigner 换成正式签名、核对证书指纹，再上传到 Release。
+#
+# apk-signing 环境中的 Secrets：
 #   ANDROID_KEYSTORE_BASE64   keystore 文件的 base64
-#   ANDROID_KEY_PROPERTIES    key.properties 的内容（storeFile=jikelog-release.jks、密码与别名）
-# 以及仓库变量（Settings → Variables，不是机密）：
+#   ANDROID_KEY_PROPERTIES    key.properties 的内容（storePassword、keyAlias、keyPassword）
+# 仓库变量（Settings → Variables，不是机密）：
 #   APP_API_BASE              正式服务器地址，如 https://www.pingvv.top
 #   APP_E2E_PUBLIC_KEY        传输加密公钥（服务器上 init-env.sh 的输出）
-#   APK_CERT_SHA256           签名证书的 SHA-256 指纹：核对 APK 确实用正式密钥签名，而不是调试密钥
+#   APK_CERT_SHA256           签名证书的 SHA-256 指纹，核对 APK 确实用正式密钥签名
 on:
   workflow_dispatch:
     inputs:
@@ -23,7 +27,7 @@ on:
         type: string
 
 permissions:
-  contents: write # 上传到 Release
+  contents: read
 
 concurrency:
   group: release-apk-${{ inputs.version }}
@@ -33,25 +37,30 @@ env:
   FLUTTER_VERSION: 3.47.6
   # pubspec.lock 记录的是国内镜像地址；锁文件含每个包的 sha256，--enforce-lockfile 会逐一校验
   PUB_HOSTED_URL: https://pub.flutter-io.cn
+  # 输入只经环境变量传给脚本，不直接拼进命令（防止注入）
+  VERSION: ${{ inputs.version }}
 
 jobs:
-  apk:
-    name: 构建签名 APK
+  build:
+    name: 构建 APK（无密钥）
     runs-on: ubuntu-latest
-    environment: apk-signing
-    env:
-      # 输入只经环境变量传给脚本，不直接拼进命令（防止注入）
-      VERSION: ${{ inputs.version }}
-      SEMVER: '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
     steps:
       - name: 校验版本
         run: |
-          [[ "$VERSION" =~ $SEMVER ]] || { echo "::error::版本号不合法：$VERSION"; exit 1; }
+          # 只发布正式版本；versionCode = 主*10000 + 次*100 + 修订，次版本与修订号不超过 99
+          [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]] ||
+            { echo "::error::版本号不合法或不是正式版本：$VERSION"; exit 1; }
 
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
           ref: v${{ inputs.version }}
+          fetch-depth: 0
+
+      - name: 确认标签在 main 上
+        run: |
+          git merge-base --is-ancestor HEAD origin/main ||
+            { echo "::error::标签 v$VERSION 指向的提交不在 main 上，不发布"; exit 1; }
 
       - uses: actions/cache@v6
         with:
@@ -71,7 +80,43 @@ jobs:
       - run: flutter pub get --enforce-lockfile
         working-directory: apps/mobile
 
-      - name: 写入签名配置
+      - name: 构建
+        working-directory: apps/mobile
+        env:
+          API_BASE: ${{ vars.APP_API_BASE }}
+          E2E_PUBLIC_KEY: ${{ vars.APP_E2E_PUBLIC_KEY }}
+        run: |
+          [[ "$API_BASE" == https://* ]] || { echo "::error::仓库变量 APP_API_BASE 须为 https 地址"; exit 1; }
+          [ -n "$E2E_PUBLIC_KEY" ] || { echo "::error::缺少仓库变量 APP_E2E_PUBLIC_KEY"; exit 1; }
+          IFS=. read -r major minor patch <<<"$VERSION"
+          flutter build apk --release --build-number=$((major * 10000 + minor * 100 + patch)) \
+            --dart-define=JIKELOG_API_BASE="$API_BASE" --dart-define=JIKELOG_E2E_PUBLIC_KEY="$E2E_PUBLIC_KEY"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: apk-unsigned
+          path: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 1
+          if-no-files-found: error
+
+  sign:
+    name: 签名并上传
+    needs: build
+    runs-on: ubuntu-latest
+    environment: apk-signing
+    permissions:
+      contents: write # 上传到 Release
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: apk-unsigned
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: 正式签名
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
@@ -82,30 +127,24 @@ jobs:
           fi
           dir="$RUNNER_TEMP/signing"
           (umask 077 && mkdir -p "$dir" &&
-            printf '%s' "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$dir/jikelog-release.jks" &&
-            printf '%s\n' "$KEY_PROPERTIES" | tr -d '\r' > "$dir/key.properties")
-          echo "JIKELOG_KEY_PROPERTIES=$dir/key.properties" >> "$GITHUB_ENV"
-
-      - name: 构建
-        working-directory: apps/mobile
-        env:
-          API_BASE: ${{ vars.APP_API_BASE }}
-          E2E_PUBLIC_KEY: ${{ vars.APP_E2E_PUBLIC_KEY }}
-        run: |
-          [[ "$API_BASE" == https://* ]] || { echo "::error::仓库变量 APP_API_BASE 须为 https 地址"; exit 1; }
-          [ -n "$E2E_PUBLIC_KEY" ] || { echo "::error::缺少仓库变量 APP_E2E_PUBLIC_KEY"; exit 1; }
-          # versionCode 由版本号推出（1.2.3 → 10203），保证升级时递增
-          IFS=. read -r major minor patch <<<"${VERSION%%-*}"
-          flutter build apk --release --build-number=$((major * 10000 + minor * 100 + patch)) \
-            --dart-define=JIKELOG_API_BASE="$API_BASE" --dart-define=JIKELOG_E2E_PUBLIC_KEY="$E2E_PUBLIC_KEY"
+            printf '%s' "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$dir/release.jks")
+          prop() { printf '%s\n' "$KEY_PROPERTIES" | tr -d '\r' | sed -n "s/^$1=//p" | head -1; }
+          export KS_PASS KEY_PASS
+          KS_PASS=$(prop storePassword) KEY_PASS=$(prop keyPassword) alias=$(prop keyAlias)
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          mkdir -p dist
+          # 替换 Gradle 用的调试签名；密码经环境变量传入，不出现在命令行中
+          "$apksigner" sign --ks "$dir/release.jks" --ks-pass env:KS_PASS --ks-key-alias "$alias" \
+            --key-pass env:KEY_PASS --out "dist/jikelog-$VERSION.apk" app-release.apk
+          rm -rf "$dir"
 
       - name: 核对签名证书
         env:
           EXPECTED: ${{ vars.APK_CERT_SHA256 }}
         run: |
-          apk=apps/mobile/build/app/outputs/flutter-apk/app-release.apk
           apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
-          actual=$("$apksigner" verify --print-certs "$apk" | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
+          certs=$("$apksigner" verify --print-certs "dist/jikelog-$VERSION.apk")
+          actual=$(printf '%s\n' "$certs" | sed -n 's/.*certificate SHA-256 digest: //p')
           expected=$(printf '%s' "$EXPECTED" | tr -d ': ' | tr 'A-F' 'a-f')
           if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
             echo "::error::APK 的签名证书（${actual:-无}）与仓库变量 APK_CERT_SHA256 不符，不发布"
@@ -117,8 +156,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p dist
-          cp apps/mobile/build/app/outputs/flutter-apk/app-release.apk "dist/jikelog-$VERSION.apk"
           (cd dist && sha256sum "jikelog-$VERSION.apk" > "jikelog-$VERSION.apk.sha256")
           gh release upload "v$VERSION" dist/* --clobber --repo "$GITHUB_REPOSITORY"
 
