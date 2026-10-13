@@ -955,6 +955,14 @@ export interface components {
             buildTime: string;
             /** Format: date-time */
             serverTime: string;
+            features: components["schemas"]["SystemFeatures"];
+        };
+        /** @description 服务端已开通的功能，App 据此隐藏尚不可用的入口 */
+        SystemFeatures: {
+            /** @description 是否开通短信。为 false 时手机号登录、注册、绑定与找回密码都不可用（发送验证码返回 503 SMS_DISABLED） */
+            sms: boolean;
+            /** @description 是否开通服务端推送。为 false 时提醒只依赖设备本地闹钟 */
+            push: boolean;
         };
         SystemInfoEnvelope: components["schemas"]["EnvelopeBase"] & {
             data: components["schemas"]["SystemInfo"];

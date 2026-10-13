@@ -1,0 +1,134 @@
+name: 部署
+
+# 构建并部署到正式服务器（ADR-012）：Release Please 发布新版本后由 release-please.yml 调用，
+# 也可以在 Actions 页面手动运行（例如重新部署某个版本）。
+# 服务器无法访问 Docker Hub，镜像在这里构建后导出为压缩包，经 SSH 上传。
+#
+# 需要在仓库的 production 环境中配置（只放在环境中，不要放在仓库级 Secrets）：
+#   DEPLOY_HOST          服务器地址（如 39.96.207.220）
+#   DEPLOY_SSH_KEY       部署专用的 SSH 私钥（对应公钥在服务器 root 的 authorized_keys 中）
+#   DEPLOY_KNOWN_HOSTS   服务器的主机公钥（ssh-keyscan 的输出），防止中间人
+# 并在环境中限制只允许 main 分支与 v* 标签部署、要求审批（docs/部署运维/生产部署.md 第 1.4 节）。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 要部署的版本（如 0.9.0），留空则取 version.txt
+        required: false
+  # 被调用时不接收 Secrets：部署用的 Secrets 按 production 环境读取
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: 构建并部署
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      # 输入只经环境变量传给脚本，不直接拼进命令（防止注入）
+      INPUT_VERSION: ${{ inputs.version }}
+      SEMVER: '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+    steps:
+      - name: 校验版本
+        run: |
+          if [ -n "$INPUT_VERSION" ] && ! [[ "$INPUT_VERSION" =~ $SEMVER ]]; then
+            echo "::error::版本号不合法：$INPUT_VERSION"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.version && format('v{0}', inputs.version) || github.ref }}
+
+      - name: 确定版本
+        run: |
+          v="$INPUT_VERSION"
+          [ -n "$v" ] || v=$(cat version.txt)
+          [[ "$v" =~ $SEMVER ]] || { echo "::error::版本号不合法：$v"; exit 1; }
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+          echo "部署版本 $v"
+
+      - name: 构建 API 镜像
+        working-directory: server
+        run: |
+          docker build --build-arg COMMIT="$(git rev-parse --short HEAD)" \
+            --build-arg BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t "jikelog-api:$VERSION" .
+          mkdir -p ../dist
+          docker save "jikelog-api:$VERSION" | gzip > ../dist/api.tar.gz
+
+      - name: 构建备份镜像
+        run: |
+          docker build -t "jikelog-backup:$VERSION" deploy/backup
+          docker save "jikelog-backup:$VERSION" | gzip > dist/backup.tar.gz
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 构建管理后台（部署在 /admin/ 下）
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @jikelog/admin-web exec tsc --noEmit
+          pnpm --filter @jikelog/admin-web exec vite build --base /admin/
+          tar -czf dist/admin.tar.gz -C apps/admin-web/dist .
+
+      - name: 打包部署配置
+        run: tar -czf dist/config.tar.gz -C deploy/production compose.yml caddy scripts
+
+      - name: 检查部署配置
+        id: check
+        run: |
+          if [ -z "$DEPLOY_HOST" ]; then
+            echo "::warning::尚未配置 DEPLOY_HOST 等部署密钥，只构建、不部署"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 上传并部署
+        if: steps.check.outputs.ready == 'true'
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh_run() { ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "root@$DEPLOY_HOST" "$@"; }
+          # 服务器无法访问 Docker Hub：把它缺少的第三方镜像（首次部署、升级了基础镜像）一并上传
+          missing=()
+          for img in $(grep -oE '^\s+image: [^$]+$' deploy/production/compose.yml | awk '{print $2}'); do
+            ssh_run docker image inspect "$img" >/dev/null 2>&1 || missing+=("$img")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "服务器缺少：${missing[*]}"
+            for img in "${missing[@]}"; do docker pull -q "$img"; done
+            docker save "${missing[@]}" | gzip > dist/base.tar.gz
+          fi
+          ssh_run mkdir -p "/root/jikelog/releases/$VERSION"
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes dist/*.tar.gz "root@$DEPLOY_HOST:/root/jikelog/releases/$VERSION/"
+          # 先解出部署脚本（首次部署时服务器上还没有）。版本已校验，只含数字、字母与 . -
+          ssh_run "cd /root/jikelog && tar -xzf releases/$VERSION/config.tar.gz scripts && bash scripts/deploy.sh $VERSION"
+
+      - name: 保留发布包
+        if: steps.check.outputs.ready != 'true'
+        uses: actions/upload-artifact@v5
+        with:
+          name: jikelog-${{ env.VERSION }}
+          path: dist/
+          retention-days: 7

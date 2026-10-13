@@ -1,0 +1,72 @@
+# 即刻日志正式环境的入口（ADR-012）：一个域名承载接口、管理后台与对象存储的预签名地址。
+{
+	email {$ACME_EMAIL}
+	# 只向 Let's Encrypt 申请证书：App 正式版只信任 Let's Encrypt 的根证书
+	cert_issuer acme
+}
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+
+	# 接口（含 WebSocket 实时通知）与健康检查
+	@api path /api/* /healthz /readyz
+	handle @api {
+		reverse_proxy api:8080
+	}
+
+	# 对象存储：附件与导出文件的预签名上传、下载。签名包含主机名，原样转发 Host
+	@objects {
+		path /{$STORAGE_BUCKET}/*
+		method GET HEAD PUT
+	}
+	handle @objects {
+		request_body {
+			max_size 110MB
+		}
+		# 对象与管理后台同源：一律作为下载处理，即使上传时声明为 HTML 或 SVG，也不会在本域名下执行
+		header {
+			Content-Security-Policy "sandbox; default-src 'none'"
+			Content-Disposition attachment
+		}
+		reverse_proxy objectstore:9000
+	}
+
+	# 管理后台：单页应用，找不到的路径回到 index.html
+	handle_path /admin/* {
+		root * /srv/admin/current
+		header {
+			Content-Security-Policy "frame-ancestors 'none'"
+			X-Frame-Options DENY
+			Referrer-Policy no-referrer
+		}
+		# 带哈希的静态资源长期缓存，找不到时返回 404（不能回落到 index.html 后被长期缓存）
+		handle /assets/* {
+			header Cache-Control "public, max-age=31536000, immutable"
+			file_server
+		}
+		# 其余（index.html 与单页应用的路由）每次校验
+		handle {
+			header Cache-Control no-cache
+			try_files {path} /index.html
+			file_server
+		}
+	}
+
+	redir /admin /admin/ 308
+	redir / /admin/ 302
+
+	handle {
+		respond "Not Found" 404
+	}
+}
+
+# 不带 www 的域名跳转到正式地址
+{$SITE_DOMAIN_APEX} {
+	redir https://{$SITE_DOMAIN}{uri} 308
+}

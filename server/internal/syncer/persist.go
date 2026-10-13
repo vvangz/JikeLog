@@ -61,7 +61,14 @@ func (w *writer) write(ctx context.Context, e Entity, id uuid.UUID, exists bool,
 	}
 	w.seq++
 	device := w.p.DeviceID
-	if !exists {
+	switch {
+	case !exists && w.batch && e.Name != EntityMemo:
+		// 新记录排队，整批一起发送（备忘录随后要按记录写提醒，仍逐条插入）
+		w.pending = append(w.pending, pendingInsert{idx: w.cur, params: dbgen.InsertRecordBatchParams{
+			ID: id, UserID: w.p.UserID, Entity: e.Name, ServerSeq: w.seq,
+			Fields: fields, Clocks: clocks, Absorbed: absorbed, Deleted: out.Next.Deleted, DeviceID: &device,
+		}})
+	case !exists:
 		var n int64
 		n, err = w.q.InsertRecord(ctx, dbgen.InsertRecordParams{
 			ID: id, UserID: w.p.UserID, Entity: e.Name, ServerSeq: w.seq,
@@ -71,7 +78,7 @@ func (w *writer) write(ctx context.Context, e Entity, id uuid.UUID, exists bool,
 			w.seq-- // 未写入，序号不前进
 			return errIDTaken
 		}
-	} else {
+	default:
 		err = w.q.UpdateRecord(ctx, dbgen.UpdateRecordParams{
 			ID: id, ServerSeq: w.seq, Fields: fields, Clocks: clocks, Absorbed: absorbed,
 			Deleted: out.Next.Deleted, DeviceID: &device,

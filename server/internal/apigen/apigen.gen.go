@@ -1452,10 +1452,22 @@ type SyncRecord struct {
 	Version   int64                  `json:"version"`
 }
 
+// SystemFeatures 服务端已开通的功能，App 据此隐藏尚不可用的入口
+type SystemFeatures struct {
+	// Push 是否开通服务端推送。为 false 时提醒只依赖设备本地闹钟
+	Push bool `json:"push"`
+
+	// Sms 是否开通短信。为 false 时手机号登录、注册、绑定与找回密码都不可用（发送验证码返回 503 SMS_DISABLED）
+	Sms bool `json:"sms"`
+}
+
 // SystemInfo defines model for SystemInfo.
 type SystemInfo struct {
 	BuildTime string `json:"buildTime"`
 	Commit    string `json:"commit"`
+
+	// Features 服务端已开通的功能，App 据此隐藏尚不可用的入口
+	Features SystemFeatures `json:"features"`
 
 	// Name Example: jikelog-api
 	Name       string    `json:"name"`

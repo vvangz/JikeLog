@@ -20,7 +20,7 @@ var (
 	validEnvs         = []string{EnvDevelopment, EnvTest, EnvStaging, EnvProduction}
 	validLogLevels    = []string{"debug", "info", "warn", "error"}
 	validLogFormats   = []string{"json", "text"}
-	validSMSProviders = []string{SMSProviderMock, SMSProviderAliyun}
+	validSMSProviders = []string{SMSProviderMock, SMSProviderAliyun, SMSProviderDisabled}
 	validCaptchas     = []string{CaptchaProviderNone, CaptchaProviderAliyun}
 	validKMS          = []string{KMSProviderLocal, KMSProviderAliyun}
 	validPush         = []string{PushProviderLog, PushProviderJPush}
@@ -171,8 +171,9 @@ func (c Config) validateAuth() []error {
 	if !slices.Contains(validCaptchas, c.Captcha.Provider) {
 		errs = append(errs, fmt.Errorf("JIKELOG_CAPTCHA_PROVIDER=%q 不合法，可选 %v", c.Captcha.Provider, validCaptchas))
 	}
-	if c.IsDeployed() && c.Captcha.Provider == CaptchaProviderNone {
-		errs = append(errs, errors.New("staging / production 环境必须启用人机验证（JIKELOG_CAPTCHA_PROVIDER）"))
+	// 人机验证只用于发送短信前；短信未开通时不需要
+	if c.IsDeployed() && c.Captcha.Provider == CaptchaProviderNone && c.SMS.Provider != SMSProviderDisabled {
+		errs = append(errs, errors.New("staging / production 环境发送短信前必须启用人机验证（JIKELOG_CAPTCHA_PROVIDER）"))
 	}
 	return errs
 }

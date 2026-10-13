@@ -29,6 +29,14 @@ type Config struct {
 	ReadyCacheTTL time.Duration
 	Checks        []Checker
 	Now           func() time.Time
+	// Features 为服务端已开通的功能（系统信息中返回给 App）。
+	Features Features
+}
+
+// Features 为服务端已开通的可选功能。
+type Features struct {
+	SMS  bool
+	Push bool
 }
 
 // Handler 实现 system 标签下的接口。
@@ -102,6 +110,7 @@ func (h *Handler) GetSystemInfo(ctx context.Context, _ apigen.GetSystemInfoReque
 			Commit:     version.Commit,
 			BuildTime:  version.BuildTime,
 			ServerTime: h.cfg.Now().UTC(),
+			Features:   apigen.SystemFeatures{Sms: h.cfg.Features.SMS, Push: h.cfg.Features.Push},
 		},
 	}, nil
 }

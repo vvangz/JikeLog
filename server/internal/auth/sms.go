@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -54,6 +55,18 @@ var ErrSMSCodeInvalid = httpx.NewError(http.StatusBadRequest, CodeSMSCodeInvalid
 type SMSSender interface {
 	SendCode(ctx context.Context, phone, code string, purpose Purpose) error
 }
+
+// CodeSMSDisabled 表示服务端尚未开通短信。
+const CodeSMSDisabled = "SMS_DISABLED"
+
+// ErrSMSDisabled 为短信未开通时发送验证码的错误。
+var ErrSMSDisabled = httpx.NewError(http.StatusServiceUnavailable, CodeSMSDisabled, "短信功能暂未开放，请使用用户名和密码登录")
+
+// DisabledSender 用于尚未开通短信的环境：任何发送都返回 ErrSMSDisabled。
+type DisabledSender struct{}
+
+// SendCode 实现 SMSSender。
+func (DisabledSender) SendCode(context.Context, string, string, Purpose) error { return ErrSMSDisabled }
 
 // MockSender 不真正发送短信，只把验证码写入日志，并记住每个号码最近一次的验证码供测试读取。
 type MockSender struct {
@@ -156,6 +169,11 @@ func (s *SMSCodes) Send(ctx context.Context, p Purpose, phone string) error {
 		return fmt.Errorf("保存验证码失败: %w", err)
 	}
 	if err := s.sender.SendCode(ctx, phone, code, p); err != nil {
+		// 发送失败时释放冷却，允许用户立即重试
+		if errors.Is(err, ErrSMSDisabled) {
+			_ = s.rdb.Del(ctx, key, cooldownKey(phone)).Err()
+			return ErrSMSDisabled
+		}
 		s.logger.ErrorContext(ctx, "sms send failed", "phone", MaskPhone(phone), "purpose", string(p), "error", err)
 		// 发送失败时释放冷却，允许用户立即重试
 		_ = s.rdb.Del(ctx, key, cooldownKey(phone)).Err()

@@ -203,7 +203,11 @@ func newAdminService(o Options, tx db.TxRunner, limiter *ratelimit.Limiter) *adm
 }
 
 func newSystemHandler(o Options) *system.Handler {
-	return system.NewHandler(system.Config{Name: o.Name, Logger: o.Logger, Now: o.Now, Checks: []system.Checker{
+	features := system.Features{
+		SMS:  o.Config.SMS.Provider != config.SMSProviderDisabled,
+		Push: o.Config.Push.Provider == config.PushProviderJPush,
+	}
+	return system.NewHandler(system.Config{Name: o.Name, Logger: o.Logger, Now: o.Now, Features: features, Checks: []system.Checker{
 		system.NewCheck("postgres", o.Pool.Ping),
 		system.NewCheck("redis", func(ctx context.Context) error { return o.Redis.Ping(ctx).Err() }),
 	}})
@@ -238,8 +242,10 @@ func newSMSSender(cfg config.SMS, logger *slog.Logger) (auth.SMSSender, error) {
 	switch cfg.Provider {
 	case config.SMSProviderMock:
 		return &auth.MockSender{Logger: logger}, nil
+	case config.SMSProviderDisabled:
+		return auth.DisabledSender{}, nil
 	case config.SMSProviderAliyun:
-		return nil, errors.New("阿里云短信通道将在 v0.9.0 接入，当前版本请使用 JIKELOG_SMS_PROVIDER=mock")
+		return nil, errors.New("阿里云短信通道尚未接入，请使用 JIKELOG_SMS_PROVIDER=disabled（只开放用户名密码登录）或 mock（开发）")
 	default:
 		return nil, fmt.Errorf("未知短信通道 %q", cfg.Provider)
 	}

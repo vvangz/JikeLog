@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 正式构建：只允许 HTTPS，且只信任系统证书（不信任用户安装的证书）。
-     证书锁定（pin-set）在 v0.9.0 确定生产域名与证书后加入。 -->
+     接口等网络请求由 Dart 的 HttpClient 发出，不受本文件约束；正式版的证书锁定在 Dart 层实现（lib/core/net/tls.dart，ADR-012）。 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>

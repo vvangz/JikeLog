@@ -14,6 +14,9 @@ desktop.ini
 !.env.example
 *.pem
 *.key
+# App 证书锁定测试用的一次性证书（CA 私钥已删除，只能签发 localhost 证书，见目录中的 README）
+!apps/mobile/test/fixtures/tls/*.pem
+!apps/mobile/test/fixtures/tls/*.key
 *.p12
 *.jks
 *.keystore

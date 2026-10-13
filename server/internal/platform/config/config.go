@@ -22,6 +22,9 @@ const (
 	// SMSProviderMock 只把验证码写入日志，仅用于开发与测试，生产环境禁止使用。
 	SMSProviderMock   = "mock"
 	SMSProviderAliyun = "aliyun"
+	// SMSProviderDisabled 表示尚未开通短信：发送验证码的接口返回 503 SMS_DISABLED，
+	// App 据系统信息隐藏手机号相关功能，只能用用户名和密码登录。
+	SMSProviderDisabled = "disabled"
 )
 
 // 人机验证通道。
@@ -33,7 +36,8 @@ const (
 
 // KMS 通道。
 const (
-	// KMSProviderLocal 用环境变量中的主密钥包裹数据密钥，仅用于开发与测试。
+	// KMSProviderLocal 用环境变量中的主密钥包裹数据密钥。单机自托管的生产环境也使用它（ADR-012），
+	// 主密钥只存在服务器的 .env（权限 600）与离线备份中。
 	KMSProviderLocal  = "local"
 	KMSProviderAliyun = "aliyun"
 )

@@ -16,3 +16,7 @@ regexes = [
   '''hzHoYda9NBwh0f7KEN0UVflj0FcozpvvPh4esvLPnhM=''',
   '''v4jRZ7eVOKo/cCE83/e8RMzA3QKJmK4Dqj4hg52Fik4=''',
 ]
+
+[[allowlists]]
+description = "App 证书锁定测试用的一次性 localhost 证书与私钥（apps/mobile/test/fixtures/tls/README.md）"
+paths = ['''^apps/mobile/test/fixtures/tls/''']

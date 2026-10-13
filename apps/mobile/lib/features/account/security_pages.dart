@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/server_features.dart';
 import '../../app/providers.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/api/endpoints.dart';
@@ -57,7 +58,8 @@ class _ChangePasswordPageState extends ConsumerState<ChangePasswordPage>
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
-    final hasPhone = auth is SignedIn && auth.user.hasPhone;
+    // 已绑定手机号并且服务端开通了短信，才能用验证码验证身份
+    final hasPhone = auth is SignedIn && auth.user.hasPhone && smsEnabled(ref);
     return JkPage(
       title: '修改密码',
       children: [

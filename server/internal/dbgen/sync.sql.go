@@ -456,6 +456,36 @@ func (q *Queries) ListDeletedAttachments(ctx context.Context, maxRows int32) ([]
 	return items, nil
 }
 
+const listForeignRecordIDs = `-- name: ListForeignRecordIDs :many
+SELECT id FROM records WHERE id = ANY($1::uuid[]) AND user_id <> $2
+`
+
+type ListForeignRecordIDsParams struct {
+	Ids    []uuid.UUID
+	UserID uuid.UUID
+}
+
+// 一批 ID 中已被其他账号使用的。不加锁，只用于判断 ID 冲突。
+func (q *Queries) ListForeignRecordIDs(ctx context.Context, arg ListForeignRecordIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listForeignRecordIDs, arg.Ids, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMemoReminders = `-- name: ListMemoReminders :many
 SELECT offset_min, fire_at FROM memo_reminders WHERE memo_id = $1
 `
@@ -475,6 +505,49 @@ func (q *Queries) ListMemoReminders(ctx context.Context, memoID uuid.UUID) ([]Li
 	for rows.Next() {
 		var i ListMemoRemindersRow
 		if err := rows.Scan(&i.OffsetMin, &i.FireAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecordsForUpdate = `-- name: ListRecordsForUpdate :many
+SELECT id, user_id, entity, version, server_seq, fields, clocks, absorbed, deleted, device_id, created_at, updated_at FROM records WHERE user_id = $1 AND id = ANY($2::uuid[]) ORDER BY id FOR UPDATE
+`
+
+type ListRecordsForUpdateParams struct {
+	UserID uuid.UUID
+	Ids    []uuid.UUID
+}
+
+// 一次读取并锁定一批推送涉及的本账号记录。按 ID 顺序加锁；同一账号的推送已由同步游标串行，不会互相等待。
+func (q *Queries) ListRecordsForUpdate(ctx context.Context, arg ListRecordsForUpdateParams) ([]Record, error) {
+	rows, err := q.db.Query(ctx, listRecordsForUpdate, arg.UserID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Record{}
+	for rows.Next() {
+		var i Record
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Entity,
+			&i.Version,
+			&i.ServerSeq,
+			&i.Fields,
+			&i.Clocks,
+			&i.Absorbed,
+			&i.Deleted,
+			&i.DeviceID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

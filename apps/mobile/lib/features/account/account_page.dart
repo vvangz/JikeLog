@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/server_features.dart';
 import '../../app/providers.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
@@ -43,8 +44,15 @@ class AccountPage extends ConsumerWidget {
               key: const Key('account-phone'),
               leading: const Icon(Icons.phone_iphone_outlined),
               title: const Text('手机号'),
-              subtitle: Text(user.phoneMasked ?? '未绑定，绑定后可用验证码登录和找回密码'),
-              trailing: Text(user.hasPhone ? '换绑' : '绑定'),
+              subtitle: Text(
+                smsEnabled(ref)
+                    ? user.phoneMasked ?? '未绑定，绑定后可用验证码登录和找回密码'
+                    : '${user.phoneMasked ?? '未绑定'}（$smsUnavailableHint）',
+              ),
+              trailing: smsEnabled(ref)
+                  ? Text(user.hasPhone ? '换绑' : '绑定')
+                  : null,
+              enabled: smsEnabled(ref),
               onTap: () => context.push('/account/phone'),
             ),
             const Divider(height: 1),

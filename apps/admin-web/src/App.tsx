@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import { useState, type ReactNode } from 'react';
 import { BrowserRouter, MemoryRouter, Navigate, Route, Routes } from 'react-router';
 import { AppShell } from './app/AppShell';
+import { routerBase } from './app/routerBase';
 import { ApiError } from './api/errors';
 import { AuthProvider } from './auth/session';
 import { useAuth } from './auth/useAuth';
@@ -57,7 +58,7 @@ export default function App({ initialPath, fetch, baseUrl }: AppProps) {
             {initialPath ? (
               <MemoryRouter initialEntries={[initialPath]}>{routes}</MemoryRouter>
             ) : (
-              <BrowserRouter basename={import.meta.env.BASE_URL}>{routes}</BrowserRouter>
+              <BrowserRouter basename={routerBase(import.meta.env.BASE_URL)}>{routes}</BrowserRouter>
             )}
           </AuthProvider>
         </QueryClientProvider>

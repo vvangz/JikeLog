@@ -67,3 +67,11 @@ describe('其他', () => {
     expect(selectedKey('/unknown')).toBe('');
   });
 });
+
+describe('部署路径', () => {
+  it('路由基础路径去掉结尾斜杠', async () => {
+    const { routerBase } = await import('./app/routerBase');
+    expect(routerBase('/admin/')).toBe('/admin');
+    expect(routerBase('/')).toBe('/');
+  });
+});

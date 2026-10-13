@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vvangz/JikeLog/server/internal/e2e"
 )
@@ -264,6 +265,107 @@ func TestSyncIDCollisionAcrossAccounts(t *testing.T) {
 	}
 	if recs := a.pull(other, co, 0).records(); len(recs) != 0 {
 		t.Fatalf("其他账号不应拉到：%v", recs)
+	}
+}
+
+// 一批推送中混合已有记录、新记录、同一记录的连续两次修改与其他账号的 ID：
+// 服务端按批预读记录后，逐条结果与逐条处理时一致。
+func TestSyncBatchMixesExistingNewRepeatedAndForeignIDs(t *testing.T) {
+	a := newTestApp(t)
+	d1, d2 := a.twoDevices("syncer11")
+	other := a.register("syncer11b", "secret123", "install-c")
+	c1, c2, co := a.handshake(d1), a.handshake(d2), a.handshake(other)
+	existing, fresh, repeated, foreign := newID(), newID(), newID(), newID()
+	k0 := a.hlc(0, nodeA)
+	a.expect(a.push(d1, c1, c1.encode(worklogChange{id: existing, fields: map[string]any{"date": "2026-10-01", "content": "旧"},
+		clocks: map[string]string{"date": k0, "content": k0}})), http.StatusOK, "")
+	a.expect(a.push(other, co, co.encode(worklogChange{id: foreign, fields: map[string]any{"date": "2026-10-01"},
+		clocks: map[string]string{"date": k0}})), http.StatusOK, "")
+
+	k1, k2 := a.hlc(1, nodeA), a.hlc(2, nodeA)
+	r := a.push(d1, c1,
+		c1.encode(worklogChange{id: existing, fields: map[string]any{"content": "新"}, clocks: map[string]string{"content": k1},
+			baseClocks: map[string]string{"date": k0, "content": k0}}),
+		c1.encode(worklogChange{id: repeated, fields: map[string]any{"date": "2026-10-02", "content": "第一次"},
+			clocks: map[string]string{"date": k1, "content": k1}}),
+		c1.encode(worklogChange{id: foreign, fields: map[string]any{"date": "2026-10-03"}, clocks: map[string]string{"date": k1}}),
+		c1.encode(worklogChange{id: repeated, fields: map[string]any{"content": "第二次"}, clocks: map[string]string{"content": k2},
+			baseClocks: map[string]string{"date": k1, "content": k1}}),
+		c1.encode(worklogChange{id: fresh, fields: map[string]any{"date": "2026-10-04"}, clocks: map[string]string{"date": k1}}),
+	)
+	a.expect(r, http.StatusOK, "")
+	res := r.results()
+	want := []struct {
+		status  string
+		version int64
+		seq     int64
+	}{{"applied", 2, 2}, {"applied", 1, 3}, {"rejected", 0, 0}, {"applied", 2, 4}, {"applied", 1, 5}}
+	for i, w := range want {
+		if res[i]["status"] != w.status || num(res[i], "version") != w.version || num(res[i], "serverSeq") != w.seq {
+			t.Fatalf("第 %d 条：%v，期望 %+v", i, res[i], w)
+		}
+	}
+	if res[2]["error"].(map[string]any)["code"] != "ID_CONFLICT" || num(r.data(), "cursor") != 5 {
+		t.Fatalf("其他账号的 ID 应冲突，游标为 5：%v", r.data())
+	}
+
+	got := map[string]string{}
+	for _, rec := range a.pull(d2, c2, 0).records() {
+		id := rec["id"].(string)
+		if enc, ok := rec["fields"].(map[string]any)["content"].(string); ok {
+			got[id], _ = c2.open("worklog", id, "content", enc)
+		} else {
+			got[id] = ""
+		}
+	}
+	if len(got) != 3 || got[existing] != "新" || got[repeated] != "第二次" || got[fresh] != "" {
+		t.Fatalf("拉取结果：%v", got)
+	}
+}
+
+// 预读之后、批量插入之前，另一个账号抢先插入了同一 ID：这一条报告 ID 冲突，同批其他变更照常写入。
+func TestSyncBatchInsertLosesRaceToOtherAccount(t *testing.T) {
+	a := newTestApp(t)
+	d1, _ := a.twoDevices("syncer12")
+	a.register("syncer12b", "secret123", "install-c")
+	c1 := a.handshake(d1)
+	ctx := context.Background()
+	var otherID string
+	if err := a.pool.QueryRow(ctx, "SELECT id FROM users WHERE username = 'syncer12b'").Scan(&otherID); err != nil {
+		t.Fatal(err)
+	}
+	raced, ok := newID(), newID()
+
+	// 另一个账号的插入先不提交：推送的预读看不到它，批量插入时在唯一索引上等待，对方提交后得到冲突
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO records (id, user_id, entity, version, server_seq, fields, clocks, absorbed, deleted)
+		VALUES ($1, $2, 'worklog', 1, 1, '{}', '{}', '{}', false)`, raced, otherID); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		_ = tx.Commit(ctx)
+	}()
+
+	k := a.hlc(0, nodeA)
+	r := a.push(d1, c1,
+		c1.encode(worklogChange{id: raced, fields: map[string]any{"date": "2026-10-09"}, clocks: map[string]string{"date": k}}),
+		c1.encode(worklogChange{id: ok, fields: map[string]any{"date": "2026-10-10"}, clocks: map[string]string{"date": k}}),
+	)
+	a.expect(r, http.StatusOK, "")
+	res := r.results()
+	if res[0]["status"] != "rejected" || res[0]["error"].(map[string]any)["code"] != "ID_CONFLICT" {
+		t.Fatalf("抢先被占用的 ID 应冲突：%v", res[0])
+	}
+	if res[1]["status"] != "applied" {
+		t.Fatalf("同批其他变更应写入：%v", res[1])
+	}
+	var owner string
+	if err := a.pool.QueryRow(ctx, "SELECT user_id::text FROM records WHERE id = $1", raced).Scan(&owner); err != nil || owner != otherID {
+		t.Fatalf("记录仍属于抢先插入的账号：%s err=%v", owner, err)
 	}
 }
 

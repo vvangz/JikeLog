@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../app/providers.dart';
 import '../../core/sync/sync_engine.dart';
 import '../../core/sync/sync_providers.dart';
 import 'attachment_service.dart';
@@ -20,6 +21,7 @@ final attachmentServiceProvider = Provider<AttachmentService>((ref) {
     store: ref.watch(recordStoreProvider),
     engine: ref.watch(syncEngineProvider),
     baseDir: ref.watch(attachmentDirProvider),
+    storageDio: ref.watch(tlsPolicyProvider).dio(),
   );
   // 每次同步完成后重试待上传的附件（所属日志可能刚同步到服务端）
   ref.listen(syncStatusProvider, (_, next) {

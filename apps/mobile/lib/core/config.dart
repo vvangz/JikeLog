@@ -18,6 +18,14 @@ abstract final class AppConfig {
   /// 开发示例公钥，对应 deploy/.env.example 中的 JIKELOG_E2E_PRIVATE_KEY。
   static const devE2EPublicKey = 'hzHoYda9NBwh0f7KEN0UVflj0FcozpvvPh4esvLPnhM=';
 
+  /// 正式版连接 HTTPS 服务器时只信任 Let's Encrypt 的根证书（ADR-012）。
+  /// 服务器改用其他证书颁发机构前，需先发布用 `--dart-define=JIKELOG_PIN_CA=false`
+  /// 构建（或内置了新根证书）的版本。
+  static const pinCa = bool.fromEnvironment(
+    'JIKELOG_PIN_CA',
+    defaultValue: true,
+  );
+
   /// 本地联调时允许 profile 构建使用开发示例公钥（`--dart-define=JIKELOG_ALLOW_DEV_E2E_KEY=true`）。
   /// 对正式（release）构建无效。
   static const allowDevE2EKey = bool.fromEnvironment(

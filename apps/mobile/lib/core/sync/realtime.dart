@@ -7,6 +7,7 @@ import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../api/api_client.dart';
+import '../net/tls.dart';
 
 /// 建立 WebSocket 连接（测试中替换）。
 typedef ChannelFactory = WebSocketChannel Function(
@@ -30,9 +31,9 @@ class RealtimeClient implements RealtimeLink {
     required this.onChange,
     this.onRevoked,
     this.deviceId,
-    ChannelFactory? connect,
+    required this.connect,
     this.maxBackoff = const Duration(seconds: 60),
-  }) : _connect = connect ?? _defaultConnect;
+  });
 
   final ApiClient client;
 
@@ -42,7 +43,9 @@ class RealtimeClient implements RealtimeLink {
 
   /// 本设备 ID：忽略自己产生的通知。
   final String? Function()? deviceId;
-  final ChannelFactory _connect;
+
+  /// 建立 WebSocket 连接；生产中为 [ioConnect]（按 tlsPolicyProvider 的信任策略），测试中替换。
+  final ChannelFactory connect;
   final Duration maxBackoff;
 
   static const closeRevoked = 4401;
@@ -58,14 +61,14 @@ class RealtimeClient implements RealtimeLink {
 
   bool get connected => _channel != null && _sub != null;
 
-  static WebSocketChannel _defaultConnect(
-    Uri uri,
-    Map<String, String> headers,
-  ) => IOWebSocketChannel.connect(
-    uri,
-    headers: headers,
-    pingInterval: const Duration(seconds: 30),
-  );
+  /// 按 [tls] 的信任策略建立连接。
+  static ChannelFactory ioConnect(TlsPolicy tls) =>
+      (uri, headers) => IOWebSocketChannel.connect(
+        uri,
+        headers: headers,
+        pingInterval: const Duration(seconds: 30),
+        customClient: tls.webSocketClient,
+      );
 
   /// WebSocket 地址：与 API 同源，http → ws，https → wss。
   static Uri wsUri(String baseUrl) {
@@ -106,7 +109,7 @@ class RealtimeClient implements RealtimeLink {
     final token = client.accessToken;
     if (!_running || generation != _generation) return;
     if (token == null) return _scheduleRetry();
-    final ch = _connect(wsUri(client.baseUrl), {
+    final ch = connect(wsUri(client.baseUrl), {
       'Authorization': 'Bearer $token',
     });
     try {
