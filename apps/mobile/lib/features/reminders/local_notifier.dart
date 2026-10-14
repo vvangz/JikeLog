@@ -203,10 +203,19 @@ class PluginLocalNotifier implements LocalNotifier {
   }
 
   @override
-  Future<Map<int, String?>> pending() async => {
-    for (final p in await _plugin.pendingNotificationRequests())
-      p.id: p.payload,
-  };
+  Future<Map<int, String?>> pending() async {
+    try {
+      return {
+        for (final p in await _plugin.pendingNotificationRequests())
+          p.id: p.payload,
+      };
+    } on Object catch (e) {
+      // Windows 未打包运行（flutter run）时没有包标识，读取待发列表可能失败：按"没有待发"处理
+      if (_windows == null) rethrow;
+      debugPrint('读取待发通知失败: $e');
+      return {};
+    }
+  }
 
   @override
   Future<void> schedule(PlannedAlarm alarm, {required bool exact}) async {
@@ -231,7 +240,14 @@ class PluginLocalNotifier implements LocalNotifier {
   }
 
   @override
-  Future<void> cancel(int id) => _plugin.cancel(id: id);
+  Future<void> cancel(int id) async {
+    try {
+      await _plugin.cancel(id: id);
+    } on Object catch (e) {
+      if (_windows == null) rethrow;
+      debugPrint('取消通知失败: $e');
+    }
+  }
 
   @override
   // Windows 未实现"只取消待发通知"，改为取消全部（含已显示的）

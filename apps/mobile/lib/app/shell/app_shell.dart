@@ -35,10 +35,18 @@ ShellLayout layoutFor(double width) {
 
 /// 应用外壳：左上角入口图标 + 左侧导航栏 + 内容区。
 class AppShell extends ConsumerStatefulWidget {
-  const AppShell({super.key, required this.location, required this.child});
+  const AppShell({
+    super.key,
+    required this.location,
+    required this.child,
+    this.navigator,
+  });
 
   final String location;
   final Widget child;
+
+  /// 外壳内的导航器（底部面板等弹在这里）。
+  final GlobalKey<NavigatorState>? navigator;
 
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
@@ -72,6 +80,7 @@ class _AppShellState extends ConsumerState<AppShell>
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
+    _creating?.cancel();
     _reveal.dispose();
     super.dispose();
   }
@@ -114,10 +123,17 @@ class _AppShellState extends ConsumerState<AppShell>
   /// 键盘快捷键（桌面端与外接键盘）：Ctrl+F 搜索，Ctrl+N 在当前模块中新建。
   /// 子页面或对话框在上层时不处理。
   bool _onKey(KeyEvent e) {
-    if (e is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
+    final keys = HardwareKeyboard.instance;
+    // Windows 上 AltGr 会同时报告 Ctrl+Alt：排除，避免吞掉 AltGr 组合输入的字符
+    if (e is! KeyDownEvent ||
+        !keys.isControlPressed ||
+        keys.isAltPressed ||
+        keys.isMetaPressed) {
       return false;
     }
     if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return false;
+    // 模块页上打开了底部面板等（弹在外壳内的导航器上）
+    if (widget.navigator?.currentState?.canPop() ?? false) return false;
     if (e.logicalKey == LogicalKeyboardKey.keyF) {
       _search();
       return true;
@@ -126,10 +142,14 @@ class _AppShellState extends ConsumerState<AppShell>
     return false;
   }
 
+  /// 刚按过 Ctrl+N：新建是异步的，页面打开前再按不重复新建（1 秒后恢复）。
+  Timer? _creating;
+
   bool _createInModule() {
     final module = destinationFor(widget.location)?.path;
     // 只在模块首页处理（如笔记的文件夹面板等仍在模块页内）
     if (module == null || widget.location != module) return false;
+    if (_creating?.isActive ?? false) return true;
     _closeOverlay();
     switch (module) {
       case '/worklog':
@@ -143,6 +163,7 @@ class _AppShellState extends ConsumerState<AppShell>
       default:
         return false;
     }
+    _creating = Timer(const Duration(seconds: 1), () {});
     return true;
   }
 

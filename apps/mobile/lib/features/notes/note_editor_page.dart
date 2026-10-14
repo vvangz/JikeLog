@@ -93,7 +93,7 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage>
       },
     );
     // 没有富文本编辑器的平台（Windows）一律用 Markdown 打开，不改笔记保存的格式
-    _openEditor(_richAvailable ? n.format : NoteFormat.markdown);
+    _openEditor(editorFormatFor(n.format, ref.read(platformFeaturesProvider)));
     _loaded = true;
     // 新建的笔记直接开始输入
     if (n.title.isEmpty && n.body.isEmpty) {
@@ -106,8 +106,6 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage>
   // ---- 正文编辑器 ----
 
   /// 以 BodySync 中的最新内容打开编辑器。
-  bool get _richAvailable => ref.read(platformFeaturesProvider).richTextEditor;
-
   void _openEditor(NoteFormat format) {
     _format = format;
     final sync = _body!;
@@ -473,7 +471,7 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage>
   }
 
   List<Widget> _actions(Note n) => [
-    if (_richAvailable)
+    if (ref.watch(platformFeaturesProvider.select((f) => f.richTextEditor)))
       IconButton(
         key: const Key('note-format'),
         tooltip: _format == NoteFormat.markdown ? '切换到富文本' : '切换到 Markdown',

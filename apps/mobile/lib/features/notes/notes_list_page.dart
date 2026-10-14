@@ -17,16 +17,13 @@ import 'note_repository.dart';
 /// 页面宽度达到此值时筛选面板常驻左侧。
 const _panelBreakpoint = 720.0;
 
-/// 笔记主界面：按文件夹、标签、收藏筛选的笔记列表。
 /// 新建笔记并打开（列表页按钮与桌面端 Ctrl+N）：在当前文件夹或标签下，默认富文本格式（没有富文本编辑器的平台用 Markdown）。
 Future<void> createNote(BuildContext context, WidgetRef ref) async {
   final filter = ref.read(noteFilterProvider);
   final id = await ref
       .read(noteRepositoryProvider)
       .create(
-        format: ref.read(platformFeaturesProvider).richTextEditor
-            ? NoteFormat.rich
-            : NoteFormat.markdown,
+        format: newNoteFormat(ref.read(platformFeaturesProvider)),
         folderId: filter is FolderNotes ? filter.folderId : null,
         tag: filter is TagNotes ? filter.tag : null,
         favorite: filter is FavoriteNotes,
@@ -34,6 +31,7 @@ Future<void> createNote(BuildContext context, WidgetRef ref) async {
   if (context.mounted) await context.push('/notes/$id');
 }
 
+/// 笔记主界面：按文件夹、标签、收藏筛选的笔记列表。
 class NotesListPage extends ConsumerWidget {
   const NotesListPage({super.key});
 

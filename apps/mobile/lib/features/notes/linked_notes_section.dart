@@ -44,9 +44,7 @@ class LinkedNotesSection extends ConsumerWidget {
     final id = await ref
         .read(noteRepositoryProvider)
         .create(
-          format: ref.read(platformFeaturesProvider).richTextEditor
-              ? NoteFormat.rich
-              : NoteFormat.markdown,
+          format: newNoteFormat(ref.read(platformFeaturesProvider)),
           worklogId: worklogId,
         );
     if (context.mounted) await context.push('/notes/$id');

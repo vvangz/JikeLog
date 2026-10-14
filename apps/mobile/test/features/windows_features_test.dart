@@ -128,4 +128,31 @@ void main() {
     await ctrl(tester, LogicalKeyboardKey.keyF);
     expect(router.state.matchedLocation, '/search');
   });
+
+  testWidgets('快捷键：底部面板打开时不新建；Ctrl+Alt（AltGr）不处理', (tester) async {
+    await pumpApp(
+      tester,
+      syncServer: FakeSyncServer(),
+      features: PlatformFeatures.windows,
+    );
+    await _go(tester, '/notes');
+    await tapAndSettle(tester, find.byKey(const Key('note-filter-open')));
+    await ctrl(tester, LogicalKeyboardKey.keyN);
+    final router = _c(tester).read(routerProvider);
+    expect(router.state.matchedLocation, '/notes');
+
+    // 关闭底部面板
+    Navigator.of(tester.element(find.byType(BottomSheet))).pop();
+    await settleApp(tester);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altRight);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await settleApp(tester);
+    expect(router.state.matchedLocation, '/notes');
+
+    await ctrl(tester, LogicalKeyboardKey.keyN);
+    expect(router.state.matchedLocation, startsWith('/notes/'));
+  });
 }

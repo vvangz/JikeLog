@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -95,6 +96,11 @@ class _ExportPageState extends ConsumerState<ExportPage> {
       _toastError(e);
       // 可能已过期：刷新状态
       if (mounted) ref.invalidate(exportsProvider);
+    } on FileSystemException catch (e) {
+      debugPrint('保存导出文件失败: $e');
+      if (mounted) {
+        showJkToast(context, '无法写入所选文件夹，请换一个位置', kind: JkToastKind.error);
+      }
     } on Object catch (e) {
       debugPrint('下载导出文件失败: $e');
       if (mounted) {

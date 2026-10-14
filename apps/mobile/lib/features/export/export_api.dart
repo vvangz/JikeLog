@@ -217,14 +217,19 @@ class SaveExportFiles implements ExportFiles {
     _checkUrl(url);
     final folder = await _pickFolder();
     if (folder == null) return null;
-    final target = availablePath(folder, fileName);
+    // 文件名只取最后一段，不能借路径写到所选文件夹之外
+    final target = availablePath(folder, p.basename(fileName));
     // 先下载到临时文件名，完成后再改名：中途失败不会留下不完整的 zip
     final part = File('$target.part');
     try {
       await _dio.download(url, part.path);
       await part.rename(target);
     } on Object {
-      if (await part.exists()) await part.delete();
+      try {
+        if (await part.exists()) await part.delete();
+      } on FileSystemException catch (e) {
+        debugPrint('删除不完整的导出文件失败: $e');
+      }
       rethrow;
     }
     return target;

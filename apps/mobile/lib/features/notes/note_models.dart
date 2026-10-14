@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../core/sync/record_store.dart';
 import '../../core/sync/refs.dart';
 import '../../shared/text/markdown_text.dart';
+import '../../core/platform/platform_features.dart';
 
 /// 笔记格式：两种格式的正文都是 Markdown，只决定默认的编辑方式（ADR-007）。
 enum NoteFormat {
@@ -11,6 +12,14 @@ enum NoteFormat {
 
   static NoteFormat parse(Object? v) => v == 'rich' ? rich : markdown;
 }
+
+/// 当前平台上新建笔记的格式：没有富文本编辑器的平台（Windows）用 Markdown（ADR-013）。
+NoteFormat newNoteFormat(PlatformFeatures f) =>
+    f.richTextEditor ? NoteFormat.rich : NoteFormat.markdown;
+
+/// 打开笔记时使用的编辑方式：没有富文本编辑器时一律用 Markdown，不改笔记保存的格式。
+NoteFormat editorFormatFor(NoteFormat stored, PlatformFeatures f) =>
+    f.richTextEditor ? stored : NoteFormat.markdown;
 
 /// 一篇笔记。
 @immutable

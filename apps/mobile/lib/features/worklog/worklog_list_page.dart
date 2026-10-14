@@ -13,13 +13,13 @@ import 'worklog_repository.dart';
 
 const _weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
-/// 工作日志主界面：按月分组的日志列表。
 /// 新建一篇工作日志并打开（列表页按钮与桌面端 Ctrl+N）。
 Future<void> createWorklog(BuildContext context, WidgetRef ref) async {
   final id = await ref.read(worklogRepositoryProvider).create();
   if (context.mounted) await context.push('/worklog/$id');
 }
 
+/// 工作日志主界面：按月分组的日志列表。
 class WorklogListPage extends ConsumerWidget {
   const WorklogListPage({super.key});
 

@@ -36,11 +36,17 @@ class PlatformFeatures {
 
   /// 运行平台对应的功能集。`flutter test` 中固定为 Android，
   /// 使本机（Windows）与 CI（Linux）上的测试行为一致；测试 Windows 行为时覆盖 [platformFeaturesProvider]。
-  static PlatformFeatures get current {
+  static final PlatformFeatures current = _detect();
+
+  static PlatformFeatures _detect() {
+    // Web 只用于本地联调与截图，按手机处理
     if (kIsWeb || Platform.environment.containsKey('FLUTTER_TEST')) {
       return android;
     }
-    return Platform.isWindows ? windows : android;
+    if (Platform.isWindows) return windows;
+    if (Platform.isAndroid || Platform.isIOS) return android;
+    // 其他桌面平台尚未适配：先按 Windows 处理（同为桌面、同样没有这些移动端插件）
+    return windows;
   }
 
   /// 桌面端：键盘快捷键、窗口较宽时的布局、导出时另存为文件等。
