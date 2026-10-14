@@ -1,0 +1,7 @@
+src/guide/
+src/changelog/
+src/privacy.md
+src/terms.md
+.vitepress/generated/
+.vitepress/cache/
+.vitepress/dist/

@@ -8,12 +8,13 @@
 | Web 管理后台 | React 19 + Ant Design 6 + Vite 8 | [`apps/admin-web`](apps/admin-web) | ✅ 已发布 |
 | 服务端 | Go 1.27 + Gin + PostgreSQL + Redis | [`server`](server) | ✅ 已发布 |
 | Windows 客户端 | Flutter（与 Android 同一代码库，ADR-013） | [`apps/mobile/windows`](apps/mobile/windows) | ✅ v1.1.0 起 |
+| 官网 | VitePress（教程由 `docs/使用说明` 生成，ADR-014） | [`apps/site`](apps/site) | 🚧 开发中 |
 
 > 当前版本：**v1.0.0（正式发布）**，更新内容见[发布说明](docs/发布说明/v1.0.0.md)。
 
 ## 下载
 
-安装包附在每个版本的 [GitHub Release](https://github.com/vvangz/JikeLog/releases/latest) 上，同时提供 SHA-256 校验文件：
+从官网的[下载页](https://www.pingvv.top/download)下载，或从每个版本的 [GitHub Release](https://github.com/vvangz/JikeLog/releases/latest) 下载，两处都提供 SHA-256 校验值：
 
 - **Android**（8.0 及以上）：`jikelog-<版本>.apk`，安装与首次使用见[快速上手](docs/使用说明/01-快速上手.md)。
 - **Windows**（10 1809 及以上，64 位）：`jikelog-<版本>.msix`，第一次安装前需要信任随附的证书 `jikelog-windows.cer`，见 [Windows 版](docs/使用说明/09-Windows版.md)。
@@ -33,6 +34,7 @@
 JikeLog/
 ├─ apps/mobile/              Flutter 客户端
 ├─ apps/admin-web/           React 管理后台
+├─ apps/site/                官网（VitePress）
 ├─ server/                   Go 后端（api/openapi.yaml 是接口契约）
 ├─ packages/design-tokens/   设计令牌（颜色、字体、间距等），生成 Dart 与 CSS/TS 代码
 ├─ deploy/                   Docker Compose 与部署脚本
@@ -57,6 +59,9 @@ cd server && go run ./cmd/api                 # http://localhost:8080/healthz
 
 # 管理后台
 pnpm --filter @jikelog/admin-web dev          # http://localhost:5173
+
+# 官网（先同步 docs/ 中的教程）
+pnpm --filter @jikelog/site dev               # http://localhost:5173（端口被占用时顺延）
 
 # Android 客户端
 cd apps/mobile && flutter run
@@ -92,7 +97,7 @@ cd apps/mobile && flutter run
 - [架构总览](docs/架构/总览.md) · [架构决策记录](docs/架构/ADR)
 - [设计规范](docs/设计规范.md)
 - [开发日志](docs/开发日志)
-- [使用说明](docs/使用说明) · [管理员手册](docs/管理员手册.md)
+- [使用说明](docs/使用说明) · [管理员手册](docs/管理员手册.md) · [隐私政策](docs/法律/隐私政策.md) · [用户协议](docs/法律/用户协议.md)
 - 部署运维：[本地开发环境](docs/部署运维/本地开发环境.md) · [生产部署](docs/部署运维/生产部署.md) · [发布 APK](docs/部署运维/发布APK.md) · [发布 Windows 版](docs/部署运维/发布Windows版.md) · [备份与恢复](docs/部署运维/备份与恢复.md) · [压测](docs/部署运维/压测.md)
 - [发布说明](docs/发布说明/v1.0.0.md)
 - [贡献与版本规范](CONTRIBUTING.md) · [变更记录](CHANGELOG.md)
