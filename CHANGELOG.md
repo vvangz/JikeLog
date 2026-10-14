@@ -2,6 +2,30 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [1.0.0](https://github.com/vvangz/JikeLog/compare/v0.9.0...v1.0.0) (2026-10-14)
+
+
+### 新功能
+
+* **ci:** 发布新版本时构建签名 APK 并附到 GitHub Release ([90fd409](https://github.com/vvangz/JikeLog/commit/90fd409cbdee1db22fd733f6ae2b5f75354d2650))
+* **deploy:** 正式环境每个账号的附件配额默认 8GB ([b7ae5f7](https://github.com/vvangz/JikeLog/commit/b7ae5f78595c140c4aff537a67fcd22c0bfc9b8c))
+* **mobile:** 正式版使用发布密钥签名 ([5c52d64](https://github.com/vvangz/JikeLog/commit/5c52d64cc135f47db7de8f7e5987db95003250ba))
+
+
+### 问题修复
+
+* **ci:** 发布后自动部署读不到 production 环境的 Secrets ([00175de](https://github.com/vvangz/JikeLog/commit/00175de76d2261d082376656481f5885c1b3b1c9))
+* **ci:** 签名与构建分开，签名密钥不与仓库代码同处一台机器 ([073a72b](https://github.com/vvangz/JikeLog/commit/073a72b92d097d4deea83f23406a1027ea22cae5))
+* **ci:** 部署前校验 SSH 私钥并先确认能登录服务器 ([7c44ef6](https://github.com/vvangz/JikeLog/commit/7c44ef625487099e0ec8202c1cbf23004f278433))
+* **deploy:** 解包发布包时不保留包内属主 ([b29aea4](https://github.com/vvangz/JikeLog/commit/b29aea4df491b5f47bf9afce3aa6a819fabde573))
+* **server:** 阿里云验证码与 KMS 的错误提示不再提"v0.9.0 接入" ([7362843](https://github.com/vvangz/JikeLog/commit/73628435d3c207f658aeeba8cbf39040edcf0795))
+
+
+### 文档
+
+* v1.0.0 开发日志（正式发布） ([34cd3c5](https://github.com/vvangz/JikeLog/commit/34cd3c597e6fbab0b0cefc4b158d9dacf93f9a04))
+* v1.0.0 文档定稿与发布说明 ([3f55f5d](https://github.com/vvangz/JikeLog/commit/3f55f5dc90b0e360152f93b689e982a8de3e836d))
+
 ## [0.9.0](https://github.com/vvangz/JikeLog/compare/v0.8.0...v0.9.0) (2026-10-13)
 
 
