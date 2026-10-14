@@ -49,10 +49,10 @@ gh workflow run release-windows.yml --ref main -f version=1.1.0
 
 ## 5. 在本机构建与调试
 
-需要 Visual Studio 2022 的"使用 C++ 的桌面开发"组件，并打开 Windows 的开发者模式（Flutter 插件需要符号链接）：
+需要 Visual Studio 2022 的"使用 C++ 的桌面开发"组件与 ATL（通知、安全存储插件用到），并打开 Windows 的开发者模式（Flutter 插件需要符号链接）。已装生成工具但缺 ATL 时，用 Visual Studio Installer 修改安装，加上 `Microsoft.VisualStudio.Component.VC.ATL`：
 
 ```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --add Microsoft.VisualStudio.Component.VC.ATL"
 start ms-settings:developers
 ```
 
