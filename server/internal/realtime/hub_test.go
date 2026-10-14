@@ -94,7 +94,12 @@ func (f *fixture) dial(t *testing.T) *websocket.Conn {
 
 func read(t *testing.T, conn *websocket.Conn) Event {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	return readWithin(t, conn, 3*time.Second)
+}
+
+func readWithin(t *testing.T, conn *websocket.Conn, timeout time.Duration) Event {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	var ev Event
 	if err := wsjson.Read(ctx, conn, &ev); err != nil {
@@ -182,7 +187,9 @@ func TestResubscribeNotifiesAll(t *testing.T) {
 	if err := f.mr.Restart(); err != nil {
 		t.Fatal(err)
 	}
-	if ev := read(t, conn); ev.Type != EventChanged || ev.Origin != nil {
+	// 重新订阅要等 go-redis 连接池拨号失败后的退避（约 1 秒）与 Hub 的重试间隔（1 秒），
+	// CI 开启 -race 时可能超过 3 秒
+	if ev := readWithin(t, conn, 15*time.Second); ev.Type != EventChanged || ev.Origin != nil {
 		t.Fatalf("ev=%+v", ev)
 	}
 }
