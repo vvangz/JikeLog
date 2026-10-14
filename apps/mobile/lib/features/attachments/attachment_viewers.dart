@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as p;
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
@@ -14,59 +13,19 @@ import '../../shared/ui/jk_button.dart';
 import '../../shared/ui/jk_feedback.dart';
 import 'attachment_images.dart';
 import 'attachment_service.dart';
+import 'desktop_open.dart';
 import 'media.dart';
 
-/// 用系统中的应用打开文件（测试中替换）。返回 false 表示没有可用的应用。
-final openExternalProvider = Provider<Future<bool> Function(File, String)>(
-  (ref) => ref.watch(platformFeaturesProvider).isDesktop
-      ? openOnDesktop
-      : (file, mime) async =>
-            (await OpenFilex.open(file.path, type: mime)).type ==
-            ResultType.done,
-);
-
-/// Windows 上打开后会被执行的扩展名：这类附件只打开所在文件夹，不直接运行。
-const _executableExtensions = {
-  '.appx',
-  '.bat',
-  '.cmd',
-  '.com',
-  '.cpl',
-  '.exe',
-  '.hta',
-  '.jar',
-  '.js',
-  '.jse',
-  '.lnk',
-  '.msc',
-  '.msi',
-  '.msix',
-  '.msp',
-  '.pif',
-  '.ps1',
-  '.psm1',
-  '.reg',
-  '.scr',
-  '.url',
-  '.vb',
-  '.vbe',
-  '.vbs',
-  '.wsf',
-  '.wsh',
-};
-
-/// 桌面端（Windows）打开附件：交给系统按扩展名选择默认应用（open_filex 只支持 Android 与 iOS）。
-Future<bool> openOnDesktop(File file, String mime) =>
-    launchUrl(Uri.file(desktopOpenTarget(file.path)));
-
-/// 桌面端实际打开的路径：可执行文件改为打开所在文件夹，由用户自行决定是否运行。
-@visibleForTesting
-String desktopOpenTarget(String path) {
-  // Windows 忽略文件名末尾的点与空格（"a.exe." 等同 "a.exe"）
-  final name = p.basename(path).replaceAll(RegExp(r'[. ]+$'), '');
-  final ext = p.extension(name).toLowerCase();
-  return _executableExtensions.contains(ext) ? p.dirname(path) : path;
-}
+/// 用系统中的应用打开文件（测试中替换）。参数为本机文件、MIME 类型与附件的原文件名；
+/// 返回 false 表示没有可用的应用。
+final openExternalProvider =
+    Provider<Future<bool> Function(File, String, String)>(
+      (ref) => ref.watch(platformFeaturesProvider).isDesktop
+          ? (file, _, name) => openOnDesktop(file, name)
+          : (file, mime, _) async =>
+                (await OpenFilex.open(file.path, type: mime)).type ==
+                ResultType.done,
+    );
 
 /// 按类型打开附件：图片全屏查看，PDF 在 App 内阅读，音频在 App 内播放，其他文件交给系统应用。
 Future<void> showAttachment(
@@ -95,7 +54,7 @@ Future<void> showAttachment(
       showDragHandle: true,
       builder: (_) => AudioPlayerSheet(file: file, title: a.fileName),
     );
-  } else if (!await ref.read(openExternalProvider)(file, a.mime) &&
+  } else if (!await ref.read(openExternalProvider)(file, a.mime, a.fileName) &&
       context.mounted) {
     showJkToast(context, '没有可以打开该文件的应用');
   }
@@ -145,7 +104,7 @@ class PdfViewerPage extends ConsumerWidget {
           tooltip: '用其他应用打开',
           icon: const Icon(Icons.open_in_new),
           onPressed: () async {
-            if (!await ref.read(openExternalProvider)(file, mime) &&
+            if (!await ref.read(openExternalProvider)(file, mime, title) &&
                 context.mounted) {
               showJkToast(context, '没有可以打开该文件的应用');
             }
