@@ -51,6 +51,10 @@ class DeviceIdentity {
         final a = await DeviceInfoPlugin().androidInfo;
         model = '${a.manufacturer} ${a.model}'.trim();
         os = 'Android ${a.version.release}';
+      } else if (platform == 'windows') {
+        final w = await DeviceInfoPlugin().windowsInfo;
+        model = w.computerName;
+        os = '${w.productName} ${w.displayVersion}'.trim();
       }
       version = (await PackageInfo.fromPlatform()).version;
     } on Exception catch (e) {

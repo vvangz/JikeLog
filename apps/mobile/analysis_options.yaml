@@ -5,6 +5,7 @@ analyzer:
     - "**/*.g.dart"
     - build/**
     - android/**
+    - windows/**
   language:
     strict-casts: true
     strict-inference: true
