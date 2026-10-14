@@ -8,7 +8,7 @@ name: 部署
 #   DEPLOY_HOST          服务器地址（如 39.96.207.220）
 #   DEPLOY_SSH_KEY       部署专用的 SSH 私钥（对应公钥在服务器 root 的 authorized_keys 中）
 #   DEPLOY_KNOWN_HOSTS   服务器的主机公钥（ssh-keyscan 的输出），防止中间人
-# 并在环境中限制只允许 main 分支与 v* 标签部署、要求审批（docs/部署运维/生产部署.md 第 1.4 节）。
+# 并在环境中限制只允许 main 分支部署、要求审批（docs/部署运维/生产部署.md 第 1.4 节）。
 on:
   workflow_dispatch:
     inputs:
@@ -125,7 +125,7 @@ jobs:
           ssh_run mkdir -p "/root/jikelog/releases/$VERSION"
           scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes dist/*.tar.gz "root@$DEPLOY_HOST:/root/jikelog/releases/$VERSION/"
           # 先解出部署脚本（首次部署时服务器上还没有）。版本已校验，只含数字、字母与 . -
-          ssh_run "cd /root/jikelog && tar -xzf releases/$VERSION/config.tar.gz scripts && bash scripts/deploy.sh $VERSION"
+          ssh_run "cd /root/jikelog && tar --no-same-owner -xzf releases/$VERSION/config.tar.gz scripts && bash scripts/deploy.sh $VERSION"
 
       - name: 保留发布包
         if: failure() && env.VERSION != ''

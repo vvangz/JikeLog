@@ -1,7 +1,21 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// 本机构建正式签名的 APK：keystore 与 key.properties 不入库，放在 android/key.properties，
+// 或用环境变量 JIKELOG_KEY_PROPERTIES 指定路径（storeFile 相对于该文件）。没有时 release 构建用调试签名，
+// 便于本机 flutter run --release。CI 发布时不用这里：构建任务没有密钥，另一个任务用 apksigner 换成正式签名。
+val keyProperties = Properties().apply {
+    val file = System.getenv("JIKELOG_KEY_PROPERTIES")?.let(::File) ?: rootProject.file("key.properties")
+    if (file.isFile) {
+        file.inputStream().use(::load)
+        val storeFile = getProperty("storeFile") ?: throw GradleException("$file 中缺少 storeFile")
+        setProperty("storeFile", file.absoluteFile.parentFile.resolve(storeFile).path)
+    }
 }
 
 android {
@@ -36,11 +50,20 @@ android {
         )
     }
 
+    signingConfigs {
+        if (keyProperties.containsKey("storeFile")) {
+            create("release") {
+                storeFile = file(keyProperties.getProperty("storeFile"))
+                storePassword = keyProperties.getProperty("storePassword")
+                keyAlias = keyProperties.getProperty("keyAlias")
+                keyPassword = keyProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // 正式签名在 v0.9.0 接入：keystore 不入库，由 CI Secrets 注入 key.properties
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 }

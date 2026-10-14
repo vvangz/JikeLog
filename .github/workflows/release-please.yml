@@ -40,3 +40,14 @@ jobs:
     # 被调用的工作流读不到 production 环境的 Secrets，除非这里写 inherit（v0.9.0 发布时因此没有部署）。
     # 仓库级 Secrets 为空，部署用的 Secrets 只放在 production 环境中，inherit 不会多传其他密钥。
     secrets: inherit
+
+  # 构建正式签名的 APK 并附到刚创建的 Release；签名密钥在 apk-signing 环境中
+  apk:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-apk.yml
+    with:
+      version: ${{ needs.release-please.outputs.version }}
+    secrets: inherit

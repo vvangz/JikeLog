@@ -53,9 +53,10 @@ log "更新配置与管理后台"
 saved=$(mktemp -d)
 trap 'rm -rf "$saved"' EXIT
 for p in compose.yml caddy; do if [ -e "$p" ]; then cp -a "$p" "$saved/"; fi; done
-tar -xzf "$REL/config.tar.gz" -C "$ROOT"
+# 以 root 解包时 tar 默认保留包内的属主（GitHub 构建机的 uid 1001），一律改为 root
+tar --no-same-owner -xzf "$REL/config.tar.gz" -C "$ROOT"
 mkdir -p "admin/$VERSION"
-tar -xzf "$REL/admin.tar.gz" -C "admin/$VERSION"
+tar --no-same-owner -xzf "$REL/admin.tar.gz" -C "admin/$VERSION"
 ln -sfn "$VERSION" admin/current
 set_env JIKELOG_VERSION "$VERSION"
 
