@@ -310,8 +310,9 @@ class FakeExportFiles implements ExportFiles {
   Future<void> clear() async => cleared++;
 
   @override
-  Future<void> downloadAndShare(String url, String fileName) async {
+  Future<String?> downloadAndShare(String url, String fileName) async {
     if (fail != null) throw fail!;
     shared.add((url, fileName));
+    return null;
   }
 }

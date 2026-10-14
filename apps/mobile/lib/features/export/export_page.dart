@@ -86,7 +86,11 @@ class _ExportPageState extends ConsumerState<ExportPage> {
     final files = ref.read(exportFilesProvider);
     try {
       final url = await api.downloadUrl(job.id);
-      await files.downloadAndShare(url, exportFileName(job.createdAt));
+      final saved = await files.downloadAndShare(
+        url,
+        exportFileName(job.createdAt),
+      );
+      if (saved != null && mounted) showJkToast(context, '已保存到 $saved');
     } on ApiException catch (e) {
       _toastError(e);
       // 可能已过期：刷新状态
