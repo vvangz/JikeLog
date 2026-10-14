@@ -25,6 +25,10 @@ on:
       version:
         required: true
         type: string
+    # 签名后安装包的 SHA-256，部署工作流据此核对 Release 中的文件（ADR-014）
+    outputs:
+      sha256:
+        value: ${{ jobs.sign.outputs.sha256 }}
 
 permissions:
   contents: read
@@ -110,6 +114,8 @@ jobs:
   sign:
     name: 签名并上传
     needs: build
+    outputs:
+      sha256: ${{ steps.upload.outputs.sha256 }}
     runs-on: windows-latest
     environment: windows-signing
     permissions:
@@ -171,11 +177,13 @@ jobs:
           Write-Output "签名者 SHA-1：$actual"
 
       - name: 上传到 Release
+        id: upload
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           (cd dist && sha256sum "jikelog-$VERSION.msix" > "jikelog-$VERSION.msix.sha256")
+          echo "sha256=$(cut -d' ' -f1 "dist/jikelog-$VERSION.msix.sha256")" >> "$GITHUB_OUTPUT"
           gh release upload "v$VERSION" "dist/jikelog-$VERSION.msix" "dist/jikelog-$VERSION.msix.sha256" \
             dist/jikelog-windows.cer --clobber --repo "$GITHUB_REPOSITORY"
 

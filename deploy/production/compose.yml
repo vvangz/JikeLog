@@ -90,6 +90,8 @@ services:
       # 挂载目录而不是单个文件：部署时替换 Caddyfile 后，容器能看到新内容（caddy reload 生效）
       - ./caddy:/etc/caddy:ro
       - ./admin:/srv/admin:ro            # 管理后台静态文件，current 指向当前版本
+      - ./site:/srv/site:ro              # 官网静态文件，current 指向当前版本
+      - ./downloads:/srv/downloads:ro    # 安装包与 latest.json，current 指向最新的版本
       - caddy_data:/data                 # 证书保存在这里，不要删
       - caddy_config:/config
 

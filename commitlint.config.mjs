@@ -10,7 +10,7 @@ export default {
     'scope-enum': [
       1,
       'always',
-      ['server', 'mobile', 'admin', 'tokens', 'deploy', 'docs', 'ci', 'deps', 'release'],
+      ['server', 'mobile', 'admin', 'site', 'tokens', 'deploy', 'docs', 'ci', 'deps', 'release'],
     ],
     'subject-case': [0],
     'header-max-length': [2, 'always', 100],
