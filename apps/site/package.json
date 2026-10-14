@@ -1,0 +1,19 @@
+{
+  "name": "@jikelog/site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "即刻日志官网：产品介绍、下载、使用教程、更新日志与隐私政策（VitePress，教程由 docs/使用说明 生成）",
+  "scripts": {
+    "sync": "node scripts/sync-docs.mjs",
+    "dev": "node scripts/sync-docs.mjs && vitepress dev",
+    "build": "node scripts/sync-docs.mjs && vitepress build",
+    "preview": "vitepress preview",
+    "test": "node --test \"test/*.test.mjs\"",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=80 --test-coverage-include=\"lib/**\" --test-coverage-include=\"scripts/**\" \"test/*.test.mjs\""
+  },
+  "devDependencies": {
+    "vitepress": "2.0.0-alpha.20",
+    "vue": "3.5.43"
+  }
+}
