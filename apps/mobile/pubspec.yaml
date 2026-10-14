@@ -54,6 +54,7 @@ dev_dependencies:
   fake_async: ^1.3.3
   stream_channel: ^2.1.4
   cross_file: ^0.3.5+5
+  msix: ^3.18.0
 flutter:
   uses-material-design: true
 
@@ -75,3 +76,25 @@ flutter:
         - asset: assets/fonts/MiSans-Regular.ttf
         - asset: assets/fonts/MiSans-Semibold.ttf
           weight: 600
+
+# Windows 安装包（MSIX，ADR-013）：dart run msix:create --build-windows false。
+# 发布时由 .github/workflows/release-windows.yml 构建（不签名），另一个任务用自签名证书签名。
+msix_config:
+  display_name: 即刻日志
+  publisher_display_name: JikeLog
+  identity_name: JikeLog.App
+  # 须与签名证书的 Subject 完全一致
+  publisher: CN=JikeLog
+  logo_path: windows/runner/resources/app_icon.png
+  # 录音附件需要麦克风
+  capabilities: internetClient, microphone
+  languages: zh-cn
+  output_name: jikelog
+  sign_msix: false
+  install_certificate: false
+  store: false
+  # 通知激活器：clsid 须与 lib/features/reminders/local_notifier.dart 中的 windowsToastActivatorGuid 相同
+  toast_activator:
+    clsid: 0c7ab9ca-e9e2-43e2-9426-8e7c2e6432c5
+    arguments: msix-args
+    display_name: 即刻日志

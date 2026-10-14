@@ -188,3 +188,6 @@ jobs:
       # Dart 代码与测试已在"移动端"任务中检查；这里只确认 Windows 版能编译（C++ 运行器与插件）
       - name: 构建 Windows 版
         run: flutter build windows --release --build-number=${{ github.run_number }}
+      # 确认能打包为 MSIX（不签名；正式包由"发布 Windows 版"工作流签名）
+      - name: 打包 MSIX
+        run: dart run msix:create --build-windows false --version 0.0.1.0
