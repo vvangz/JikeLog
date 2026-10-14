@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
+import '../../core/platform/platform_features.dart';
 import '../../core/sync/sync_engine.dart';
 import '../../core/sync/sync_providers.dart';
 import '../../shared/ui/conflict_banner.dart';
@@ -91,7 +92,8 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage>
         }
       },
     );
-    _openEditor(n.format);
+    // 没有富文本编辑器的平台（Windows）一律用 Markdown 打开，不改笔记保存的格式
+    _openEditor(editorFormatFor(n.format, ref.read(platformFeaturesProvider)));
     _loaded = true;
     // 新建的笔记直接开始输入
     if (n.title.isEmpty && n.body.isEmpty) {
@@ -469,14 +471,15 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage>
   }
 
   List<Widget> _actions(Note n) => [
-    IconButton(
-      key: const Key('note-format'),
-      tooltip: _format == NoteFormat.markdown ? '切换到富文本' : '切换到 Markdown',
-      icon: Icon(
-        _format == NoteFormat.markdown ? Icons.text_fields : Icons.code,
+    if (ref.watch(platformFeaturesProvider.select((f) => f.richTextEditor)))
+      IconButton(
+        key: const Key('note-format'),
+        tooltip: _format == NoteFormat.markdown ? '切换到富文本' : '切换到 Markdown',
+        icon: Icon(
+          _format == NoteFormat.markdown ? Icons.text_fields : Icons.code,
+        ),
+        onPressed: _switchFormat,
       ),
-      onPressed: _switchFormat,
-    ),
     IconButton(
       key: const Key('note-info'),
       tooltip: '文件夹、标签、关联与附件',

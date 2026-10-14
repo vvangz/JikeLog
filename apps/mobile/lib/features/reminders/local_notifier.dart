@@ -86,6 +86,12 @@ abstract class LocalNotifier {
   Future<void> cancelAll();
 }
 
+/// Windows 通知的应用标识（未打包运行时使用；MSIX 安装后使用包标识）。
+const windowsAppUserModelId = 'JikeLog.JikeLog';
+
+/// Windows 通知激活器的 CLSID，须与 MSIX 清单中 toast_activator 的 clsid 相同（pubspec.yaml）。
+const windowsToastActivatorGuid = '0c7ab9ca-e9e2-43e2-9426-8e7c2e6432c5';
+
 /// 基于 flutter_local_notifications 的实现。
 class PluginLocalNotifier implements LocalNotifier {
   PluginLocalNotifier([FlutterLocalNotificationsPlugin? plugin])
@@ -99,6 +105,12 @@ class PluginLocalNotifier implements LocalNotifier {
         AndroidFlutterLocalNotificationsPlugin
       >();
 
+  /// Windows 的通知（Toast）不需要运行时授权，排定与取消依赖 MSIX 包标识（ADR-013）。
+  FlutterLocalNotificationsWindows? get _windows => _plugin
+      .resolvePlatformSpecificImplementation<
+        FlutterLocalNotificationsWindows
+      >();
+
   static const _details = NotificationDetails(
     android: AndroidNotificationDetails(
       reminderChannelId,
@@ -110,6 +122,7 @@ class PluginLocalNotifier implements LocalNotifier {
       // 锁屏时不显示备忘内容（通知标题是备忘的第一行）
       visibility: NotificationVisibility.private,
     ),
+    windows: WindowsNotificationDetails(),
   );
 
   @override
@@ -127,6 +140,11 @@ class PluginLocalNotifier implements LocalNotifier {
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        windows: WindowsInitializationSettings(
+          appName: '即刻日志',
+          appUserModelId: windowsAppUserModelId,
+          guid: windowsToastActivatorGuid,
+        ),
       ),
       onDidReceiveNotificationResponse: (r) {
         final p = r.payload;
@@ -162,6 +180,8 @@ class PluginLocalNotifier implements LocalNotifier {
 
   @override
   Future<ReminderPermissions> permissions() async {
+    // Windows：没有运行时授权；用户在系统设置中关闭通知时 App 无法得知
+    if (_windows != null) return _granted;
     final android = _android;
     if (android == null) return ReminderPermissions.none;
     return ReminderPermissions(
@@ -172,6 +192,7 @@ class PluginLocalNotifier implements LocalNotifier {
 
   @override
   Future<ReminderPermissions> requestPermissions() async {
+    if (_windows != null) return _granted;
     final android = _android;
     if (android == null) return ReminderPermissions.none;
     await android.requestNotificationsPermission();
@@ -182,10 +203,19 @@ class PluginLocalNotifier implements LocalNotifier {
   }
 
   @override
-  Future<Map<int, String?>> pending() async => {
-    for (final p in await _plugin.pendingNotificationRequests())
-      p.id: p.payload,
-  };
+  Future<Map<int, String?>> pending() async {
+    try {
+      return {
+        for (final p in await _plugin.pendingNotificationRequests())
+          p.id: p.payload,
+      };
+    } on Object catch (e) {
+      // Windows 未打包运行（flutter run）时没有包标识，读取待发列表可能失败：按"没有待发"处理
+      if (_windows == null) rethrow;
+      debugPrint('读取待发通知失败: $e');
+      return {};
+    }
+  }
 
   @override
   Future<void> schedule(PlannedAlarm alarm, {required bool exact}) async {
@@ -210,8 +240,20 @@ class PluginLocalNotifier implements LocalNotifier {
   }
 
   @override
-  Future<void> cancel(int id) => _plugin.cancel(id: id);
+  Future<void> cancel(int id) async {
+    try {
+      await _plugin.cancel(id: id);
+    } on Object catch (e) {
+      if (_windows == null) rethrow;
+      debugPrint('取消通知失败: $e');
+    }
+  }
 
   @override
-  Future<void> cancelAll() => _plugin.cancelAllPendingNotifications();
+  // Windows 未实现"只取消待发通知"，改为取消全部（含已显示的）
+  Future<void> cancelAll() => _windows != null
+      ? _plugin.cancelAll()
+      : _plugin.cancelAllPendingNotifications();
+
+  static const _granted = ReminderPermissions(notifications: true, exact: true);
 }

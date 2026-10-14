@@ -57,6 +57,37 @@ abstract class SystemCalendar {
   Future<void> deleteEvent(String eventId);
 }
 
+/// 没有系统日历的平台（Windows，见 ADR-013）：不授权，设置页也不显示开关。
+class NoSystemCalendar implements SystemCalendar {
+  const NoSystemCalendar();
+
+  @override
+  Future<bool> requestAccess() async => false;
+
+  @override
+  Future<bool> hasAccess() async => false;
+
+  @override
+  Future<bool> exists(String calendarId) async => false;
+
+  @override
+  Future<String> createCalendar(String name) =>
+      throw UnsupportedError('当前平台没有系统日历');
+
+  @override
+  Future<void> deleteCalendar(String calendarId) async {}
+
+  @override
+  Future<String> createEvent(String calendarId, CalendarEventData e) =>
+      throw UnsupportedError('当前平台没有系统日历');
+
+  @override
+  Future<void> updateEvent(String eventId, CalendarEventData e) async {}
+
+  @override
+  Future<void> deleteEvent(String eventId) async {}
+}
+
 class PluginSystemCalendar implements SystemCalendar {
   DeviceCalendar get _cal => DeviceCalendar.instance;
 

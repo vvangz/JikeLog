@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
+import '../../core/platform/platform_features.dart';
 import '../../core/sync/sync_providers.dart';
 import '../../shared/ui/jk_icon.dart';
 import '../../shared/ui/jk_states.dart';
@@ -16,23 +17,23 @@ import 'note_repository.dart';
 /// 页面宽度达到此值时筛选面板常驻左侧。
 const _panelBreakpoint = 720.0;
 
+/// 新建笔记并打开（列表页按钮与桌面端 Ctrl+N）：在当前文件夹或标签下，默认富文本格式（没有富文本编辑器的平台用 Markdown）。
+Future<void> createNote(BuildContext context, WidgetRef ref) async {
+  final filter = ref.read(noteFilterProvider);
+  final id = await ref
+      .read(noteRepositoryProvider)
+      .create(
+        format: newNoteFormat(ref.read(platformFeaturesProvider)),
+        folderId: filter is FolderNotes ? filter.folderId : null,
+        tag: filter is TagNotes ? filter.tag : null,
+        favorite: filter is FavoriteNotes,
+      );
+  if (context.mounted) await context.push('/notes/$id');
+}
+
 /// 笔记主界面：按文件夹、标签、收藏筛选的笔记列表。
 class NotesListPage extends ConsumerWidget {
   const NotesListPage({super.key});
-
-  /// 新建笔记：在当前文件夹或标签下，默认富文本格式。
-  Future<void> _create(BuildContext context, WidgetRef ref) async {
-    final filter = ref.read(noteFilterProvider);
-    final id = await ref
-        .read(noteRepositoryProvider)
-        .create(
-          format: NoteFormat.rich,
-          folderId: filter is FolderNotes ? filter.folderId : null,
-          tag: filter is TagNotes ? filter.tag : null,
-          favorite: filter is FavoriteNotes,
-        );
-    if (context.mounted) await context.push('/notes/$id');
-  }
 
   void _openPanel(BuildContext context) => showModalBottomSheet<void>(
     context: context,
@@ -55,7 +56,7 @@ class NotesListPage extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
         key: const Key('note-create'),
-        onPressed: () => _create(context, ref),
+        onPressed: () => createNote(context, ref),
         icon: const Icon(Icons.add),
         label: const Text('新建笔记'),
       ),

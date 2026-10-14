@@ -7,13 +7,16 @@
 | Android 客户端 | Flutter 3.47 / Dart 3.13 | [`apps/mobile`](apps/mobile) | ✅ 已发布 |
 | Web 管理后台 | React 19 + Ant Design 6 + Vite 8 | [`apps/admin-web`](apps/admin-web) | ✅ 已发布 |
 | 服务端 | Go 1.27 + Gin + PostgreSQL + Redis | [`server`](server) | ✅ 已发布 |
-| Windows 客户端 | Flutter（与 Android 同一代码库） | — | 📅 后续版本 |
+| Windows 客户端 | Flutter（与 Android 同一代码库，ADR-013） | [`apps/mobile/windows`](apps/mobile/windows) | ✅ v1.1.0 起 |
 
 > 当前版本：**v1.0.0（正式发布）**，更新内容见[发布说明](docs/发布说明/v1.0.0.md)。
 
 ## 下载
 
-正式签名的 Android 安装包（APK）附在每个版本的 [GitHub Release](https://github.com/vvangz/JikeLog/releases/latest) 上，同时提供 SHA-256 校验文件。要求 Android 8.0 及以上。安装与首次使用见[快速上手](docs/使用说明/01-快速上手.md)。
+安装包附在每个版本的 [GitHub Release](https://github.com/vvangz/JikeLog/releases/latest) 上，同时提供 SHA-256 校验文件：
+
+- **Android**（8.0 及以上）：`jikelog-<版本>.apk`，安装与首次使用见[快速上手](docs/使用说明/01-快速上手.md)。
+- **Windows**（10 1809 及以上，64 位）：`jikelog-<版本>.msix`，第一次安装前需要信任随附的证书 `jikelog-windows.cer`，见 [Windows 版](docs/使用说明/09-Windows版.md)。
 
 ## 功能概览
 
@@ -80,7 +83,8 @@ cd apps/mobile && flutter run
 | v0.7.0 | M6 搜索 + 导出 | 全局搜索、数据导出 ✅ |
 | v0.8.0 | M7 管理后台 | 仪表盘、用户配置查看、审计日志 ✅ |
 | v0.9.0 | M8 上线准备 | 单机部署、自动发布、14 天加密备份、安全与性能 ✅ |
-| **v1.0.0** | 正式发布 | 签名的正式 APK、文档定稿、发布说明 ✅ |
+| v1.0.0 | 正式发布 | 签名的正式 APK、文档定稿、发布说明 ✅ |
+| **v1.1.0** | Windows 客户端 | 同一套代码的 Windows 版、MSIX 安装包、键盘快捷键 |
 
 ## 文档
 
@@ -89,7 +93,7 @@ cd apps/mobile && flutter run
 - [设计规范](docs/设计规范.md)
 - [开发日志](docs/开发日志)
 - [使用说明](docs/使用说明) · [管理员手册](docs/管理员手册.md)
-- 部署运维：[本地开发环境](docs/部署运维/本地开发环境.md) · [生产部署](docs/部署运维/生产部署.md) · [发布 APK](docs/部署运维/发布APK.md) · [备份与恢复](docs/部署运维/备份与恢复.md) · [压测](docs/部署运维/压测.md)
+- 部署运维：[本地开发环境](docs/部署运维/本地开发环境.md) · [生产部署](docs/部署运维/生产部署.md) · [发布 APK](docs/部署运维/发布APK.md) · [发布 Windows 版](docs/部署运维/发布Windows版.md) · [备份与恢复](docs/部署运维/备份与恢复.md) · [压测](docs/部署运维/压测.md)
 - [发布说明](docs/发布说明/v1.0.0.md)
 - [贡献与版本规范](CONTRIBUTING.md) · [变更记录](CHANGELOG.md)
 

@@ -51,6 +51,11 @@ class DeviceIdentity {
         final a = await DeviceInfoPlugin().androidInfo;
         model = '${a.manufacturer} ${a.model}'.trim();
         os = 'Android ${a.version.release}';
+      } else if (platform == 'windows') {
+        final w = await DeviceInfoPlugin().windowsInfo;
+        // 不上报计算机名：常含真实姓名，而设备型号会显示在管理后台
+        model = 'Windows PC';
+        os = '${w.productName} ${w.displayVersion}'.trim();
       }
       version = (await PackageInfo.fromPlatform()).version;
     } on Exception catch (e) {

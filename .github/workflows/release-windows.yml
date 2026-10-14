@@ -1,0 +1,191 @@
+name: 发布 Windows 版
+
+# 构建 Windows 安装包（MSIX，ADR-013）并附到 GitHub Release（docs/部署运维/发布Windows版.md）。
+# Release Please 发布新版本后由 release-please.yml 调用；也可以在 Actions 页面从 main 手动运行，为已发布的版本重新构建。
+#
+# 与 APK 相同，分两个任务，签名证书不与仓库代码同处一台机器：
+#   build  无密钥、只读权限：确认标签在 main 上，构建 Windows 版并打包为未签名的 MSIX。
+#   sign   windows-signing 环境（只允许 main）：不检出仓库代码，核对安装包与构建产物一致，用 signtool 以自签名证书
+#          签名、核对签名者，再把 MSIX、校验文件与证书公钥（.cer，由 PFX 导出）上传到 Release。
+#
+# windows-signing 环境中的 Secrets：
+#   WINDOWS_PFX_BASE64     代码签名证书（PFX）的 base64
+#   WINDOWS_PFX_PASSWORD   PFX 的密码
+# 仓库变量（不是机密）：
+#   APP_API_BASE、APP_E2E_PUBLIC_KEY   同发布 APK
+#   WINDOWS_CERT_THUMBPRINT            签名证书的 SHA-1 指纹，核对 MSIX 确实用该证书签名
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 已发布的版本（如 1.1.0）
+        required: true
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-windows-${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: 3.47.6
+  PUB_HOSTED_URL: https://pub.flutter-io.cn
+  # 输入只经环境变量传给脚本，不直接拼进命令（防止注入）
+  VERSION: ${{ inputs.version }}
+
+jobs:
+  build:
+    name: 构建 MSIX（无密钥）
+    runs-on: windows-latest
+    outputs:
+      sha256: ${{ steps.hash.outputs.sha256 }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 校验版本
+        run: |
+          # 只发布正式版本；MSIX 版本号为 主.次.修订.0
+          [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]] ||
+            { echo "::error::版本号不合法或不是正式版本：$VERSION"; exit 1; }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: v${{ inputs.version }}
+          fetch-depth: 0
+
+      - name: 确认标签在 main 上
+        run: |
+          git merge-base --is-ancestor HEAD origin/main ||
+            { echo "::error::标签 v$VERSION 指向的提交不在 main 上，不发布"; exit 1; }
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .cache/fonts
+          key: fonts-${{ hashFiles('scripts/fetch-fonts.sh') }}
+      - name: 下载字体（校验 SHA256）
+        run: bash scripts/fetch-fonts.sh
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+        working-directory: apps/mobile
+
+      - name: 构建并打包
+        working-directory: apps/mobile
+        env:
+          API_BASE: ${{ vars.APP_API_BASE }}
+          E2E_PUBLIC_KEY: ${{ vars.APP_E2E_PUBLIC_KEY }}
+        run: |
+          [[ "$API_BASE" == https://* ]] || { echo "::error::仓库变量 APP_API_BASE 须为 https 地址"; exit 1; }
+          [ -n "$E2E_PUBLIC_KEY" ] || { echo "::error::缺少仓库变量 APP_E2E_PUBLIC_KEY"; exit 1; }
+          IFS=. read -r major minor patch <<<"$VERSION"
+          flutter build windows --release --build-name="$VERSION" \
+            --build-number=$((major * 10000 + minor * 100 + patch)) \
+            --dart-define=JIKELOG_API_BASE="$API_BASE" --dart-define=JIKELOG_E2E_PUBLIC_KEY="$E2E_PUBLIC_KEY"
+          # 配置见 pubspec.yaml 的 msix_config（不签名）
+          dart run msix:create --build-windows false --version "$VERSION.0" --output-path "$GITHUB_WORKSPACE/dist"
+
+      # 签名任务据此确认收到的就是本任务产出的安装包
+      - name: 记录校验值
+        id: hash
+        run: echo "sha256=$(sha256sum dist/jikelog.msix | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: msix-unsigned
+          path: dist/jikelog.msix
+          retention-days: 1
+          if-no-files-found: error
+
+  sign:
+    name: 签名并上传
+    needs: build
+    runs-on: windows-latest
+    environment: windows-signing
+    permissions:
+      contents: write # 上传到 Release
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: msix-unsigned
+
+      - name: 签名
+        shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
+          PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
+          EXPECTED_SHA256: ${{ needs.build.outputs.sha256 }}
+        run: |
+          $actualHash = (Get-FileHash jikelog.msix -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (-not $env:EXPECTED_SHA256 -or $actualHash -ne $env:EXPECTED_SHA256) {
+            Write-Output "::error::收到的安装包与构建任务的产物不一致，不签名"
+            exit 1
+          }
+          if (-not $env:PFX_BASE64 -or -not $env:PFX_PASSWORD) {
+            Write-Output "::error::读不到签名证书：检查 windows-signing 环境的 Secrets；被调用时调用方须写 secrets: inherit"
+            exit 1
+          }
+          $dir = Join-Path $env:RUNNER_TEMP 'signing'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          $pfx = Join-Path $dir 'sign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String(($env:PFX_BASE64 -replace '\s', '')))
+          # 导入当前用户的证书存储后按指纹签名：密码不出现在 signtool 的命令行中
+          $password = ConvertTo-SecureString $env:PFX_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item -Recurse -Force $dir
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $msix = "dist/jikelog-$env:VERSION.msix"
+          Move-Item jikelog.msix $msix
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          # 时间戳：证书到期后已发布的安装包仍可验证
+          & $signtool.FullName sign /fd SHA256 /sha1 $cert.Thumbprint /s My `
+            /tr https://timestamp.digicert.com /td SHA256 $msix
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # 证书公钥（.cer），用户安装前导入"受信任的人"
+          [IO.File]::WriteAllBytes("dist/jikelog-windows.cer", $cert.Export('Cert'))
+
+      - name: 核对签名者
+        shell: pwsh
+        env:
+          EXPECTED: ${{ vars.WINDOWS_CERT_THUMBPRINT }}
+        run: |
+          $sig = Get-AuthenticodeSignature "dist/jikelog-$env:VERSION.msix"
+          $actual = $sig.SignerCertificate.Thumbprint
+          $expected = ($env:EXPECTED -replace '[:\s]', '').ToUpperInvariant()
+          # 自签名证书在构建机上不受信任，Status 不是 Valid；只核对签名者是否为发布证书
+          if (-not $expected -or $actual -ne $expected) {
+            Write-Output "::error::MSIX 的签名者（$actual）与仓库变量 WINDOWS_CERT_THUMBPRINT 不符，不发布（$($sig.Status)：$($sig.StatusMessage)）"
+            exit 1
+          }
+          Write-Output "签名者 SHA-1：$actual"
+
+      - name: 上传到 Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd dist && sha256sum "jikelog-$VERSION.msix" > "jikelog-$VERSION.msix.sha256")
+          gh release upload "v$VERSION" "dist/jikelog-$VERSION.msix" "dist/jikelog-$VERSION.msix.sha256" \
+            dist/jikelog-windows.cer --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: 清理签名文件
+        if: always()
+        shell: pwsh
+        env:
+          THUMBPRINT: ${{ vars.WINDOWS_CERT_THUMBPRINT }}
+        run: |
+          Remove-Item -Recurse -Force (Join-Path $env:RUNNER_TEMP 'signing') -ErrorAction SilentlyContinue
+          if ($env:THUMBPRINT) {
+            Remove-Item "Cert:\CurrentUser\My\$($env:THUMBPRINT -replace '[:\s]', '')" -DeleteKey -ErrorAction SilentlyContinue
+          }
