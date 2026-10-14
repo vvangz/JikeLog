@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
 import '../../core/api/models.dart';
+import '../../core/platform/platform_features.dart';
 import '../../shared/ui/jk_feedback.dart';
 import '../../shared/ui/jk_page.dart';
 import 'reminder_settings.dart';
@@ -117,8 +118,10 @@ class SettingsPage extends ConsumerWidget {
             ),
             const Divider(height: 1),
             const ReminderPermissionTile(),
-            const Divider(height: 1),
-            const CalendarExportTile(),
+            if (ref.watch(platformFeaturesProvider).systemCalendar) ...[
+              const Divider(height: 1),
+              const CalendarExportTile(),
+            ],
           ],
         ),
         const JkSectionTitle('其他'),

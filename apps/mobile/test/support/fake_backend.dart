@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jikelog/core/platform/platform_features.dart';
 import 'package:jikelog/app/providers.dart';
 import 'package:jikelog/core/api/api_client.dart';
 import 'package:jikelog/core/api/models.dart';
@@ -177,8 +178,10 @@ List<Override> testOverrides({
   AppDatabase? db,
   FakeSyncServer? syncServer,
   Future<Directory> Function()? filesDir,
+  PlatformFeatures features = PlatformFeatures.android,
 }) => [
   keyValueStoreProvider.overrideWithValue(store ?? MemoryStore()),
+  platformFeaturesProvider.overrideWithValue(features),
   deviceIdentityProvider.overrideWithValue(testDevice),
   tokenStoreProvider.overrideWithValue(tokens ?? MemoryTokenStore()),
   apiClientProvider.overrideWith(

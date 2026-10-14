@@ -61,6 +61,27 @@ void main() {
   setUp(() => _tmp = Directory.systemTemp.createTempSync('jk-view'));
   tearDown(() => _tmp.deleteSync(recursive: true));
 
+  group('desktopOpenTarget（Windows 打开附件）', () {
+    test('普通文件直接打开', () {
+      expect(desktopOpenTarget('/a/b/报告.pdf'), '/a/b/报告.pdf');
+      expect(desktopOpenTarget('/a/b/README'), '/a/b/README');
+    });
+
+    test('可执行文件只打开所在文件夹', () {
+      for (final name in [
+        'setup.exe',
+        'run.BAT',
+        'x.pdf.exe',
+        'evil.exe.',
+        'evil.lnk ',
+        'script.ps1',
+        'a.msi',
+      ]) {
+        expect(desktopOpenTarget('/a/b/$name'), '/a/b', reason: name);
+      }
+    });
+  });
+
   testWidgets('按类型打开：图片全屏、PDF 阅读、音频播放、其他交给系统应用', (tester) async {
     final player = FakePlayer();
     final ref = await _pump(tester, player: player);

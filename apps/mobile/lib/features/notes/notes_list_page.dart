@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/platform/platform_features.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
 import '../../core/sync/sync_providers.dart';
@@ -20,13 +21,15 @@ const _panelBreakpoint = 720.0;
 class NotesListPage extends ConsumerWidget {
   const NotesListPage({super.key});
 
-  /// 新建笔记：在当前文件夹或标签下，默认富文本格式。
+  /// 新建笔记：在当前文件夹或标签下，默认富文本格式（没有富文本编辑器的平台用 Markdown）。
   Future<void> _create(BuildContext context, WidgetRef ref) async {
     final filter = ref.read(noteFilterProvider);
     final id = await ref
         .read(noteRepositoryProvider)
         .create(
-          format: NoteFormat.rich,
+          format: ref.read(platformFeaturesProvider).richTextEditor
+              ? NoteFormat.rich
+              : NoteFormat.markdown,
           folderId: filter is FolderNotes ? filter.folderId : null,
           tag: filter is TagNotes ? filter.tag : null,
           favorite: filter is FavoriteNotes,

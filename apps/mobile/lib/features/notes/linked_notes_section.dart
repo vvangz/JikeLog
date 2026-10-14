@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/platform/platform_features.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
 import '../../shared/ui/jk_feedback.dart';
@@ -42,7 +43,12 @@ class LinkedNotesSection extends ConsumerWidget {
   Future<void> _create(BuildContext context, WidgetRef ref) async {
     final id = await ref
         .read(noteRepositoryProvider)
-        .create(format: NoteFormat.rich, worklogId: worklogId);
+        .create(
+          format: ref.read(platformFeaturesProvider).richTextEditor
+              ? NoteFormat.rich
+              : NoteFormat.markdown,
+          worklogId: worklogId,
+        );
     if (context.mounted) await context.push('/notes/$id');
   }
 
