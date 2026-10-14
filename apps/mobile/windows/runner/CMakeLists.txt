@@ -34,8 +34,10 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 # Add dependency libraries and include directories. Add any application-specific
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
-# C++/WinRT（device_channel.cpp 读取 IANA 时区）
+# C++/WinRT（device_channel.cpp 读取 IANA 时区）。须用 C++20：C++17 下 C++/WinRT 退回已被
+# 新版 MSVC 拒绝的 <experimental/coroutine>（STL1011）
 target_link_libraries(${BINARY_NAME} PRIVATE "windowsapp")
+target_compile_features(${BINARY_NAME} PRIVATE cxx_std_20)
 # 源文件按 UTF-8 读取（注释与窗口标题含中文；不加时 MSVC 按系统代码页解析，/WX 下报 C4819）
 target_compile_options(${BINARY_NAME} PRIVATE "/utf-8")
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
