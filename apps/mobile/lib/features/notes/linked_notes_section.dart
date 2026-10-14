@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/platform/platform_features.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
+import '../../core/platform/platform_features.dart';
 import '../../shared/ui/jk_feedback.dart';
 import 'note_models.dart';
 import 'note_repository.dart';

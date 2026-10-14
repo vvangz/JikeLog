@@ -7,9 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/platform/platform_features.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
+import '../../core/platform/platform_features.dart';
 import '../../core/sync/sync_engine.dart';
 import '../../core/sync/sync_providers.dart';
 import '../../shared/ui/conflict_banner.dart';

@@ -9,6 +9,7 @@ environment:
   sdk: ^3.13.5
 
 dependencies:
+  audioplayers: 6.8.1
   crypto: ^3.0.7
   cryptography: ^2.9.0
   device_calendar_plus: ^0.10.1
@@ -28,7 +29,6 @@ dependencies:
   go_router: ^18.0.2
   jpush_flutter: ^3.5.8
   just_audio: ^0.10.6
-  just_audio_windows: 0.2.3
   open_filex: ^4.7.0
   package_info_plus: ^10.2.2
   path: ^1.9.1
