@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jikelog/app/router.dart';
@@ -92,5 +93,39 @@ void main() {
     );
     await _go(tester, '/settings');
     expect(find.byKey(const Key('calendar-export')), findsNothing);
+  });
+
+  Future<void> ctrl(WidgetTester tester, LogicalKeyboardKey key) async {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(key);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await settleApp(tester);
+  }
+
+  testWidgets('快捷键：Ctrl+N 在当前模块新建，Ctrl+F 打开搜索；子页面上不处理', (tester) async {
+    await pumpApp(
+      tester,
+      syncServer: FakeSyncServer(),
+      features: PlatformFeatures.windows,
+      width: 1280,
+      height: 800,
+    );
+    await _go(tester, '/notes');
+    await ctrl(tester, LogicalKeyboardKey.keyN);
+    final router = _c(tester).read(routerProvider);
+    expect(router.state.matchedLocation, startsWith('/notes/'));
+
+    // 已在笔记编辑页（子页面）：快捷键不再新建
+    final editing = router.state.matchedLocation;
+    await ctrl(tester, LogicalKeyboardKey.keyN);
+    expect(router.state.matchedLocation, editing);
+
+    await _go(tester, '/ledger');
+    await ctrl(tester, LogicalKeyboardKey.keyN);
+    expect(router.state.matchedLocation, '/ledger/entry/new');
+
+    await _go(tester, '/memos');
+    await ctrl(tester, LogicalKeyboardKey.keyF);
+    expect(router.state.matchedLocation, '/search');
   });
 }

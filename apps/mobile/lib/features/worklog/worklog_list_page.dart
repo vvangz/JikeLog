@@ -14,13 +14,14 @@ import 'worklog_repository.dart';
 const _weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
 /// 工作日志主界面：按月分组的日志列表。
+/// 新建一篇工作日志并打开（列表页按钮与桌面端 Ctrl+N）。
+Future<void> createWorklog(BuildContext context, WidgetRef ref) async {
+  final id = await ref.read(worklogRepositoryProvider).create();
+  if (context.mounted) await context.push('/worklog/$id');
+}
+
 class WorklogListPage extends ConsumerWidget {
   const WorklogListPage({super.key});
-
-  Future<void> _create(BuildContext context, WidgetRef ref) async {
-    final id = await ref.read(worklogRepositoryProvider).create();
-    if (context.mounted) await context.push('/worklog/$id');
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,7 +30,7 @@ class WorklogListPage extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
         key: const Key('worklog-create'),
-        onPressed: () => _create(context, ref),
+        onPressed: () => createWorklog(context, ref),
         icon: const Icon(Icons.add),
         label: const Text('写日志'),
       ),
@@ -45,7 +46,7 @@ class WorklogListPage extends ConsumerWidget {
             onRetry: () => ref.invalidate(worklogListProvider),
           ),
           data: (items) => items.isEmpty
-              ? _Empty(onCreate: () => _create(context, ref))
+              ? _Empty(onCreate: () => createWorklog(context, ref))
               : _List(items: items),
         ),
       ),

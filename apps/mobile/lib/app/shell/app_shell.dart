@@ -1,9 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/auth_controller.dart';
+import '../../features/memos/memos_page.dart';
+import '../../features/notes/notes_list_page.dart';
 import '../../features/search/search_repository.dart';
+import '../../features/worklog/worklog_list_page.dart';
 import '../theme/app_theme.dart';
 import '../theme/jk_tokens.g.dart';
 import 'destinations.dart';
@@ -56,6 +62,7 @@ class _AppShellState extends ConsumerState<AppShell>
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
     // 动画状态变化时重建，使返回键拦截（PopScope.canPop）与入口图标状态始终正确
     _reveal.addStatusListener((_) {
       if (mounted) setState(() {});
@@ -64,6 +71,7 @@ class _AppShellState extends ConsumerState<AppShell>
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
     _reveal.dispose();
     super.dispose();
   }
@@ -101,6 +109,41 @@ class _AppShellState extends ConsumerState<AppShell>
     _closeOverlay();
     final module = SearchModule.parse(destinationFor(widget.location)?.path);
     context.push(module == null ? '/search' : '/search?module=${module.name}');
+  }
+
+  /// 键盘快捷键（桌面端与外接键盘）：Ctrl+F 搜索，Ctrl+N 在当前模块中新建。
+  /// 子页面或对话框在上层时不处理。
+  bool _onKey(KeyEvent e) {
+    if (e is! KeyDownEvent || !HardwareKeyboard.instance.isControlPressed) {
+      return false;
+    }
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return false;
+    if (e.logicalKey == LogicalKeyboardKey.keyF) {
+      _search();
+      return true;
+    }
+    if (e.logicalKey == LogicalKeyboardKey.keyN) return _createInModule();
+    return false;
+  }
+
+  bool _createInModule() {
+    final module = destinationFor(widget.location)?.path;
+    // 只在模块首页处理（如笔记的文件夹面板等仍在模块页内）
+    if (module == null || widget.location != module) return false;
+    _closeOverlay();
+    switch (module) {
+      case '/worklog':
+        unawaited(createWorklog(context, ref));
+      case '/notes':
+        unawaited(createNote(context, ref));
+      case '/memos':
+        createMemo(context, ref);
+      case '/ledger':
+        unawaited(context.push('/ledger/entry/new'));
+      default:
+        return false;
+    }
+    return true;
   }
 
   @override
