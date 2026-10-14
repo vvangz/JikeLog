@@ -8,7 +8,7 @@ Windows 安装包（MSIX）由 GitHub Actions 构建并签名，附在每个版�
 
 1. 合并 Release Please 的发布 PR 后，`release-please.yml` 打上标签并创建 Release，随后调用 `release-windows.yml`（与部署、APK 并行）。
 2. **构建**（Windows 构建机，没有密钥、只读权限）：检出标签，确认它在 `main` 上，`flutter build windows`，再用 `dart run msix:create` 打包为未签名的 MSIX（配置见 `apps/mobile/pubspec.yaml` 的 `msix_config`）。
-3. **签名并上传**（`windows-signing` 环境）：不检出仓库代码，用 `signtool` 以自签名证书签名并加时间戳，核对签名者的 SHA-1 指纹与仓库变量 `WINDOWS_CERT_THUMBPRINT` 一致，再上传：
+3. **签名并上传**（`windows-signing` 环境）：不检出仓库代码。先核对收到的安装包与构建任务输出的 SHA-256 一致；把 PFX 导入构建机的用户证书存储，用 `signtool` 按指纹签名并加时间戳（HTTPS），核对签名者的 SHA-1 指纹与仓库变量 `WINDOWS_CERT_THUMBPRINT` 一致，再上传：
    - `jikelog-<版本>.msix` 与 `.sha256`
    - `jikelog-windows.cer`（证书公钥，由 PFX 导出）
 
@@ -26,7 +26,7 @@ MSIX 的版本号为 `<版本>.0`；只为正式版本构建。
 PFX 与密码和 APK 的签名密钥放在一起离线备份。
 
 - **丢失**：用新证书签名的版本，用户要先导入新证书才能安装。若证书主题仍为 `CN=JikeLog`，已安装的 App 可以直接升级。
-- **泄露**：别人可以做出用户电脑会信任的安装包。换新证书并通知用户删除旧证书（`certlm.msc` → 受信任的人）。
+- **泄露**：导入过该证书的电脑都会信任别人用它签名的安装包。立即换新证书，在 Release 与 README 中公告，通知用户删除旧证书（`certlm.msc` → 受信任的人 → 证书 → `JikeLog`）。
 - **到期前**（2036 年）：用同一主题生成新证书，更新 Secrets 与 `WINDOWS_CERT_THUMBPRINT`，随下一个版本发布新的 `.cer`。
 
 ## 3. GitHub 配置
