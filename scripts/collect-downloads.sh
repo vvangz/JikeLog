@@ -62,9 +62,13 @@ expect "jikelog-$VERSION.msix" "${EXPECT_MSIX_SHA256:-}"
 apk="$dl/jikelog-$VERSION.apk"
 if [ -f "$apk" ]; then
   apksigner=$(find "${ANDROID_HOME:?未设置 ANDROID_HOME}/build-tools" -name apksigner -type f | sort -V | tail -1)
-  # apksigner 输出"Signer #1 certificate SHA-256 digest: <小写十六进制>"，整行比对
-  "$apksigner" verify --print-certs "$apk" | grep -qxF "Signer #1 certificate SHA-256 digest: $apk_cert" ||
-    { echo "::error::APK 的签名证书与 APK_CERT_SHA256 不符"; exit 1; }
+  # apksigner 输出"Signer #1 certificate SHA-256 digest: <小写十六进制>"，整行比对。
+  # 先取完整输出再匹配：直接接 grep -q 时，grep 匹配后退出，apksigner 继续写入会被 SIGPIPE 终止，
+  # 在 pipefail 下整条管道算作失败（v1.2.0 部署因此误报证书不符）
+  certs=$("$apksigner" verify --print-certs "$apk") ||
+    { echo "::error::apksigner 校验 APK 签名失败"; exit 1; }
+  grep -qxF "Signer #1 certificate SHA-256 digest: $apk_cert" <<<"$certs" ||
+    { echo "::error::APK 的签名证书与 APK_CERT_SHA256 不符：$(grep 'SHA-256 digest' <<<"$certs" || echo 无)"; exit 1; }
 fi
 cer="$dl/jikelog-windows.cer"
 if [ -f "$cer" ]; then
