@@ -2,6 +2,18 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [1.2.2](https://github.com/vvangz/JikeLog/compare/v1.2.1...v1.2.2) (2026-10-23)
+
+
+### 问题修复
+
+* **deploy:** 核对 APK 证书时兼容不同版本 apksigner 的输出格式 ([f174a7d](https://github.com/vvangz/JikeLog/commit/f174a7dbd92d58013cd6e6b3bc535b7ef381edd5))
+
+
+### 文档
+
+* v1.1.0、v1.2.0 发布说明（官网更新日志），v1.0.0 注明备案已通过 ([be37bd2](https://github.com/vvangz/JikeLog/commit/be37bd203dd98aa600eb54d9008bf784cbc2fe63))
+
 ## [1.2.1](https://github.com/vvangz/JikeLog/compare/v1.2.0...v1.2.1) (2026-10-23)
 
 
