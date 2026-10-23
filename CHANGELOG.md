@@ -2,6 +2,13 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [1.2.1](https://github.com/vvangz/JikeLog/compare/v1.2.0...v1.2.1) (2026-10-23)
+
+
+### 问题修复
+
+* **deploy:** 核对 APK 证书与检查数据库是否运行时先取完整输出再匹配，避免 SIGPIPE 误判 ([73dcbd2](https://github.com/vvangz/JikeLog/commit/73dcbd23b550ff5a105d7661aafa953e9b2827f5))
+
 ## [1.2.0](https://github.com/vvangz/JikeLog/compare/v1.1.0...v1.2.0) (2026-10-23)
 
 
