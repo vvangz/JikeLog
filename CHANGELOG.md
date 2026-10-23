@@ -18,7 +18,6 @@
 * **ci:** 签名与构建分开，签名密钥不与仓库代码同处一台机器 ([073a72b](https://github.com/vvangz/JikeLog/commit/073a72b92d097d4deea83f23406a1027ea22cae5))
 * **ci:** 部署前校验 SSH 私钥并先确认能登录服务器 ([7c44ef6](https://github.com/vvangz/JikeLog/commit/7c44ef625487099e0ec8202c1cbf23004f278433))
 * **deploy:** 解包发布包时不保留包内属主 ([b29aea4](https://github.com/vvangz/JikeLog/commit/b29aea4df491b5f47bf9afce3aa6a819fabde573))
-* **mobile:** 使用即刻日志的应用图标，替换 Flutter 默认图标 ([430fe07](https://github.com/vvangz/JikeLog/commit/430fe071c603d9a7e0827079fc05aaa3bd3fb859))
 * **mobile:** 使用即刻日志的应用图标，替换 Flutter 默认图标 ([2678252](https://github.com/vvangz/JikeLog/commit/2678252fec2e2d872fb08100af44d3da9f65d0c1))
 * **server:** 升级 Go 1.27.3 与 excelize 修复新公布的漏洞 ([20aac47](https://github.com/vvangz/JikeLog/commit/20aac470d12aa037b87b857c19bdad8e990d24a7))
 * **server:** 阿里云验证码与 KMS 的错误提示不再提"v0.9.0 接入" ([7362843](https://github.com/vvangz/JikeLog/commit/73628435d3c207f658aeeba8cbf39040edcf0795))
