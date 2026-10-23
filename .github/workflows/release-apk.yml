@@ -25,6 +25,10 @@ on:
       version:
         required: true
         type: string
+    # 签名后安装包的 SHA-256，部署工作流据此核对 Release 中的文件（ADR-014）
+    outputs:
+      sha256:
+        value: ${{ jobs.sign.outputs.sha256 }}
 
 permissions:
   contents: read
@@ -109,6 +113,8 @@ jobs:
   sign:
     name: 签名并上传
     needs: build
+    outputs:
+      sha256: ${{ steps.upload.outputs.sha256 }}
     runs-on: ubuntu-latest
     environment: apk-signing
     permissions:
@@ -165,10 +171,12 @@ jobs:
           echo "签名证书 SHA-256：$actual"
 
       - name: 上传到 Release
+        id: upload
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           (cd dist && sha256sum "jikelog-$VERSION.apk" > "jikelog-$VERSION.apk.sha256")
+          echo "sha256=$(cut -d' ' -f1 "dist/jikelog-$VERSION.apk.sha256")" >> "$GITHUB_OUTPUT"
           gh release upload "v$VERSION" dist/* --clobber --repo "$GITHUB_REPOSITORY"
 
       - name: 清理签名文件

@@ -1,6 +1,7 @@
 packages:
   - apps/admin-web
   - apps/note-editor
+  - apps/site
   - packages/*
 
 onlyBuiltDependencies:

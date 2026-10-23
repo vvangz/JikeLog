@@ -29,14 +29,19 @@ jobs:
 
   # 发布新版本后部署到正式服务器（ADR-012）。用 GITHUB_TOKEN 创建的 Release 不会触发其他工作流，
   # 所以在这里直接调用部署工作流。
+  # 等 APK 与 Windows 安装包上传到 Release 后再部署，官网下载页才能取到它们（ADR-014）；
+  # 安装包构建失败也照常部署，下载页保持上一个版本；工作流被取消时不部署（!cancelled()，不用 always()）。
   deploy:
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    needs: [release-please, apk, windows]
+    if: ${{ !cancelled() && needs.release-please.outputs.release_created == 'true' }}
     permissions:
       contents: read
     uses: ./.github/workflows/deploy.yml
     with:
       version: ${{ needs.release-please.outputs.version }}
+      # 签名任务输出的安装包校验值；任务失败时为空，部署时只核对 .sha256 与签名证书
+      apk_sha256: ${{ needs.apk.outputs.sha256 }}
+      msix_sha256: ${{ needs.windows.outputs.sha256 }}
     # 被调用的工作流读不到 production 环境的 Secrets，除非这里写 inherit（v0.9.0 发布时因此没有部署）。
     # 仓库级 Secrets 为空，部署用的 Secrets 只放在 production 环境中，inherit 不会多传其他密钥。
     secrets: inherit

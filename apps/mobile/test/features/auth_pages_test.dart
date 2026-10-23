@@ -14,7 +14,7 @@ void main() {
     await tester.tapAt(const Offset(200, 20)); // 关闭底部弹层
     await settleApp(tester);
     await tapAndSettle(tester, find.text('《用户协议》'));
-    expect(find.textContaining('妥善保管账号'), findsOneWidget);
+    expect(find.textContaining('请妥善保管密码'), findsOneWidget);
     await tester.tapAt(const Offset(200, 20));
     await settleApp(tester);
 

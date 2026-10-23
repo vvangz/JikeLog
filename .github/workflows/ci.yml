@@ -74,7 +74,7 @@ jobs:
         run: docker build --build-arg COMMIT=${GITHUB_SHA::7} -t jikelog-api:ci .
 
   web:
-    name: 设计令牌、管理后台与笔记编辑器
+    name: 设计令牌、管理后台、笔记编辑器与官网
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -108,6 +108,13 @@ jobs:
           pnpm typecheck
           pnpm test:coverage
           pnpm build
+      - name: 官网 测试（含覆盖率）/ 构建
+        working-directory: apps/site
+        run: |
+          pnpm test:coverage
+          pnpm build
+      - name: 正式环境 Caddyfile 路由检查
+        run: bash deploy/production/tests/caddy-smoke.sh
       - name: 管理后台 端到端测试（Playwright，接口在浏览器层模拟）
         working-directory: apps/admin-web
         run: |

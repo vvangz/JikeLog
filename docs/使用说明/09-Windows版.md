@@ -8,7 +8,7 @@ Windows 版与 Android 版是同一个应用：用同一个账号登录，数据
 
 Windows 版以 MSIX 安装包发布，使用即刻日志自己的证书签名。**第一次安装前**要先让电脑信任这张证书，以后升级不用再做。
 
-1. 打开 [GitHub Release 页面](https://github.com/vvangz/JikeLog/releases/latest)，下载两个文件，放在同一个文件夹：
+1. 打开官网的[下载页](https://www.pingvv.top/download#windows)（下载慢时可以用 [GitHub Release 页面](https://github.com/vvangz/JikeLog/releases/latest)），下载两个文件，放在同一个文件夹：
    - `jikelog-<版本>.msix`：安装包
    - `jikelog-windows.cer`：证书
 2. 先按下方说明核对证书指纹，再信任证书（二选一，都需要管理员权限）：

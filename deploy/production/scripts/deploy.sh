@@ -2,7 +2,8 @@
 # 部署一个版本（ADR-012），由 GitHub Actions 的"部署"工作流通过 SSH 调用，也可以手动执行：
 #   cd /root/jikelog && bash scripts/deploy.sh 0.9.0
 # 发布包事先上传到 releases/<版本>/：api.tar.gz、backup.tar.gz（镜像），admin.tar.gz（管理后台），
-# config.tar.gz（compose.yml、caddy/、scripts/），以及服务器缺少的第三方镜像 base.tar.gz（可选）。
+# config.tar.gz（compose.yml、caddy/、scripts/），以及服务器缺少的第三方镜像 base.tar.gz（可选）；
+# 官网上线（ADR-014）起还有 site.tar.gz（官网）与 downloads.tar.gz（安装包与 latest.json，ADR-014），没有时保留服务器上现有的。
 # 步骤：部署前备份数据库 → 载入镜像 → 更新配置与管理后台 → 迁移 → 启动 → 就绪检查；失败时切回上一个版本。
 set -euo pipefail
 
@@ -30,6 +31,8 @@ PREV=$(get_env JIKELOG_VERSION)
 # 上一个版本的镜像已不在时（例如首次部署），没有可以切回的版本
 docker image inspect "jikelog-api:$PREV" >/dev/null 2>&1 || PREV=""
 PREV_ADMIN=$(readlink admin/current 2>/dev/null || true)
+PREV_SITE=$(readlink site/current 2>/dev/null || true)
+PREV_DOWNLOADS=$(readlink downloads/current 2>/dev/null || true)
 log "当前版本 ${PREV:-无}"
 
 log "载入镜像"
@@ -48,20 +51,52 @@ if JIKELOG_VERSION="${PREV:-$VERSION}" docker compose ps --status running postgr
   ls -1t backups/predeploy/*.dump | tail -n +6 | xargs -r rm -f
 fi
 
-log "更新配置与管理后台"
+log "更新配置、管理后台与官网"
 # 保存当前配置，失败时连同镜像版本一起切回（不含 scripts/：不能覆盖正在执行的本脚本）
 saved=$(mktemp -d)
 trap 'rm -rf "$saved"' EXIT
 for p in compose.yml caddy; do if [ -e "$p" ]; then cp -a "$p" "$saved/"; fi; done
-# 以 root 解包时 tar 默认保留包内的属主（GitHub 构建机的 uid 1001），一律改为 root
-tar --no-same-owner -xzf "$REL/config.tar.gz" -C "$ROOT"
-mkdir -p "admin/$VERSION"
-tar --no-same-owner -xzf "$REL/admin.tar.gz" -C "admin/$VERSION"
-ln -sfn "$VERSION" admin/current
-set_env JIKELOG_VERSION "$VERSION"
+
+# 原子地切换 <目录>/current（先建临时软链接再改名，切换过程中 current 始终存在）
+switch_current() { # 目录 版本
+  ln -sfn "$2" "$1/.current.tmp"
+  mv -Tf "$1/.current.tmp" "$1/current"
+}
+
+# 官网与安装包（ADR-014）：先解到临时目录，完整后再换上。重新部署同一版本时，原内容移到 .old-<版本>，失败时换回
+STAGED=()
+stage_static() { # 目录
+  local part=$1 new="$1/.new-$VERSION"
+  rm -rf "$new"
+  mkdir -p "$new"
+  tar --no-same-owner -xzf "$REL/$part.tar.gz" -C "$new"
+  # Caddy 会跟随软链接，发布包里不应有软链接（防止指向容器内的证书等文件）
+  find "$new" -type l -delete
+  if [ -d "$part/$VERSION" ]; then
+    rm -rf "$part/.old-$VERSION"
+    mv "$part/$VERSION" "$part/.old-$VERSION"
+  fi
+  mv "$new" "$part/$VERSION"
+  switch_current "$part" "$VERSION"
+  STAGED+=("$part")
+}
+restore_static() { # 目录 上一个版本（可为空）
+  local part=$1 prev=$2
+  if [ -d "$part/.old-$VERSION" ]; then
+    rm -rf "${part:?}/$VERSION"
+    mv "$part/.old-$VERSION" "$part/$VERSION"
+  fi
+  if [ -n "$prev" ]; then switch_current "$part" "$prev"; else rm -f "$part/current"; fi
+}
 
 rollback() {
   log "失败，切回 ${PREV:-（无）}"
+  for part in "${STAGED[@]}"; do
+    case "$part" in
+      site) restore_static site "$PREV_SITE" ;;
+      downloads) restore_static downloads "$PREV_DOWNLOADS" ;;
+    esac
+  done
   if [ -n "$PREV" ]; then
     set_env JIKELOG_VERSION "$PREV"
     [ -n "$PREV_ADMIN" ] && ln -sfn "$PREV_ADMIN" admin/current
@@ -72,7 +107,22 @@ rollback() {
   log "数据库迁移只向前；如需回到部署前的数据，见 backups/predeploy/ 与 docs/部署运维/生产部署.md 第 3 节"
   exit 1
 }
+# 从解包开始任何一步失败都切回（发布包损坏时也不会留下新配置配旧服务）
 trap rollback ERR
+
+# 以 root 解包时 tar 默认保留包内的属主（GitHub 构建机的 uid 1001），一律改为 root
+tar --no-same-owner -xzf "$REL/config.tar.gz" -C "$ROOT"
+mkdir -p "admin/$VERSION"
+tar --no-same-owner -xzf "$REL/admin.tar.gz" -C "admin/$VERSION"
+ln -sfn "$VERSION" admin/current
+for part in site downloads; do
+  if [ -f "$REL/$part.tar.gz" ]; then
+    stage_static "$part"
+  else
+    log "发布包中没有 $part.tar.gz，保留现有的 $part"
+  fi
+done
+set_env JIKELOG_VERSION "$VERSION"
 
 log "数据库迁移"
 docker compose run --rm -T --entrypoint jikelog-migrate api
@@ -95,17 +145,23 @@ done
 [ "$ready" = 1 ] || false
 trap - ERR
 
-log "清理旧版本（保留最近 3 个发布包、管理后台与镜像）"
-current=$(readlink admin/current)
-# 只列真实目录（find -type d 不跟随软链接，不会碰到 admin/current）
+log "清理旧版本（保留最近 3 个发布包、管理后台、官网、安装包与镜像）"
+# 只列真实目录（find -type d 不跟随软链接，不会碰到 */current）。
+# 正在使用的版本（<目录>/current 指向的；releases 没有 current，取本次部署的版本）始终保留
 prune_old() { # 目录 要保留的最新个数
+  [ -d "$1" ] || return 0
+  local keep
+  keep=$(readlink "$1/current" 2>/dev/null || echo "$VERSION")
   find "$1" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -rn | tail -n +$(($2 + 1)) | cut -d' ' -f2- |
     while read -r d; do
-      [ "$(basename "$d")" = "$current" ] || rm -rf -- "$d"
+      [ "$(basename "$d")" = "$keep" ] || rm -rf -- "$d"
     done
 }
 prune_old releases 3
 prune_old admin 3
+prune_old site 3
+prune_old downloads 3
+rm -rf site/.old-* downloads/.old-*
 # 镜像：只保留仍有发布包的版本
 for img in $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^jikelog-(api|backup):'); do
   [ -d "releases/${img#*:}" ] || docker rmi "$img" >/dev/null 2>&1 || true

@@ -31,7 +31,7 @@
 ```
 
 - **type**：`feat` 新功能 · `fix` 修复 · `refactor` 重构 · `perf` 性能 · `docs` 文档 · `test` 测试 · `build` 构建/依赖 · `ci` 持续集成 · `chore` 杂项 · `style` 格式 · `revert` 回滚
-- **scope**：`server` · `mobile` · `admin` · `tokens` · `deploy` · `docs` · `ci` · `deps` · `release`
+- **scope**：`server` · `mobile` · `admin` · `site` · `tokens` · `deploy` · `docs` · `ci` · `deps` · `release`
 - 由 commitlint 在 `commit-msg` 钩子中校验，钩子在执行 `pnpm install` 时自动安装
 
 示例：`feat(server): 新增短信验证码登录接口`
