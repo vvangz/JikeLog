@@ -18,6 +18,7 @@ OUT="${2:?用法：collect-downloads.sh <版本> <输出目录>}"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::版本号不合法：$VERSION"; exit 1; }
 
 norm() { tr -d ': \r\n' | tr '[:upper:]' '[:lower:]'; } # 去掉冒号与空白，统一小写
+norm_lines() { tr -d ': \r' | tr '[:upper:]' '[:lower:]'; } # 同上，但保留换行（逐行处理）
 apk_cert=$(printf '%s' "${APK_CERT_SHA256:-}" | norm)
 win_cert=$(printf '%s' "${WINDOWS_CERT_THUMBPRINT:-}" | norm)
 # 变量为空时任何证书都会"通过"核对
@@ -62,12 +63,14 @@ expect "jikelog-$VERSION.msix" "${EXPECT_MSIX_SHA256:-}"
 apk="$dl/jikelog-$VERSION.apk"
 if [ -f "$apk" ]; then
   apksigner=$(find "${ANDROID_HOME:?未设置 ANDROID_HOME}/build-tools" -name apksigner -type f | sort -V | tail -1)
-  # apksigner 输出"Signer #1 certificate SHA-256 digest: <小写十六进制>"，整行比对。
-  # 先取完整输出再匹配：直接接 grep -q 时，grep 匹配后退出，apksigner 继续写入会被 SIGPIPE 终止，
-  # 在 pipefail 下整条管道算作失败（v1.2.0 部署因此误报证书不符）
+  [ -n "$apksigner" ] || { echo "::error::$ANDROID_HOME/build-tools 中没有 apksigner"; exit 1; }
+  # 不同版本的 apksigner 前缀不同（"Signer #1 certificate SHA-256 digest: …"、
+  # "V3.0 Signer: certificate SHA-256 digest: …"），与签名任务一样只取 digest 之后的值：
+  # 至少有一个签名者，且所有签名者都是发布证书。先取完整输出再处理，避免管道在 pipefail 下因 SIGPIPE 误判
   certs=$("$apksigner" verify --print-certs "$apk") ||
     { echo "::error::apksigner 校验 APK 签名失败"; exit 1; }
-  grep -qxF "Signer #1 certificate SHA-256 digest: $apk_cert" <<<"$certs" ||
+  digests=$(sed -n 's/.*certificate SHA-256 digest: *//p' <<<"$certs" | norm_lines | sort -u)
+  [ -n "$digests" ] && [ "$digests" = "$apk_cert" ] ||
     { echo "::error::APK 的签名证书与 APK_CERT_SHA256 不符：$(grep 'SHA-256 digest' <<<"$certs" || echo 无)"; exit 1; }
 fi
 cer="$dl/jikelog-windows.cer"
