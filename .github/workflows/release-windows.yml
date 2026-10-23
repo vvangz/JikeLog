@@ -148,10 +148,23 @@ jobs:
           Move-Item jikelog.msix $msix
           $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
             Sort-Object FullName -Descending | Select-Object -First 1
-          # 时间戳：证书到期后已发布的安装包仍可验证
-          & $signtool.FullName sign /fd SHA256 /sha1 $cert.Thumbprint /s My `
-            /tr https://timestamp.digicert.com /td SHA256 $msix
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # 时间戳：证书到期后已发布的安装包仍可验证。RFC 3161 时间戳服务器用 http（回复本身带签名）；
+          # signtool 对 https 地址或服务器临时不可用都报 "Invalid Timestamp URL"，因此依次换服务器并重试
+          $unsigned = "$msix.unsigned"
+          Copy-Item $msix $unsigned
+          $signed = $false
+          foreach ($tsa in 'http://timestamp.digicert.com', 'http://timestamp.sectigo.com') {
+            foreach ($attempt in 1..3) {
+              Copy-Item -Force $unsigned $msix
+              & $signtool.FullName sign /fd SHA256 /sha1 $cert.Thumbprint /s My /tr $tsa /td SHA256 $msix
+              if ($LASTEXITCODE -eq 0) { $signed = $true; break }
+              Write-Output "::warning::时间戳服务器 $tsa 第 $attempt 次失败"
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+            if ($signed) { break }
+          }
+          Remove-Item $unsigned
+          if (-not $signed) { Write-Output "::error::所有时间戳服务器都失败，不发布"; exit 1 }
           # 证书公钥（.cer），用户安装前导入"受信任的人"
           [IO.File]::WriteAllBytes("dist/jikelog-windows.cer", $cert.Export('Cert'))
 
