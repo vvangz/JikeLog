@@ -2,6 +2,34 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [1.1.0](https://github.com/vvangz/JikeLog/compare/v1.0.0...v1.1.0) (2026-10-23)
+
+
+### 新功能
+
+* **ci:** 发布时构建并签名 Windows 安装包（MSIX） ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+* **mobile:** Windows 上导出文件改为选择文件夹保存 ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+* **mobile:** Windows 备忘提醒使用系统通知（Toast） ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+* **mobile:** Windows 平台骨架与按平台开关的功能 ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+* **mobile:** Windows 应用图标 ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+* **mobile:** 键盘快捷键 Ctrl+F 搜索、Ctrl+N 在当前模块新建 ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+
+
+### 问题修复
+
+* **ci:** 签名前核对产物校验值，Action 固定到提交 SHA ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+* **mobile:** Windows 打开附件改为允许列表，并以带来源标记的副本打开 ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+* **mobile:** Windows 运行器用 C++20 编译 C++/WinRT ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+* **mobile:** Windows 音频改用 audioplayers ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+* **mobile:** 处理 Windows 版审查意见 ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+
+
+### 文档
+
+* v1.1.0 开发日志（Windows 客户端），补充证书核对与附件打开说明 ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+* Windows 客户端（ADR-013、使用说明、发布 Windows 版） ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+* 本机构建 Windows 版还需要 ATL 组件 ([fd8f970](https://github.com/vvangz/JikeLog/commit/fd8f970039fa2a88e353e61c5f6dff327c5b57bc))
+
 ## [1.0.0](https://github.com/vvangz/JikeLog/compare/v0.9.0...v1.0.0) (2026-10-23)
 
 
