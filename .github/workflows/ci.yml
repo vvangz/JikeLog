@@ -158,3 +158,36 @@ jobs:
         run: bash ../../scripts/flutter-coverage.sh 80
       - name: 构建调试 APK
         run: flutter build apk --debug --build-number=${{ github.run_number }}
+
+  windows:
+    name: Windows 客户端
+    runs-on: windows-latest
+    env:
+      PUB_HOSTED_URL: https://pub.flutter-io.cn
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v6
+        with:
+          path: .cache/fonts
+          key: fonts-${{ hashFiles('scripts/fetch-fonts.sh') }}
+      - name: 下载字体（校验 SHA256）
+        working-directory: .
+        run: bash scripts/fetch-fonts.sh
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      # Dart 代码与测试已在"移动端"任务中检查；这里只确认 Windows 版能编译（C++ 运行器与插件）
+      - name: 构建 Windows 版
+        run: flutter build windows --release --build-number=${{ github.run_number }}
+      # 确认能打包为 MSIX（不签名；正式包由"发布 Windows 版"工作流签名）
+      - name: 打包 MSIX
+        run: dart run msix:create --build-windows false --version 0.0.1.0

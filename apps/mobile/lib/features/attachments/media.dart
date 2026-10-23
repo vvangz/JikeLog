@@ -8,6 +8,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:record/record.dart';
 
+import '../../core/platform/platform_features.dart';
+import 'media_windows.dart';
+
 /// 录音（record 插件）。抽成接口：组件测试中没有平台插件，用假实现替换。
 abstract interface class Recorder {
   /// 请求麦克风权限，用户拒绝时返回 false。
@@ -96,7 +99,9 @@ final recorderFactoryProvider = Provider<Recorder Function()>(
 );
 
 final playerFactoryProvider = Provider<Player Function()>(
-  (_) => PluginPlayer.new,
+  (ref) => ref.watch(platformFeaturesProvider).isDesktop
+      ? DesktopPlayer.new
+      : PluginPlayer.new,
 );
 
 /// PDF 阅读视图（pdfx）。

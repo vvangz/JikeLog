@@ -65,9 +65,11 @@ def main() -> None:
         out = MOBILE / "android" / "app" / "src" / "main" / "res" / f"mipmap-{density}" / "ic_launcher.png"
         img.resize((px, px), Image.LANCZOS).save(out, optimize=True)
 
-    ico = MOBILE / "windows" / "runner" / "resources" / "app_icon.ico"
-    if ico.parent.is_dir():
-        img.save(ico, sizes=[(s, s) for s in (16, 24, 32, 48, 64, 128, 256)])
+    res = MOBILE / "windows" / "runner" / "resources"
+    if res.is_dir():
+        img.save(res / "app_icon.ico", sizes=[(s, s) for s in (16, 24, 32, 48, 64, 128, 256)])
+        # MSIX 的应用图标（msix_config.logo_path，至少 400px）
+        img.resize((512, 512), Image.LANCZOS).save(res / "app_icon.png", optimize=True)
 
     print("ok")
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jikelog/core/platform/platform_features.dart';
 import 'package:jikelog/core/config.dart';
 import 'package:jikelog/app/app.dart';
 import 'package:jikelog/core/api/models.dart';
@@ -48,6 +49,7 @@ Future<FakeBackend> pumpApp(
   double textScale = 1,
   Map<String, dynamic>? user,
   FakeSyncServer? syncServer,
+  PlatformFeatures features = PlatformFeatures.android,
 }) async {
   final b = backend ?? standardBackend(user: user);
   tester.view.physicalSize = Size(width, height);
@@ -66,6 +68,7 @@ Future<FakeBackend> pumpApp(
         store: store,
         tokens: MemoryTokenStore(signedIn ? testTokens : null),
         syncServer: syncServer,
+        features: features,
       ),
       child: const JikeLogApp(),
     ),

@@ -41,7 +41,7 @@ Future<WidgetRef> _pump(
         ),
         pdfViewBuilderProvider.overrideWithValue((f) => const Text('PDF 内容')),
         recordingDirProvider.overrideWithValue(() async => _tmp),
-        openExternalProvider.overrideWithValue((_, _) async => openExternal),
+        openExternalProvider.overrideWithValue((_, _, _) async => openExternal),
       ],
       child: MaterialApp(
         theme: AppTheme.light(),

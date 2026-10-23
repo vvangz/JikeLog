@@ -14,6 +14,7 @@ import '../../core/sync/record_store.dart';
 import '../../core/sync/schema.dart';
 import '../../core/sync/sync_api.dart';
 import '../../core/sync/sync_engine.dart';
+import 'desktop_open.dart';
 
 /// 附件状态。
 enum AttachmentState { uploading, failed, ready }
@@ -76,7 +77,14 @@ class AttachmentService {
   Future<Directory> _dir() async =>
       Directory(p.join((await baseDir()).path, 'attachments'));
 
+  /// 附件 ID 来自同步记录，用作文件名前先确认是 UUID，防止被篡改的记录把文件写到附件目录之外。
+  static final _uuid = RegExp(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    caseSensitive: false,
+  );
+
   Future<File> _fileFor(String id) async {
+    if (!_uuid.hasMatch(id)) throw ArgumentError.value(id, 'id', '不是有效的附件 ID');
     final dir = await _dir();
     await dir.create(recursive: true);
     return File(p.join(dir.path, id));
@@ -86,6 +94,7 @@ class AttachmentService {
   Future<void> deleteLocalFiles() async {
     final dir = await _dir();
     if (await dir.exists()) await dir.delete(recursive: true);
+    await deleteDesktopOpenCopies();
   }
 
   /// 为记录添加附件：复制到应用目录后在后台上传。

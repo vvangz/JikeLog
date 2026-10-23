@@ -8,18 +8,24 @@ import 'package:path/path.dart' as p;
 
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
+import '../../core/platform/platform_features.dart';
 import '../../shared/ui/jk_button.dart';
 import '../../shared/ui/jk_feedback.dart';
 import 'attachment_images.dart';
 import 'attachment_service.dart';
+import 'desktop_open.dart';
 import 'media.dart';
 
-/// 用系统中的应用打开文件（测试中替换）。返回 false 表示没有可用的应用。
-final openExternalProvider = Provider<Future<bool> Function(File, String)>(
-  (_) =>
-      (file, mime) async =>
-          (await OpenFilex.open(file.path, type: mime)).type == ResultType.done,
-);
+/// 用系统中的应用打开文件（测试中替换）。参数为本机文件、MIME 类型与附件的原文件名；
+/// 返回 false 表示没有可用的应用。
+final openExternalProvider =
+    Provider<Future<bool> Function(File, String, String)>(
+      (ref) => ref.watch(platformFeaturesProvider).isDesktop
+          ? (file, _, name) => openOnDesktop(file, name)
+          : (file, mime, _) async =>
+                (await OpenFilex.open(file.path, type: mime)).type ==
+                ResultType.done,
+    );
 
 /// 按类型打开附件：图片全屏查看，PDF 在 App 内阅读，音频在 App 内播放，其他文件交给系统应用。
 Future<void> showAttachment(
@@ -48,7 +54,7 @@ Future<void> showAttachment(
       showDragHandle: true,
       builder: (_) => AudioPlayerSheet(file: file, title: a.fileName),
     );
-  } else if (!await ref.read(openExternalProvider)(file, a.mime) &&
+  } else if (!await ref.read(openExternalProvider)(file, a.mime, a.fileName) &&
       context.mounted) {
     showJkToast(context, '没有可以打开该文件的应用');
   }
@@ -98,7 +104,7 @@ class PdfViewerPage extends ConsumerWidget {
           tooltip: '用其他应用打开',
           icon: const Icon(Icons.open_in_new),
           onPressed: () async {
-            if (!await ref.read(openExternalProvider)(file, mime) &&
+            if (!await ref.read(openExternalProvider)(file, mime, title) &&
                 context.mounted) {
               showJkToast(context, '没有可以打开该文件的应用');
             }

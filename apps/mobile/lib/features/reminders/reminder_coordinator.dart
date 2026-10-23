@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../app/router.dart';
+import '../../core/platform/platform_features.dart';
 import '../../core/sync/sync_providers.dart';
 import '../auth/auth_controller.dart';
 import '../consent/consent_controller.dart';
@@ -21,13 +22,16 @@ final localNotifierProvider = Provider<LocalNotifier>(
 );
 
 final pushClientProvider = Provider<PushClient>(
-  (_) => jpushAppKey.isEmpty
+  (ref) =>
+      jpushAppKey.isEmpty || !ref.watch(platformFeaturesProvider).pushChannel
       ? const NoPushClient()
       : JPushClient(appKey: jpushAppKey),
 );
 
 final systemCalendarProvider = Provider<SystemCalendar>(
-  (_) => PluginSystemCalendar(),
+  (ref) => ref.watch(platformFeaturesProvider).systemCalendar
+      ? PluginSystemCalendar()
+      : const NoSystemCalendar(),
 );
 
 final deviceTimeZoneProvider = Provider<DeviceTimeZone>(

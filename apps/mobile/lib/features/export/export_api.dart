@@ -4,14 +4,17 @@ library;
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../app/providers.dart';
 import '../../core/api/api_client.dart';
 import '../../core/net/tls.dart';
+import '../../core/platform/platform_features.dart';
 
 /// 可以导出的模块（与接口中的 ExportModule 一致）。
 enum ExportModule {
@@ -132,10 +135,11 @@ final exportApiProvider = Provider<ExportApi>(
   (ref) => ExportApi(ref.watch(apiClientProvider)),
 );
 
-/// 把下载好的导出文件交给用户：系统分享面板（可保存到文件、发给电脑等）。
+/// 把下载好的导出文件交给用户：手机上打开系统分享面板（可保存到文件、发给电脑等），
+/// 桌面端（Windows）弹出"另存为"。
 abstract class ExportFiles {
-  /// 下载 [url] 到本机临时目录并打开分享面板。
-  Future<void> downloadAndShare(String url, String fileName);
+  /// 下载 [url] 并交给用户。桌面端返回保存的路径，用户取消或手机上分享时返回 null。
+  Future<String?> downloadAndShare(String url, String fileName);
 
   /// 删除本机留下的导出文件（退出登录时）。
   Future<void> clear();
@@ -164,11 +168,8 @@ class ShareExportFiles implements ExportFiles {
   }
 
   @override
-  Future<void> downloadAndShare(String url, String fileName) async {
-    // 导出内容是明文：正式版只从 HTTPS 地址下载
-    if (kReleaseMode && Uri.parse(url).scheme != 'https') {
-      throw StateError('下载地址不安全');
-    }
+  Future<String?> downloadAndShare(String url, String fileName) async {
+    _checkUrl(url);
     // 只保留最近一次下载的文件（分享面板需要在之后读取它，不能立即删除）；退出登录时清空
     await clear();
     final dir = await _dir();
@@ -181,12 +182,78 @@ class ShareExportFiles implements ExportFiles {
         title: fileName,
       ),
     );
+    return null;
   }
 }
 
-final exportFilesProvider = Provider<ExportFiles>(
-  (ref) => ShareExportFiles(tls: ref.watch(tlsPolicyProvider)),
-);
+/// 导出内容是明文：正式版只从 HTTPS 地址下载。
+void _checkUrl(String url) {
+  if (kReleaseMode && Uri.parse(url).scheme != 'https') {
+    throw StateError('下载地址不安全');
+  }
+}
+
+/// 桌面端：让用户选择文件夹，直接下载到那里，不在临时目录留副本。
+/// （file_picker 的"另存为"要求先把整个文件读进内存，含附件的导出可能很大，所以选文件夹。）
+class SaveExportFiles implements ExportFiles {
+  SaveExportFiles({
+    required TlsPolicy tls,
+    Dio? dio,
+    Future<String?> Function()? pickFolder,
+  }) : _dio = dio ?? tls.dio(ShareExportFiles.options),
+       _pickFolder = pickFolder ?? _folderDialog;
+
+  final Dio _dio;
+  final Future<String?> Function() _pickFolder;
+
+  static Future<String?> _folderDialog() =>
+      FilePicker.getDirectoryPath(dialogTitle: '选择导出文件的保存位置');
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<String?> downloadAndShare(String url, String fileName) async {
+    _checkUrl(url);
+    final folder = await _pickFolder();
+    if (folder == null) return null;
+    // 文件名只取最后一段，不能借路径写到所选文件夹之外
+    final target = availablePath(folder, p.basename(fileName));
+    // 先下载到临时文件名，完成后再改名：中途失败不会留下不完整的 zip
+    final part = File('$target.part');
+    try {
+      await _dio.download(url, part.path);
+      await part.rename(target);
+    } on Object {
+      try {
+        if (await part.exists()) await part.delete();
+      } on FileSystemException catch (e) {
+        debugPrint('删除不完整的导出文件失败: $e');
+      }
+      rethrow;
+    }
+    return target;
+  }
+}
+
+/// [folder] 中不与已有文件重名的路径：重名时依次加上 (2)、(3)……
+@visibleForTesting
+String availablePath(String folder, String fileName) {
+  final ext = p.extension(fileName);
+  final stem = p.basenameWithoutExtension(fileName);
+  var candidate = p.join(folder, fileName);
+  for (var i = 2; File(candidate).existsSync(); i++) {
+    candidate = p.join(folder, '$stem ($i)$ext');
+  }
+  return candidate;
+}
+
+final exportFilesProvider = Provider<ExportFiles>((ref) {
+  final tls = ref.watch(tlsPolicyProvider);
+  return ref.watch(platformFeaturesProvider).shareSheet
+      ? ShareExportFiles(tls: tls)
+      : SaveExportFiles(tls: tls);
+});
 
 /// 最近的导出（新的在前）。
 final exportsProvider = FutureProvider.autoDispose<List<ExportJob>>(

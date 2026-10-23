@@ -44,6 +44,13 @@ class MemoSelectedDayController extends Notifier<DateTime> {
   void set(DateTime d) => state = d;
 }
 
+/// 新建备忘（列表页按钮与桌面端 Ctrl+N）：日历视图下默认选中的那一天。
+void createMemo(BuildContext context, WidgetRef ref) {
+  final calendar = ref.read(memoViewProvider) == MemoView.calendar;
+  final day = ref.read(memoSelectedDayProvider);
+  context.push(calendar ? '/memos/new?day=${formatDate(day)}' : '/memos/new');
+}
+
 /// 备忘录主界面：待办列表（按日期分组）或日历。
 class MemosPage extends ConsumerWidget {
   const MemosPage({super.key});
@@ -56,11 +63,7 @@ class MemosPage extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
         key: const Key('memo-create'),
-        onPressed: () => context.push(
-          view == MemoView.calendar
-              ? '/memos/new?day=${formatDate(day)}'
-              : '/memos/new',
-        ),
+        onPressed: () => createMemo(context, ref),
         icon: const Icon(Icons.add),
         label: const Text('新建备忘'),
       ),

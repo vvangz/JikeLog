@@ -74,6 +74,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     ..listen(consentControllerProvider, (_, _) => refresh.value++)
     ..onDispose(refresh.dispose);
 
+  // 外壳内的导航器：模块页上弹出的底部面板在这里，键盘快捷键据此判断是否有内容遮挡
+  final shellNavigator = GlobalKey<NavigatorState>(debugLabel: 'shell');
   final router = GoRouter(
     initialLocation: homePath,
     refreshListenable: refresh,
@@ -107,8 +109,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const ResetPasswordPage(),
       ),
       ShellRoute(
-        builder: (context, state, child) =>
-            AppShell(location: state.matchedLocation, child: child),
+        navigatorKey: shellNavigator,
+        builder: (context, state, child) => AppShell(
+          location: state.matchedLocation,
+          navigator: shellNavigator,
+          child: child,
+        ),
         routes: [
           for (final d in moduleDestinations)
             GoRoute(

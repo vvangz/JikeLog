@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jikelog/core/platform/platform_features.dart';
 import 'package:jikelog/app/providers.dart';
 import 'package:jikelog/core/api/api_client.dart';
 import 'package:jikelog/core/api/models.dart';
@@ -177,8 +178,10 @@ List<Override> testOverrides({
   AppDatabase? db,
   FakeSyncServer? syncServer,
   Future<Directory> Function()? filesDir,
+  PlatformFeatures features = PlatformFeatures.android,
 }) => [
   keyValueStoreProvider.overrideWithValue(store ?? MemoryStore()),
+  platformFeaturesProvider.overrideWithValue(features),
   deviceIdentityProvider.overrideWithValue(testDevice),
   tokenStoreProvider.overrideWithValue(tokens ?? MemoryTokenStore()),
   apiClientProvider.overrideWith(
@@ -205,7 +208,7 @@ List<Override> testOverrides({
     (file) => Text('PDF:${file.path.split(Platform.pathSeparator).last}'),
   ),
   openExternalProvider.overrideWithValue(
-    (file, mime) async => TestHooks.openExternal(file, mime),
+    (file, mime, _) async => TestHooks.openExternal(file, mime),
   ),
   launchLinkProvider.overrideWithValue((uri) async => TestHooks.launch(uri)),
   imagePickerProvider.overrideWithValue(() => TestHooks.pickImage()),
@@ -307,8 +310,9 @@ class FakeExportFiles implements ExportFiles {
   Future<void> clear() async => cleared++;
 
   @override
-  Future<void> downloadAndShare(String url, String fileName) async {
+  Future<String?> downloadAndShare(String url, String fileName) async {
     if (fail != null) throw fail!;
     shared.add((url, fileName));
+    return null;
   }
 }
