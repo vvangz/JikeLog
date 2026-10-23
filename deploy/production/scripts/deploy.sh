@@ -41,7 +41,9 @@ docker load -i "$REL/api.tar.gz" >/dev/null
 docker load -i "$REL/backup.tar.gz" >/dev/null
 
 # .env 中可能还没有 JIKELOG_VERSION（首次部署、从验收环境迁移），compose 解析镜像名时需要它
-if JIKELOG_VERSION="${PREV:-$VERSION}" docker compose ps --status running postgres 2>/dev/null | grep -q postgres; then
+# 先取完整输出再匹配：管道直接接 grep -q 时可能因 SIGPIPE 在 pipefail 下误判，静默跳过备份
+running=$(JIKELOG_VERSION="${PREV:-$VERSION}" docker compose ps --status running postgres 2>/dev/null || true)
+if grep -q postgres <<<"$running"; then
   log "部署前备份数据库"
   mkdir -p backups/predeploy
   chmod 700 backups/predeploy
