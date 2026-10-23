@@ -2,6 +2,26 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [1.2.0](https://github.com/vvangz/JikeLog/compare/v1.1.0...v1.2.0) (2026-10-23)
+
+
+### 新功能
+
+* **deploy:** 官网与安装包下载上线：Caddy 路由、部署与回滚、从 Release 核对后镜像安装包 ([f19178d](https://github.com/vvangz/JikeLog/commit/f19178d2609bd5f8615371852dc3a8dd0891ca4e))
+* **mobile:** 隐私政策与用户协议补全运营者信息，App 内文本与官网同步 ([e0a059a](https://github.com/vvangz/JikeLog/commit/e0a059a94f94c7652972089456e931b62768a82b))
+* **site:** 官网（VitePress）：首页、下载、使用教程、更新日志、隐私政策与用户协议 ([31df4d9](https://github.com/vvangz/JikeLog/commit/31df4d941c95b69d2f66d5114d5bcdbfef892800))
+
+
+### 问题修复
+
+* **ci:** Windows 安装包签名的时间戳服务器改用 http，失败时换服务器重试 ([90bafe2](https://github.com/vvangz/JikeLog/commit/90bafe283ce08d3271fe1872c5d3cac0e0cde427))
+
+
+### 文档
+
+* ADR-014 官网与安装包下载，开发日志，更正 ADR-006 关于备份的说法 ([44b9e04](https://github.com/vvangz/JikeLog/commit/44b9e0457f9fdf28b884bba2745a5bbc1afbc7ec))
+* 隐私政策与用户协议定稿，生效日期 2026 年 10 月 24 日；生产部署记录备案与正式环境切换 ([72e9144](https://github.com/vvangz/JikeLog/commit/72e9144538a8b1aa3b112f1ff8ef7e687f8d21d2))
+
 ## [1.1.0](https://github.com/vvangz/JikeLog/compare/v1.0.0...v1.1.0) (2026-10-23)
 
 
