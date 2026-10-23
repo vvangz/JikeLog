@@ -47,7 +47,7 @@ download() {
   fi
   rm -f "$out"
   log "下载 $url"
-  curl -fL --proto '=https' --tlsv1.2 --retry 3 --retry-delay 2 -o "$out.part" "$url"
+  curl -fL --proto '=https' --tlsv1.2 --retry 3 --retry-delay 2 --retry-all-errors -o "$out.part" "$url"
   local got
   got="$(sha256_of "$out.part")"
   if [[ "$got" != "$want" ]]; then
