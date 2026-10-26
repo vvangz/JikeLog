@@ -8,7 +8,7 @@ const consentSummary =
 
 const privacyPolicy = '''
 更新日期：2026 年 10 月 26 日
-生效日期：【待填写：开通短信登录当天】
+生效日期：2026 年 10 月 26 日
 
 即刻日志（以下简称"我们"）由张旺运营，提供工作日志、笔记、备忘录与记账服务，包括 Android 版、Windows 版与官网。本政策说明我们如何处理你的个人信息。完整版本也可在官网 https://www.pingvv.top/privacy 查看。
 
