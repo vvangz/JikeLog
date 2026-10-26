@@ -2,6 +2,26 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [1.3.0](https://github.com/vvangz/JikeLog/compare/v1.2.2...v1.3.0) (2026-10-26)
+
+
+### 新功能
+
+* **mobile:** 发送短信验证码前完成人机验证 ([647eacd](https://github.com/vvangz/JikeLog/commit/647eacdf85f5a0d032507d0fe8298410d7a001bd))
+* **server:** 接入阿里云短信认证与验证码 2.0 ([8fa14ed](https://github.com/vvangz/JikeLog/commit/8fa14edf974024fca10a212ffcd8ffce4ccf7033))
+
+
+### 问题修复
+
+* **deps:** 修复 pnpm audit 新报告的三个高危漏洞 ([5045d2f](https://github.com/vvangz/JikeLog/commit/5045d2f187eb370516335db25cc94ab4f6b22c20))
+
+
+### 文档
+
+* v1.3.0 发布说明（官网更新日志） ([ff58aa9](https://github.com/vvangz/JikeLog/commit/ff58aa93c8dae7a3cd43993f1a694aee6ed7efd9))
+* 短信登录开通步骤、配置说明、隐私政策与 v1.3.0 开发日志 ([1aac5de](https://github.com/vvangz/JikeLog/commit/1aac5deca3eac6a7d8dad49a4a0d75bd87a5b7e6))
+* 隐私政策生效日期定为 2026 年 10 月 26 日 ([f30f51d](https://github.com/vvangz/JikeLog/commit/f30f51d4a26837f4e6ebb43daf44c4f5ad67877f))
+
 ## [1.2.2](https://github.com/vvangz/JikeLog/compare/v1.2.1...v1.2.2) (2026-10-23)
 
 
