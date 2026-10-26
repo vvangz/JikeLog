@@ -22,14 +22,14 @@ Android 版与 Windows 版是同一个应用：用同一个账号登录，数据
 ## 安装 Windows 版
 
 1. 下载 MSIX 安装包和证书 `jikelog-windows.cer`，放在同一个文件夹。
-2. **只在第一次安装前**：核对证书指纹后，把证书导入"受信任的人"（需要管理员权限）。
+2. **只在第一次安装前**：核对证书指纹（在下载卡片的"校验信息"中）后，把证书导入"受信任的人"（需要管理员权限）。
 3. 双击 MSIX 安装包，点击"安装"。
 
 每一步的截图与命令见 [Windows 版](/guide/windows)。升级时直接双击新版本的安装包，不用再导入证书。
 
 ## 核对安装包
 
-下载卡片上的 SHA-256 是安装包的校验值，与 GitHub Release 上的 `.sha256` 文件一致。核对方法：
+展开下载卡片的"校验信息"，其中的 SHA-256 是安装包的校验值，与 GitHub Release 上的 `.sha256` 文件一致。核对方法：
 
 - **Windows**：在下载目录打开 PowerShell，执行 `Get-FileHash .\jikelog-<版本>.msix`。
 - **macOS / Linux**：执行 `shasum -a 256 jikelog-<版本>.apk`。

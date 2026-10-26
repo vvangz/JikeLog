@@ -1,83 +1,100 @@
-/* 官网配色：青绿（品牌）+ 天蓝渐变，四个模块各有一个点缀色。与 App 的咖色主题相互独立。
-   文字用的品牌色均满足 WCAG AA（正文对比度 ≥ 4.5:1）。 */
+/* 官网视觉：黑白灰为主，只用一种深青绿作点缀（链接与少量强调）；不用渐变、阴影与装饰图案，
+   层次靠留白、字号与 1px 细线。与 App 的咖色主题相互独立。文字颜色均满足 WCAG AA（正文对比度 ≥ 4.5:1）。 */
 :root {
-  --jk-teal-50: #effcf9;
-  --jk-teal-100: #d1f5ee;
-  --jk-teal-500: #14b8a6;
-  --jk-teal-600: #0d9488;
-  --jk-teal-700: #0f766e;
-  --jk-teal-800: #115e59;
-  --jk-sky-500: #0ea5e9;
-  --jk-blue-600: #2563eb;
+  --jk-ink: #0a0a0a;
+  --jk-accent: #0f766e;
+  --jk-line: #ebebeb;
+  --jk-line-strong: #d4d4d4;
+  --jk-surface: #fafafa;
+  /* 主按钮：浅色主题为黑底白字，深色主题反转 */
+  --jk-btn-bg: #0a0a0a;
+  --jk-btn-bg-hover: #2a2a2a;
+  --jk-btn-fg: #ffffff;
+  /* 反色区块（安全与隐私） */
+  --jk-inverse-bg: #0a0a0a;
+  --jk-inverse-line: rgba(255, 255, 255, 0.12);
 
-  --jk-mod-worklog: #2563eb;
-  --jk-mod-notes: #d97706;
-  --jk-mod-memos: #e11d48;
-  --jk-mod-ledger: #059669;
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-alt: #fafafa;
+  --vp-c-bg-soft: #f4f4f4;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-divider: var(--jk-line);
+  --vp-c-gutter: var(--jk-line);
+  --vp-c-border: var(--jk-line-strong);
+  --vp-c-text-1: #0a0a0a;
+  --vp-c-text-2: #525252;
+  --vp-c-text-3: #737373;
 
-  --jk-gradient: linear-gradient(120deg, #0f766e 0%, #0d9488 35%, #2563eb 100%);
-  --jk-gradient-soft: linear-gradient(135deg, rgba(20, 184, 166, 0.16), rgba(37, 99, 235, 0.14));
-  /* 放白字的背景（按钮、号召栏）：深浅主题都用深色渐变，保证对比度 */
-  --jk-gradient-strong: linear-gradient(120deg, #0f766e 0%, #0d9488 35%, #2563eb 100%);
-  --jk-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.18);
-  --jk-card-shadow-hover: 0 2px 4px rgba(15, 23, 42, 0.06), 0 18px 40px -16px rgba(15, 118, 110, 0.35);
+  --vp-c-brand-1: var(--jk-accent);
+  --vp-c-brand-2: #115e59;
+  --vp-c-brand-3: var(--jk-accent);
+  --vp-c-brand-soft: rgba(15, 118, 110, 0.08);
 
-  --vp-c-brand-1: var(--jk-teal-700);
-  --vp-c-brand-2: var(--jk-teal-600);
-  --vp-c-brand-3: var(--jk-teal-700);
-  --vp-c-brand-soft: rgba(13, 148, 136, 0.14);
+  --vp-button-brand-bg: var(--jk-btn-bg);
+  --vp-button-brand-hover-bg: var(--jk-btn-bg-hover);
+  --vp-button-brand-active-bg: var(--jk-btn-bg-hover);
+  --vp-button-brand-text: var(--jk-btn-fg);
 
-  --vp-button-brand-bg: var(--jk-teal-700);
-  --vp-button-brand-hover-bg: var(--jk-teal-800);
-  --vp-button-brand-active-bg: var(--jk-teal-800);
-
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: var(--jk-gradient);
-
-  --vp-font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC',
-    'MiSans', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC', sans-serif;
+  /* 西文与数字全站用 Geist；中文正文用系统字体，只有标题用思源黑体（JK Display，构建时按标题用字裁剪，
+     约百 KB 并预加载，避免正文先用系统字体显示、再跳成网页字体）。字体文件加载完成前用系统字体 */
+  --jk-font-cjk: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei',
+    'Noto Sans SC', sans-serif;
+  --vp-font-family-base: 'Geist Variable', var(--jk-font-cjk);
+  --jk-font-display: 'Geist Variable', 'JK Display', var(--jk-font-cjk);
   --vp-font-family-mono: ui-monospace, 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
-
-  --vp-c-bg-alt: #f6f8fa;
 }
 
 .dark {
-  --jk-mod-worklog: #60a5fa;
-  --jk-mod-notes: #fbbf24;
-  --jk-mod-memos: #fb7185;
-  --jk-mod-ledger: #34d399;
+  --jk-ink: #ededed;
+  --jk-accent: #7dd3c0;
+  --jk-line: #222222;
+  --jk-line-strong: #333333;
+  --jk-surface: #111111;
+  --jk-btn-bg: #ededed;
+  --jk-btn-bg-hover: #ffffff;
+  --jk-btn-fg: #0a0a0a;
+  --jk-inverse-bg: #111111;
+  --jk-inverse-line: rgba(255, 255, 255, 0.1);
 
-  --jk-gradient: linear-gradient(120deg, #2dd4bf 0%, #38bdf8 60%, #818cf8 100%);
-  --jk-gradient-soft: linear-gradient(135deg, rgba(45, 212, 191, 0.12), rgba(56, 189, 248, 0.1));
-  --jk-gradient-strong: linear-gradient(120deg, #0f766e 0%, #0e7490 45%, #1d4ed8 100%);
-  --jk-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
-  --jk-card-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.3), 0 18px 40px -16px rgba(45, 212, 191, 0.3);
+  --vp-c-bg: #0a0a0a;
+  --vp-c-bg-alt: #0f0f0f;
+  --vp-c-bg-soft: #161616;
+  --vp-c-bg-elv: #141414;
+  --vp-c-text-1: #ededed;
+  --vp-c-text-2: #a3a3a3;
+  --vp-c-text-3: #8a8a8a;
 
-  --vp-c-brand-1: #5eead4;
-  --vp-c-brand-2: #2dd4bf;
-  --vp-c-brand-3: #0f766e;
-  --vp-c-brand-soft: rgba(45, 212, 191, 0.16);
-
-  --vp-button-brand-bg: #0f766e;
-  --vp-button-brand-hover-bg: #0d9488;
-  --vp-button-brand-active-bg: #0d9488;
-
-  --vp-c-bg: #0b1120;
-  --vp-c-bg-alt: #0f172a;
-  --vp-c-bg-elv: #131c31;
-  --vp-c-bg-soft: #131c31;
+  --vp-c-brand-2: #a7e6d7;
+  --vp-c-brand-soft: rgba(125, 211, 192, 0.1);
 }
 
-/* 导航栏在首页顶部透明，滚动后出现毛玻璃背景（VitePress 默认行为），这里让 Logo 文字更醒目 */
+/* 标题用展示字体 */
+h1,
+h2,
+h3,
 .VPNavBarTitle .title {
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-family: var(--jk-font-display);
+}
+
+/* 导航栏：Logo 文字加重 */
+.VPNavBarTitle .title {
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 /* 正文：中文行高略大，表格可横向滚动 */
 .vp-doc p,
 .vp-doc li {
   line-height: 1.8;
+}
+.vp-doc h1 {
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.vp-doc h2,
+.vp-doc h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .vp-doc table {
   display: block;
@@ -94,77 +111,83 @@
   border-left: 4px solid var(--vp-c-warning-1);
 }
 
-/* 通用：按钮与卡片 */
+/* 通用：按钮 */
 .jk-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   border-radius: 999px;
   padding: 0 22px;
-  height: 46px;
+  height: 44px;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   text-decoration: none !important;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+  border: 1px solid transparent;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   white-space: nowrap;
 }
 .jk-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
   flex: none;
 }
 .jk-btn--primary {
-  color: #fff !important;
-  background: var(--jk-gradient-strong);
-  box-shadow: 0 10px 24px -10px rgba(13, 148, 136, 0.7);
+  color: var(--jk-btn-fg) !important;
+  background: var(--jk-btn-bg);
 }
 .jk-btn--primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 30px -12px rgba(13, 148, 136, 0.8);
+  background: var(--jk-btn-bg-hover);
 }
 .jk-btn--ghost {
   color: var(--vp-c-text-1) !important;
-  background: var(--vp-c-bg);
-  border: 1px solid var(--vp-c-divider);
+  background: transparent;
+  border-color: var(--jk-line-strong);
 }
 .jk-btn--ghost:hover {
-  border-color: var(--vp-c-brand-2);
-  color: var(--vp-c-brand-1) !important;
+  border-color: var(--vp-c-text-1);
 }
 .jk-btn:focus-visible {
-  outline: 2px solid var(--vp-c-brand-2);
+  outline: 2px solid var(--jk-accent);
   outline-offset: 3px;
 }
 
+/* 通用：区块与标题 */
 .jk-section {
-  padding: 88px 24px;
+  padding: 128px 24px;
 }
 .jk-section__inner {
-  max-width: 1152px;
+  max-width: 1120px;
   margin: 0 auto;
 }
 .jk-eyebrow {
   display: inline-block;
   font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: var(--vp-c-brand-1);
-  margin-bottom: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--vp-c-text-3);
+  margin-bottom: 16px;
 }
+/* 大标题用 500：微软雅黑只有常规与粗体，600 会落到粗体，大字号下过重；苹方等字体显示为中等粗细 */
 .jk-h2 {
-  font-size: clamp(26px, 4vw, 36px);
-  line-height: 1.25;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  margin: 0 0 14px;
+  font-size: clamp(28px, 4.2vw, 44px);
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  margin: 0 0 18px;
   color: var(--vp-c-text-1);
 }
 .jk-lead {
   font-size: 17px;
   line-height: 1.75;
   color: var(--vp-c-text-2);
-  max-width: 640px;
+  max-width: 600px;
   margin: 0;
+}
+/* 中文标题与短段落按行均衡断行，避免最后一行只剩一两个字 */
+.jk-h2,
+.jk-lead {
+  text-wrap: balance;
 }
 .jk-center {
   text-align: center;
@@ -172,14 +195,65 @@
 .jk-center .jk-lead {
   margin: 0 auto;
 }
+/* 细线网格：容器底色作线，单元格各自铺背景，避免相邻边框叠成 2px */
+.jk-hairline-grid {
+  display: grid;
+  gap: 1px;
+  background: var(--vp-c-divider);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 20px;
+  overflow: hidden;
+}
+.jk-hairline-grid > * {
+  background: var(--vp-c-bg);
+}
 
 @media (max-width: 640px) {
   .jk-section {
-    padding: 64px 16px;
+    padding: 88px 16px;
   }
 }
 
+/* 动画：只做"出现"类的过渡，节奏慢、位移小；系统开启"减少动态效果"时由文末规则全部关闭 */
+:root {
+  --jk-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+html {
+  scroll-behavior: smooth;
+}
+/* 滚动出现（v-reveal 指令只在浏览器中加上 .jk-reveal，未加载脚本时内容照常显示） */
+.jk-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.9s var(--jk-ease),
+    transform 0.9s var(--jk-ease);
+  transition-delay: var(--jk-reveal-delay, 0ms);
+}
+.jk-reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+/* 首屏加载时依次出现 */
+@keyframes jk-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.jk-rise {
+  animation: jk-rise 1s var(--jk-ease) both;
+  animation-delay: var(--jk-rise-delay, 0ms);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
   *,
   *::before,
   *::after {
