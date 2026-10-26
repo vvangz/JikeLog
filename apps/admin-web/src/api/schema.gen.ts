@@ -963,6 +963,16 @@ export interface components {
             sms: boolean;
             /** @description 是否开通服务端推送。为 false 时提醒只依赖设备本地闹钟 */
             push: boolean;
+            captcha?: components["schemas"]["CaptchaConfig"];
+        };
+        /** @description 发送登录、找回密码验证码前的人机验证（阿里云验证码 2.0）。缺省表示不需要人机验证 */
+        CaptchaConfig: {
+            /** @description 验证码服务地域，目前固定为 cn（中国内地） */
+            region: string;
+            /** @description 控制台中的身份标 */
+            prefix: string;
+            /** @description 场景 ID，通过验证后得到的 captchaVerifyParam 随发送验证码请求提交 */
+            sceneId: string;
         };
         SystemInfoEnvelope: components["schemas"]["EnvelopeBase"] & {
             data: components["schemas"]["SystemInfo"];

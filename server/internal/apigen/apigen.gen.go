@@ -869,6 +869,18 @@ type BindPhoneRequest struct {
 	Phone Phone `json:"phone"`
 }
 
+// CaptchaConfig 发送登录、找回密码验证码前的人机验证（阿里云验证码 2.0）。缺省表示不需要人机验证
+type CaptchaConfig struct {
+	// Prefix 控制台中的身份标
+	Prefix string `json:"prefix"`
+
+	// Region 验证码服务地域，目前固定为 cn（中国内地）
+	Region string `json:"region"`
+
+	// SceneId 场景 ID，通过验证后得到的 captchaVerifyParam 随发送验证码请求提交
+	SceneId string `json:"sceneId"`
+}
+
 // ChangeError defines model for ChangeError.
 type ChangeError struct {
 	// Code VALIDATION_FAILED / UNKNOWN_ENTITY / CLOCK_SKEW / ID_CONFLICT / E2E_DECRYPT_FAILED
@@ -1454,6 +1466,9 @@ type SyncRecord struct {
 
 // SystemFeatures 服务端已开通的功能，App 据此隐藏尚不可用的入口
 type SystemFeatures struct {
+	// Captcha 发送登录、找回密码验证码前的人机验证（阿里云验证码 2.0）。缺省表示不需要人机验证
+	Captcha *CaptchaConfig `json:"captcha,omitempty"`
+
 	// Push 是否开通服务端推送。为 false 时提醒只依赖设备本地闹钟
 	Push bool `json:"push"`
 

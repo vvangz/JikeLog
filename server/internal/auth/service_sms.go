@@ -15,8 +15,11 @@ type SMSLoginResult struct {
 	Phone              string
 }
 
-// VerifyCaptcha 校验人机验证结果。
+// VerifyCaptcha 校验人机验证结果（先按 IP 限制校验次数）。
 func (s *Service) VerifyCaptcha(ctx context.Context, param, ip string) error {
+	if err := s.limitIP(ctx, bucketCaptcha, ip); err != nil {
+		return err
+	}
 	ok, err := s.d.Captcha.Verify(ctx, param, ip)
 	if err != nil {
 		return fmt.Errorf("人机验证失败: %w", err)

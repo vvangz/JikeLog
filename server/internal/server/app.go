@@ -20,6 +20,7 @@ import (
 	"github.com/vvangz/JikeLog/server/internal/auth"
 	"github.com/vvangz/JikeLog/server/internal/e2e"
 	"github.com/vvangz/JikeLog/server/internal/export"
+	"github.com/vvangz/JikeLog/server/internal/platform/aliyun"
 	"github.com/vvangz/JikeLog/server/internal/platform/config"
 	"github.com/vvangz/JikeLog/server/internal/platform/crypto"
 	"github.com/vvangz/JikeLog/server/internal/platform/db"
@@ -160,12 +161,13 @@ func (a *App) RunBackground(ctx context.Context) {
 }
 
 func newAuthService(ctx context.Context, o Options, tx db.TxRunner, limiter *ratelimit.Limiter) (*auth.Service, auth.SMSSender, error) {
-	sender, err := newSMSSender(o.Config.SMS, o.Logger)
+	// 短信认证与验证码 2.0 共用一个 RAM 用户；未使用阿里云时不会发起调用
+	api := aliyun.NewClient(aliyun.Credentials{
+		AccessKeyID: o.Config.Aliyun.AccessKeyID, AccessKeySecret: o.Config.Aliyun.AccessKeySecret,
+	}, nil)
+	sender, err := newSMSSender(o.Config.SMS, api, o.Logger)
 	if err != nil {
 		return nil, nil, err
-	}
-	if o.Config.Captcha.Provider != config.CaptchaProviderNone {
-		return nil, nil, errors.New("阿里云验证码尚未接入；短信未开通（JIKELOG_SMS_PROVIDER=disabled）时不需要人机验证，请使用 JIKELOG_CAPTCHA_PROVIDER=none")
 	}
 	params := auth.DefaultArgon2Params
 	if o.Argon2 != nil {
@@ -177,7 +179,7 @@ func newAuthService(ctx context.Context, o Options, tx db.TxRunner, limiter *rat
 		SMS:        auth.NewSMSCodes(o.Redis, limiter, sender, o.Logger, smsHashKey(o.Config.Auth.JWTSecret)),
 		Tickets:    auth.NewRegistrationTickets(o.Redis),
 		Replay:     auth.NewRefreshReplay(o.Redis),
-		Captcha:    auth.NoopCaptcha{},
+		Captcha:    newCaptcha(o.Config.Captcha, api, o.Logger),
 		Limiter:    limiter,
 		RefreshTTL: o.Config.Auth.RefreshTTL,
 		Logger:     o.Logger,
@@ -206,6 +208,9 @@ func newSystemHandler(o Options) *system.Handler {
 	features := system.Features{
 		SMS:  o.Config.SMS.Provider != config.SMSProviderDisabled,
 		Push: o.Config.Push.Provider == config.PushProviderJPush,
+	}
+	if o.Config.Captcha.Provider == config.CaptchaProviderAliyun {
+		features.Captcha = &system.Captcha{Prefix: o.Config.Captcha.Prefix, SceneID: o.Config.Captcha.SceneID}
 	}
 	return system.NewHandler(system.Config{Name: o.Name, Logger: o.Logger, Now: o.Now, Features: features, Checks: []system.Checker{
 		system.NewCheck("postgres", o.Pool.Ping),
@@ -238,15 +243,27 @@ func smsHashKey(secret string) []byte {
 	return mac.Sum(nil)
 }
 
-func newSMSSender(cfg config.SMS, logger *slog.Logger) (auth.SMSSender, error) {
+func newSMSSender(cfg config.SMS, api *aliyun.Client, logger *slog.Logger) (auth.SMSSender, error) {
 	switch cfg.Provider {
 	case config.SMSProviderMock:
 		return &auth.MockSender{Logger: logger}, nil
 	case config.SMSProviderDisabled:
 		return auth.DisabledSender{}, nil
 	case config.SMSProviderAliyun:
-		return nil, errors.New("阿里云短信通道尚未接入，请使用 JIKELOG_SMS_PROVIDER=disabled（只开放用户名密码登录）或 mock（开发）")
+		return auth.NewAliyunSender(api, auth.AliyunSMSConfig{SignName: cfg.SignName, Templates: map[auth.Purpose]string{
+			auth.PurposeLogin:         cfg.TemplateLogin,
+			auth.PurposeResetPassword: cfg.TemplateResetPassword,
+			auth.PurposeBindPhone:     cfg.TemplateBindPhone,
+			auth.PurposeVerifyCurrent: cfg.TemplateVerifyCurrent,
+		}}, logger), nil
 	default:
 		return nil, fmt.Errorf("未知短信通道 %q", cfg.Provider)
 	}
+}
+
+func newCaptcha(cfg config.Captcha, api *aliyun.Client, logger *slog.Logger) auth.CaptchaVerifier {
+	if cfg.Provider == config.CaptchaProviderAliyun {
+		return auth.NewAliyunCaptcha(api, cfg.SceneID, logger)
+	}
+	return auth.NoopCaptcha{}
 }

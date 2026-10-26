@@ -71,6 +71,7 @@ type Config struct {
 	Auth    Auth    `envPrefix:"AUTH_"`
 	SMS     SMS     `envPrefix:"SMS_"`
 	Captcha Captcha `envPrefix:"CAPTCHA_"`
+	Aliyun  Aliyun  `envPrefix:"ALIYUN_"`
 	E2E     E2E     `envPrefix:"E2E_"`
 	KMS     KMS     `envPrefix:"KMS_"`
 	Storage Storage `envPrefix:"STORAGE_"`
@@ -123,14 +124,30 @@ type Auth struct {
 	RefreshTTL        time.Duration `env:"REFRESH_TTL" envDefault:"720h"`
 }
 
-// SMS 为短信配置。
+// SMS 为短信配置。Provider=aliyun 时使用号码认证服务的短信认证：签名与模板只能用控制台中系统赠送的，
+// 模板默认值即赠送模板的编号。
 type SMS struct {
 	Provider string `env:"PROVIDER" envDefault:"mock"`
+	SignName string `env:"SIGN_NAME"`
+	// 各用途的模板编号：登录 / 注册、重置密码、绑定新手机号、验证当前手机号。
+	TemplateLogin         string `env:"TEMPLATE_LOGIN" envDefault:"100001"`
+	TemplateResetPassword string `env:"TEMPLATE_RESET_PASSWORD" envDefault:"100003"`
+	TemplateBindPhone     string `env:"TEMPLATE_BIND_PHONE" envDefault:"100004"`
+	TemplateVerifyCurrent string `env:"TEMPLATE_VERIFY_CURRENT" envDefault:"100005"`
 }
 
 // Captcha 为人机验证配置（发送短信前校验）。
 type Captcha struct {
 	Provider string `env:"PROVIDER" envDefault:"none"`
+	// SceneID 与 Prefix（身份标）来自验证码 2.0 控制台，会通过系统信息下发给 App，不是密钥。
+	SceneID string `env:"SCENE_ID"`
+	Prefix  string `env:"PREFIX"`
+}
+
+// Aliyun 为阿里云 RAM 用户的 AccessKey，短信认证与验证码 2.0 共用；只授予这两项接口的权限。
+type Aliyun struct {
+	AccessKeyID     string `env:"ACCESS_KEY_ID"`
+	AccessKeySecret string `env:"ACCESS_KEY_SECRET"`
 }
 
 // E2E 为工作日志应用层传输加密配置（ADR-006）。
