@@ -175,6 +175,22 @@ func (c Config) validateAuth() []error {
 	if c.IsDeployed() && c.Captcha.Provider == CaptchaProviderNone && c.SMS.Provider != SMSProviderDisabled {
 		errs = append(errs, errors.New("staging / production 环境发送短信前必须启用人机验证（JIKELOG_CAPTCHA_PROVIDER）"))
 	}
+	return append(errs, c.validateAliyun()...)
+}
+
+func (c Config) validateAliyun() []error {
+	var errs []error
+	sms := c.SMS.Provider == SMSProviderAliyun
+	captcha := c.Captcha.Provider == CaptchaProviderAliyun
+	if (sms || captcha) && (c.Aliyun.AccessKeyID == "" || c.Aliyun.AccessKeySecret == "") {
+		errs = append(errs, errors.New("使用阿里云短信或验证码时必须设置 JIKELOG_ALIYUN_ACCESS_KEY_ID 与 JIKELOG_ALIYUN_ACCESS_KEY_SECRET"))
+	}
+	if sms && c.SMS.SignName == "" {
+		errs = append(errs, errors.New("使用阿里云短信时必须设置 JIKELOG_SMS_SIGN_NAME（短信认证的赠送签名）"))
+	}
+	if captcha && (c.Captcha.SceneID == "" || c.Captcha.Prefix == "") {
+		errs = append(errs, errors.New("使用阿里云验证码时必须设置 JIKELOG_CAPTCHA_SCENE_ID 与 JIKELOG_CAPTCHA_PREFIX"))
+	}
 	return errs
 }
 

@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jikelog/core/platform/platform_features.dart';
 import 'package:jikelog/app/providers.dart';
 import 'package:jikelog/core/api/api_client.dart';
+import 'package:jikelog/core/api/server_features.dart';
 import 'package:jikelog/core/api/models.dart';
 import 'package:jikelog/core/device/device_identity.dart';
 import 'package:jikelog/core/db/database.dart';
@@ -21,6 +22,7 @@ import 'package:flutter/widgets.dart' show Text;
 import 'package:jikelog/features/attachments/attachment_providers.dart';
 import 'package:jikelog/features/attachments/attachment_viewers.dart';
 import 'package:jikelog/features/attachments/media.dart';
+import 'package:jikelog/features/auth/captcha.dart';
 import 'package:jikelog/features/export/export_api.dart';
 import 'package:jikelog/features/notes/editor/rich_editor_view.dart';
 import 'package:jikelog/features/notes/note_editor_page.dart';
@@ -212,6 +214,9 @@ List<Override> testOverrides({
   ),
   launchLinkProvider.overrideWithValue((uri) async => TestHooks.launch(uri)),
   imagePickerProvider.overrideWithValue(() => TestHooks.pickImage()),
+  captchaSolverProvider.overrideWithValue(
+    (_, config) async => TestHooks.solveCaptcha(config),
+  ),
   recordingDirProvider.overrideWithValue(testFilesDir),
   recorderFactoryProvider.overrideWithValue(
     () => FakeRecorder(permitted: TestHooks.micPermitted),
@@ -237,10 +242,19 @@ abstract final class TestHooks {
   static final launched = <Uri>[];
   static final opened = <String>[];
 
+  /// 人机验证：默认通过；返回 null 模拟用户关闭验证弹层。
+  static String? Function(CaptchaConfig) solveCaptcha = _passCaptcha;
+  static final captchas = <CaptchaConfig>[];
+
   static Future<List<PlatformFile>> _none() async => const [];
   static bool _yes(Uri u) {
     launched.add(u);
     return true;
+  }
+
+  static String? _passCaptcha(CaptchaConfig c) {
+    captchas.add(c);
+    return 'captcha-param';
   }
 
   static bool _yes2(File f, String mime) {
@@ -260,8 +274,10 @@ abstract final class TestHooks {
     launch = _yes;
     openExternal = _yes2;
     micPermitted = true;
+    solveCaptcha = _passCaptcha;
     launched.clear();
     opened.clear();
+    captchas.clear();
   }
 }
 

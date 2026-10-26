@@ -23,9 +23,11 @@ type ipBucket struct {
 }
 
 var (
-	bucketRegister  = ipBucket{"register", 20, time.Hour}
-	bucketLogin     = ipBucket{"login", 100, 10 * time.Minute}
-	bucketSMSLogin  = ipBucket{"smslogin", 100, 10 * time.Minute}
+	bucketRegister = ipBucket{"register", 20, time.Hour}
+	bucketLogin    = ipBucket{"login", 100, 10 * time.Minute}
+	bucketSMSLogin = ipBucket{"smslogin", 100, 10 * time.Minute}
+	// bucketCaptcha 限制每个 IP 提交人机验证的次数：每次校验都要调用阿里云（计费、有 QPS 上限）
+	bucketCaptcha   = ipBucket{"captcha", 60, time.Hour}
 	bucketRefresh   = ipBucket{"refresh", 300, 10 * time.Minute}
 	loginLockWindow = 15 * time.Minute
 )

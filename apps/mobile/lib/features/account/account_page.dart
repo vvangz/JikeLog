@@ -47,7 +47,7 @@ class AccountPage extends ConsumerWidget {
               subtitle: Text(
                 smsEnabled(ref)
                     ? user.phoneMasked ?? '未绑定，绑定后可用验证码登录和找回密码'
-                    : '${user.phoneMasked ?? '未绑定'}（$smsUnavailableHint）',
+                    : '${user.phoneMasked ?? '未绑定'}（${smsUnavailableReason(ref)}）',
               ),
               trailing: smsEnabled(ref)
                   ? Text(user.hasPhone ? '换绑' : '绑定')

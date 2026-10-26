@@ -169,15 +169,21 @@ func (s *SMSCodes) Send(ctx context.Context, p Purpose, phone string) error {
 		return fmt.Errorf("保存验证码失败: %w", err)
 	}
 	if err := s.sender.SendCode(ctx, phone, code, p); err != nil {
-		// 发送失败时释放冷却，允许用户立即重试
-		if errors.Is(err, ErrSMSDisabled) {
-			_ = s.rdb.Del(ctx, key, cooldownKey(phone)).Err()
-			return ErrSMSDisabled
+		// 通道给出的业务错误（未开通、号码被拒、通道频控）直接返回给客户端，其余一律视为发送失败
+		var appErr *httpx.Error
+		if !errors.As(err, &appErr) {
+			s.logger.ErrorContext(ctx, "sms send failed", "phone", MaskPhone(phone), "purpose", string(p), "error", err)
+			appErr = httpx.NewError(http.StatusServiceUnavailable, CodeSMSSendFailed, "验证码发送失败，请稍后重试")
 		}
-		s.logger.ErrorContext(ctx, "sms send failed", "phone", MaskPhone(phone), "purpose", string(p), "error", err)
-		// 发送失败时释放冷却，允许用户立即重试
-		_ = s.rdb.Del(ctx, key, cooldownKey(phone)).Err()
-		return httpx.NewError(http.StatusServiceUnavailable, CodeSMSSendFailed, "验证码发送失败，请稍后重试")
+		keys := []string{key}
+		// 通道频控时保留冷却期；其余失败释放冷却，允许用户立即重试
+		if appErr.Code != CodeSMSRateLimited {
+			keys = append(keys, cooldownKey(phone))
+		}
+		if err := s.rdb.Del(ctx, keys...).Err(); err != nil {
+			s.logger.WarnContext(ctx, "release sms code after send failure failed", "phone", MaskPhone(phone), "error", err)
+		}
+		return appErr
 	}
 	return nil
 }

@@ -37,6 +37,22 @@ type Config struct {
 type Features struct {
 	SMS  bool
 	Push bool
+	// Captcha 为空表示发送验证码前不需要人机验证。
+	Captcha *Captcha
+}
+
+// Captcha 为下发给 App 的阿里云验证码 2.0 初始化参数（均非密钥）。
+type Captcha struct {
+	Prefix  string
+	SceneID string
+}
+
+func (f Features) toAPI() apigen.SystemFeatures {
+	out := apigen.SystemFeatures{Sms: f.SMS, Push: f.Push}
+	if f.Captcha != nil {
+		out.Captcha = &apigen.CaptchaConfig{Region: "cn", Prefix: f.Captcha.Prefix, SceneId: f.Captcha.SceneID}
+	}
+	return out
 }
 
 // Handler 实现 system 标签下的接口。
@@ -110,7 +126,7 @@ func (h *Handler) GetSystemInfo(ctx context.Context, _ apigen.GetSystemInfoReque
 			Commit:     version.Commit,
 			BuildTime:  version.BuildTime,
 			ServerTime: h.cfg.Now().UTC(),
-			Features:   apigen.SystemFeatures{Sms: h.cfg.Features.SMS, Push: h.cfg.Features.Push},
+			Features:   h.cfg.Features.toAPI(),
 		},
 	}, nil
 }

@@ -7,3 +7,8 @@ packages:
 onlyBuiltDependencies:
   - esbuild
   - lefthook
+
+# 间接依赖的安全修复（上游尚未升级时锁定到已修复版本）
+overrides:
+  zod@<4.6.6: '>=4.6.6'
+  undici@<8.12.2: '>=8.12.2'

@@ -12,6 +12,7 @@ import '../../shared/ui/jk_button.dart';
 import '../../shared/ui/jk_form.dart';
 import 'auth_controller.dart';
 import 'auth_scaffold.dart';
+import 'captcha.dart';
 
 /// 登录页：用户名密码登录与手机验证码登录两种方式。
 class LoginPage extends ConsumerStatefulWidget {
@@ -59,7 +60,8 @@ class _LoginPageState extends ConsumerState<LoginPage> with ApiFormState {
   Widget build(BuildContext context) {
     final state = ref.watch(authControllerProvider);
     final reason = state is SignedOut ? state.reason : null;
-    // 服务端没有开通短信时只有密码登录，也不能用手机号找回密码
+    // 服务端没有开通短信，或需要人机验证而本机没有 WebView（Windows）时，
+    // 只有密码登录，也不能用手机号找回密码
     final sms = smsEnabled(ref);
     final mode = sms ? _mode : _Mode.password;
     return AuthScaffold(
@@ -157,13 +159,18 @@ class _LoginPageState extends ConsumerState<LoginPage> with ApiFormState {
           return null;
         }
         setState(() => fieldErrors = const {});
-        return sendCode(
-          () => ref
-              .read(authApiProvider)
-              .sendSms(
-                JkValidators.normalizePhone(_phone.text),
-                SmsPurpose.login,
-              ),
+        return sendWithCaptcha(
+          context,
+          ref,
+          (captcha) => sendCode(
+            () => ref
+                .read(authApiProvider)
+                .sendSms(
+                  JkValidators.normalizePhone(_phone.text),
+                  SmsPurpose.login,
+                  captchaVerifyParam: captcha,
+                ),
+          ),
         );
       },
     ),

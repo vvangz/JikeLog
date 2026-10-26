@@ -45,11 +45,16 @@ class AuthApi {
     }) as Map<String, dynamic>,
   );
 
-  /// 发送登录或找回密码验证码，返回冷却秒数。
-  Future<int> sendSms(String phone, SmsPurpose purpose) async {
+  /// 发送登录或找回密码验证码，返回冷却秒数。服务端要求人机验证时需带上 [captchaVerifyParam]。
+  Future<int> sendSms(
+    String phone,
+    SmsPurpose purpose, {
+    String? captchaVerifyParam,
+  }) async {
     final data = await _c.post('/api/v1/auth/sms/send', {
       'phone': phone,
       'purpose': purpose.wire,
+      'captchaVerifyParam': ?captchaVerifyParam,
     }) as Map<String, dynamic>;
     return (data['cooldownSeconds'] as num).toInt();
   }
@@ -103,10 +108,16 @@ class AccountApi {
   );
 
   /// 发送绑定新号码（[phone] 必填）或验证当前号码的验证码，返回冷却秒数。
-  Future<int> sendSms(SmsPurpose purpose, {String? phone}) async {
+  /// 服务端要求人机验证时需带上 [captchaVerifyParam]。
+  Future<int> sendSms(
+    SmsPurpose purpose, {
+    String? phone,
+    String? captchaVerifyParam,
+  }) async {
     final data = await _c.post('/api/v1/me/sms/send', {
       'purpose': purpose.wire,
       'phone': ?phone,
+      'captchaVerifyParam': ?captchaVerifyParam,
     }) as Map<String, dynamic>;
     return (data['cooldownSeconds'] as num).toInt();
   }

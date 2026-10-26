@@ -100,18 +100,23 @@ func TestStoragePublicEndpoint(t *testing.T) {
 
 func TestLoadFromOverrides(t *testing.T) {
 	cfg, err := LoadFrom(with(map[string]string{
-		"JIKELOG_ENV":                   "staging",
-		"JIKELOG_SMS_PROVIDER":          "aliyun",
-		"JIKELOG_CAPTCHA_PROVIDER":      "aliyun",
-		"JIKELOG_HTTP_ADDR":             "127.0.0.1:9000",
-		"JIKELOG_HTTP_SHUTDOWN_TIMEOUT": "3s",
-		"JIKELOG_HTTP_TRUSTED_PROXIES":  " 10.0.0.1, 10.0.0.2 ,",
-		"JIKELOG_LOG_LEVEL":             "debug",
-		"JIKELOG_LOG_FORMAT":            "text",
-		"JIKELOG_HTTP_CORS_ORIGINS":     "https://admin.example.com, http://localhost:5173",
-		"JIKELOG_DB_MAX_CONNS":          "5",
-		"JIKELOG_E2E_PRIVATE_KEY":       otherKey,
-		"JIKELOG_KMS_LOCAL_MASTER_KEY":  otherKey,
+		"JIKELOG_ENV":                      "staging",
+		"JIKELOG_SMS_PROVIDER":             "aliyun",
+		"JIKELOG_CAPTCHA_PROVIDER":         "aliyun",
+		"JIKELOG_ALIYUN_ACCESS_KEY_ID":     "ak",
+		"JIKELOG_ALIYUN_ACCESS_KEY_SECRET": "sk",
+		"JIKELOG_SMS_SIGN_NAME":            "签名",
+		"JIKELOG_CAPTCHA_SCENE_ID":         "scene",
+		"JIKELOG_CAPTCHA_PREFIX":           "prefix",
+		"JIKELOG_HTTP_ADDR":                "127.0.0.1:9000",
+		"JIKELOG_HTTP_SHUTDOWN_TIMEOUT":    "3s",
+		"JIKELOG_HTTP_TRUSTED_PROXIES":     " 10.0.0.1, 10.0.0.2 ,",
+		"JIKELOG_LOG_LEVEL":                "debug",
+		"JIKELOG_LOG_FORMAT":               "text",
+		"JIKELOG_HTTP_CORS_ORIGINS":        "https://admin.example.com, http://localhost:5173",
+		"JIKELOG_DB_MAX_CONNS":             "5",
+		"JIKELOG_E2E_PRIVATE_KEY":          otherKey,
+		"JIKELOG_KMS_LOCAL_MASTER_KEY":     otherKey,
 	}))
 	if err != nil {
 		t.Fatalf("LoadFrom() error = %v", err)
@@ -169,6 +174,10 @@ func TestLoadFromRejectsInvalidValues(t *testing.T) {
 		{"Access Token 有效期过长", map[string]string{"JIKELOG_AUTH_ACCESS_TTL": "2h"}},
 		{"Refresh Token 短于 Access Token", map[string]string{"JIKELOG_AUTH_REFRESH_TTL": "10m"}},
 		{"未知短信通道", map[string]string{"JIKELOG_SMS_PROVIDER": "twilio"}},
+		{"阿里云短信缺少 AccessKey", prod(map[string]string{"JIKELOG_ALIYUN_ACCESS_KEY_SECRET": ""})},
+		{"阿里云短信缺少签名", prod(map[string]string{"JIKELOG_SMS_SIGN_NAME": ""})},
+		{"阿里云验证码缺少场景", prod(map[string]string{"JIKELOG_CAPTCHA_SCENE_ID": ""})},
+		{"阿里云验证码缺少身份标", prod(map[string]string{"JIKELOG_CAPTCHA_PREFIX": ""})},
 		{"生产环境使用模拟短信", prod(map[string]string{"JIKELOG_SMS_PROVIDER": "mock"})},
 		{"生产环境使用占位密钥", prod(map[string]string{"JIKELOG_AUTH_JWT_SECRET": "change-me-local-only-change-me-local-only"})},
 		{"缺少传输加密私钥", map[string]string{"JIKELOG_E2E_PRIVATE_KEY": ""}},
@@ -210,15 +219,20 @@ func TestLoadFromRejectsInvalidValues(t *testing.T) {
 // prod 返回其余项都合规的生产环境变量，extra 覆盖其中的值。
 func prod(extra map[string]string) map[string]string {
 	env := map[string]string{
-		"JIKELOG_ENV":                     "production",
-		"JIKELOG_SMS_PROVIDER":            "aliyun",
-		"JIKELOG_CAPTCHA_PROVIDER":        "aliyun",
-		"JIKELOG_HTTP_TRUSTED_PROXIES":    "127.0.0.1",
-		"JIKELOG_HTTP_CORS_ORIGINS":       "https://admin.example.com",
-		"JIKELOG_E2E_PRIVATE_KEY":         otherKey,
-		"JIKELOG_KMS_LOCAL_MASTER_KEY":    otherKey,
-		"JIKELOG_STORAGE_ENDPOINT":        "https://oss-cn-beijing-internal.aliyuncs.com",
-		"JIKELOG_STORAGE_PUBLIC_ENDPOINT": "https://oss-cn-beijing.aliyuncs.com",
+		"JIKELOG_ENV":                      "production",
+		"JIKELOG_SMS_PROVIDER":             "aliyun",
+		"JIKELOG_CAPTCHA_PROVIDER":         "aliyun",
+		"JIKELOG_ALIYUN_ACCESS_KEY_ID":     "ak",
+		"JIKELOG_ALIYUN_ACCESS_KEY_SECRET": "sk",
+		"JIKELOG_SMS_SIGN_NAME":            "签名",
+		"JIKELOG_CAPTCHA_SCENE_ID":         "scene",
+		"JIKELOG_CAPTCHA_PREFIX":           "prefix",
+		"JIKELOG_HTTP_TRUSTED_PROXIES":     "127.0.0.1",
+		"JIKELOG_HTTP_CORS_ORIGINS":        "https://admin.example.com",
+		"JIKELOG_E2E_PRIVATE_KEY":          otherKey,
+		"JIKELOG_KMS_LOCAL_MASTER_KEY":     otherKey,
+		"JIKELOG_STORAGE_ENDPOINT":         "https://oss-cn-beijing-internal.aliyuncs.com",
+		"JIKELOG_STORAGE_PUBLIC_ENDPOINT":  "https://oss-cn-beijing.aliyuncs.com",
 	}
 	maps.Copy(env, extra)
 	return env

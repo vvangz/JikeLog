@@ -12,8 +12,26 @@ func TestSystemInfoFeatures(t *testing.T) {
 	r := a.call(http.MethodGet, "/api/v1/system/info", nil, "")
 	a.expect(r, http.StatusOK, "")
 	f := r.data()["features"].(map[string]any)
-	if f["sms"] != true || f["push"] != false {
+	if f["sms"] != true || f["push"] != false || f["captcha"] != nil {
 		t.Fatalf("开发环境的功能：%v", f)
+	}
+}
+
+func TestSystemInfoCaptchaConfig(t *testing.T) {
+	a := newTestAppWith(t, map[string]string{
+		"JIKELOG_CAPTCHA_PROVIDER":         "aliyun",
+		"JIKELOG_CAPTCHA_SCENE_ID":         "scene-1",
+		"JIKELOG_CAPTCHA_PREFIX":           "prefix-1",
+		"JIKELOG_ALIYUN_ACCESS_KEY_ID":     "ak",
+		"JIKELOG_ALIYUN_ACCESS_KEY_SECRET": "sk",
+	})
+	r := a.call(http.MethodGet, "/api/v1/system/info", nil, "")
+	c, ok := r.data()["features"].(map[string]any)["captcha"].(map[string]any)
+	if !ok || c["region"] != "cn" || c["prefix"] != "prefix-1" || c["sceneId"] != "scene-1" {
+		t.Fatalf("人机验证参数：%v", r.data()["features"])
+	}
+	if _, leaked := c["accessKeyId"]; leaked {
+		t.Fatal("不应下发 AccessKey")
 	}
 }
 

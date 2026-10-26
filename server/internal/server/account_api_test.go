@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -223,15 +222,4 @@ func TestRevocationDoesNotDependOnRedis(t *testing.T) {
 	a.expect(a.call(http.MethodGet, "/api/v1/me", nil, s.access), http.StatusOK, "")
 	a.expect(a.call(http.MethodDelete, "/api/v1/me/devices/"+other.deviceID, nil, s.access), http.StatusOK, "")
 	a.expect(a.call(http.MethodGet, "/api/v1/me", nil, other.access), http.StatusUnauthorized, "UNAUTHORIZED")
-}
-
-func TestNewAppRejectsUnsupportedProviders(t *testing.T) {
-	for _, env := range []map[string]string{
-		{"JIKELOG_SMS_PROVIDER": "aliyun"},
-		{"JIKELOG_CAPTCHA_PROVIDER": "aliyun"},
-	} {
-		if _, err := NewApp(context.Background(), Options{Config: testConfig(t, env)}); err == nil {
-			t.Errorf("尚未接入的通道 %v 应拒绝启动", env)
-		}
-	}
 }
