@@ -2,6 +2,22 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [1.4.0](https://github.com/vvangz/JikeLog/compare/v1.3.0...v1.4.0) (2026-10-26)
+
+
+### 新功能
+
+* **site:** 下载卡片收起文件名与校验值，只保留简洁提示 ([3161c13](https://github.com/vvangz/JikeLog/commit/3161c13dec65f9ad0174d12068fa810408fab389))
+* **site:** 安全区块改为规范标题与一句话说明 ([5bdb221](https://github.com/vvangz/JikeLog/commit/5bdb22121538531af9a016168dabcd309876dfa3))
+* **site:** 官网改为简约风格 ([911970a](https://github.com/vvangz/JikeLog/commit/911970a68a105a89a76c58ec0df0bc6ed6913d9d))
+* **site:** 自托管字体与克制的动画 ([f34be25](https://github.com/vvangz/JikeLog/commit/f34be25fdba085a81733bd1905c05dc5328604a2))
+
+
+### 文档
+
+* v1.4.0 发布说明（官网更新日志） ([9608b6d](https://github.com/vvangz/JikeLog/commit/9608b6d06ac73655560f78f985a4eb9986da1882))
+* v1.4.0 发布说明日期与发布记录一致 ([9232dda](https://github.com/vvangz/JikeLog/commit/9232dda2e574765639b59b7f9ea95eb8a8cb5e9f))
+
 ## [1.3.0](https://github.com/vvangz/JikeLog/compare/v1.2.2...v1.3.0) (2026-10-26)
 
 
