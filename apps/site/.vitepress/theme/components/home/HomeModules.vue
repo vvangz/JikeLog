@@ -36,10 +36,10 @@ const modules = [
 <template>
   <section id="features" class="jk-section">
     <div class="jk-section__inner">
-      <span class="jk-eyebrow">四个模块</span>
-      <h2 class="jk-h2">一个应用，管好工作与生活的记录</h2>
-      <p class="jk-lead">不用在几个应用之间来回切换。四个模块共用同一个账号、同一套搜索与同步。</p>
-      <div class="grid jk-hairline-grid">
+      <span v-reveal class="jk-eyebrow">四个模块</span>
+      <h2 v-reveal="60" class="jk-h2">一个应用，管好工作与生活的记录</h2>
+      <p v-reveal="120" class="jk-lead">不用在几个应用之间来回切换。四个模块共用同一个账号、同一套搜索与同步。</p>
+      <div v-reveal="180" class="grid jk-hairline-grid">
         <a v-for="(m, i) in modules" :key="m.title" class="cell" :href="m.link">
           <div class="cell__top">
             <JkIcon :name="m.icon" :size="22" />

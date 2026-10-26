@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitepress';
 import { addCsp } from '../lib/csp.mjs';
 import { ICP, REPO_URL, SITE_URL } from '../lib/site.mjs';
+import { DISPLAY_FONT } from '../lib/display-font.mjs';
 
 // scripts/sync-docs.mjs 生成：教程章节与更新日志版本
 const nav = JSON.parse(readFileSync(new URL('./generated/nav.json', import.meta.url), 'utf8')) as {
@@ -26,6 +27,14 @@ export default defineConfig({
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
     ['link', { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' }],
+    // 标题字体：构建后由 scripts/subset-display-font.mjs 生成；预加载，尽量在首次绘制前就绪
+    ['link', { rel: 'preload', href: DISPLAY_FONT.path, as: 'font', type: 'font/woff2', crossorigin: '' }],
+    [
+      'style',
+      {},
+      `@font-face{font-family:'JK Display';src:url('${DISPLAY_FONT.path}') format('woff2');` +
+        `font-weight:${DISPLAY_FONT.weight.min} ${DISPLAY_FONT.weight.max};font-display:swap}`,
+    ],
     ['meta', { name: 'theme-color', content: '#ffffff' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: '即刻日志' }],

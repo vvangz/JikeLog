@@ -17,9 +17,9 @@ import HomeSecurity from './HomeSecurity.vue';
     <HomePlatforms />
     <HomeFaq />
     <section class="cta">
-      <h2>现在开始，把每一天记下来</h2>
-      <p>下载即刻日志，注册账号，手机和电脑上的记录自动同步。</p>
-      <div class="cta__actions">
+      <h2 v-reveal>现在开始，把每一天记下来</h2>
+      <p v-reveal="80">下载即刻日志，注册账号，手机和电脑上的记录自动同步。</p>
+      <div v-reveal="160" class="cta__actions">
         <a class="jk-btn jk-btn--primary" href="/download"><JkIcon name="download" />立即下载</a>
         <a class="jk-btn jk-btn--ghost" href="/guide/quick-start">快速上手</a>
       </div>

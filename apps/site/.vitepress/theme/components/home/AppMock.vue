@@ -68,11 +68,11 @@ const todos = [
         <small>本月支出</small>
         <b>¥ 3,286.50</b>
         <div class="bars">
-          <span style="--h: 70%" />
-          <span style="--h: 45%" />
-          <span class="hi" style="--h: 88%" />
-          <span style="--h: 32%" />
-          <span style="--h: 58%" />
+          <span style="--h: 70%; --i: 0" />
+          <span style="--h: 45%; --i: 1" />
+          <span class="hi" style="--h: 88%; --i: 2" />
+          <span style="--h: 32%; --i: 3" />
+          <span style="--h: 58%; --i: 4" />
         </div>
       </div>
       <div class="todo">
@@ -331,6 +331,45 @@ const todos = [
 .done .todo__box {
   border-color: var(--vp-c-text-1);
   background: var(--vp-c-text-1);
+}
+/* 动效（首屏出现后播放；系统"减少动态效果"时由全局规则关闭）：
+   手机缓慢浮动，备忘提醒从上方滑入，柱状图逐根升起 */
+.phone {
+  animation: float 7s ease-in-out 1.6s infinite alternate;
+}
+.notice {
+  animation: slide-in 0.9s var(--jk-ease) 1.3s both;
+}
+.bars span {
+  transform-origin: bottom;
+  animation: grow 1.1s var(--jk-ease) both;
+  animation-delay: calc(1.1s + var(--i) * 90ms);
+}
+@keyframes float {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-10px);
+  }
+}
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
 }
 /* 窄屏上只保留桌面窗口：缩小后的手机会盖住窗口与上方的文字 */
 @media (max-width: 640px) {

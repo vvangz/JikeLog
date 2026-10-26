@@ -7,12 +7,14 @@
   "scripts": {
     "sync": "node scripts/sync-docs.mjs",
     "dev": "node scripts/sync-docs.mjs && vitepress dev",
-    "build": "node scripts/sync-docs.mjs && vitepress build",
+    "build": "node scripts/sync-docs.mjs && vitepress build && node scripts/subset-display-font.mjs",
     "preview": "vitepress preview",
     "test": "node --test \"test/*.test.mjs\"",
     "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=80 --test-coverage-include=\"lib/**\" --test-coverage-include=\"scripts/**\" \"test/*.test.mjs\""
   },
   "devDependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "subset-font": "2.9.0",
     "vitepress": "2.0.0-alpha.20",
     "vue": "3.5.43"
   }

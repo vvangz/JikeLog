@@ -14,11 +14,11 @@ const items = [
 <template>
   <section class="jk-section alt">
     <div class="jk-section__inner">
-      <span class="jk-eyebrow">细节</span>
-      <h2 class="jk-h2">记录这件事，应该顺手</h2>
-      <p class="jk-lead">从同步、搜索到导出，日常会用到的功能都考虑到了。</p>
+      <span v-reveal class="jk-eyebrow">细节</span>
+      <h2 v-reveal="60" class="jk-h2">记录这件事，应该顺手</h2>
+      <p v-reveal="120" class="jk-lead">从同步、搜索到导出，日常会用到的功能都考虑到了。</p>
       <div class="grid">
-        <a v-for="it in items" :key="it.title" class="item" :href="it.link">
+        <a v-for="(it, i) in items" :key="it.title" v-reveal="(i % 3) * 90" class="item" :href="it.link">
           <JkIcon :name="it.icon" :size="22" />
           <h3>{{ it.title }}</h3>
           <p>{{ it.desc }}</p>

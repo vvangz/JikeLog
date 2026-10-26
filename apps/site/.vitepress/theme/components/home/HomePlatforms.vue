@@ -24,10 +24,10 @@ const platforms = [
 <template>
   <section class="jk-section">
     <div class="jk-section__inner">
-      <span class="jk-eyebrow">多端可用</span>
-      <h2 class="jk-h2">手机和电脑，用同一个账号</h2>
-      <p class="jk-lead">在任何一台设备上的修改，几秒内出现在其他设备上。</p>
-      <div class="grid jk-hairline-grid">
+      <span v-reveal class="jk-eyebrow">多端可用</span>
+      <h2 v-reveal="60" class="jk-h2">手机和电脑，用同一个账号</h2>
+      <p v-reveal="120" class="jk-lead">在任何一台设备上的修改，几秒内出现在其他设备上。</p>
+      <div v-reveal="180" class="grid jk-hairline-grid">
         <div v-for="p in platforms" :key="p.id" class="card">
           <JkIcon :name="p.icon" :size="28" />
           <h3>{{ p.name }}</h3>

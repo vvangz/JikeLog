@@ -29,14 +29,14 @@ const items = [
 <template>
   <section class="sec">
     <div class="sec__inner">
-      <div class="sec__intro">
+      <div v-reveal class="sec__intro">
         <span class="eyebrow">安全与隐私</span>
         <h2>你的记录，只属于你</h2>
         <p>工作安排、个人笔记、收支明细都是敏感信息。即刻日志在设计时就把加密和隐私放在前面。</p>
         <a class="link" href="/privacy">阅读隐私政策 <JkIcon name="arrow" :size="15" /></a>
       </div>
       <div class="sec__grid">
-        <div v-for="it in items" :key="it.title" class="item">
+        <div v-for="(it, i) in items" :key="it.title" v-reveal="120 + i * 90" class="item">
           <JkIcon :name="it.icon" :size="20" />
           <h3>{{ it.title }}</h3>
           <p>{{ it.desc }}</p>

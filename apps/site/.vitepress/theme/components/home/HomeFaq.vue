@@ -37,11 +37,11 @@ const faqs = [
 <template>
   <section class="jk-section">
     <div class="jk-section__inner layout">
-      <div>
+      <div v-reveal>
         <span class="jk-eyebrow">常见问题</span>
         <h2 class="jk-h2">使用前，<br />你可能想知道</h2>
       </div>
-      <div class="list">
+      <div v-reveal="120" class="list">
         <details v-for="f in faqs" :key="f.q">
           <summary>{{ f.q }}</summary>
           <p>

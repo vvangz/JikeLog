@@ -6,18 +6,18 @@ import AppMock from './AppMock.vue';
 <template>
   <section class="hero">
     <div class="hero__text">
-      <a class="badge" href="/guide/windows">
+      <a class="badge jk-rise" href="/guide/windows">
         现已支持 Windows 电脑
         <JkIcon name="arrow" :size="14" />
       </a>
-      <h1>
+      <h1 class="jk-rise" style="--jk-rise-delay: 80ms">
         记下每一天的<br />
         <span class="muted">工作与生活</span>
       </h1>
-      <p class="lead">
+      <p class="lead jk-rise" style="--jk-rise-delay: 200ms">
         工作日志、笔记、备忘录、记账，放进一个应用。手机和电脑实时同步，没有网络也能记，记录的内容加密保存。
       </p>
-      <div class="actions">
+      <div class="actions jk-rise" style="--jk-rise-delay: 300ms">
         <a class="jk-btn jk-btn--primary" href="/download#android">
           <JkIcon name="android" />下载 Android 版
         </a>
@@ -25,9 +25,9 @@ import AppMock from './AppMock.vue';
           <JkIcon name="windows" />下载 Windows 版
         </a>
       </div>
-      <p class="facts">Android 8.0 及以上 · Windows 10 / 11 · 一个账号，多端同步</p>
+      <p class="facts jk-rise" style="--jk-rise-delay: 380ms">Android 8.0 及以上 · Windows 10 / 11 · 一个账号，多端同步</p>
     </div>
-    <div class="hero__visual">
+    <div class="hero__visual jk-rise" style="--jk-rise-delay: 480ms">
       <AppMock />
     </div>
   </section>
