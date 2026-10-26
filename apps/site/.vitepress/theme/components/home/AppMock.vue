@@ -1,5 +1,6 @@
 <script setup lang="ts">
-// 首页右侧的产品示意图（纯 CSS 绘制，内容为示例）：桌面窗口展示工作日志，手机展示备忘提醒与记账
+// 首页的产品示意图（纯 CSS 绘制，内容为示例）：桌面窗口展示工作日志，手机展示备忘提醒与记账。
+// 只用中性色，强调处用点缀色
 import JkIcon from '../JkIcon.vue';
 
 const modules = [
@@ -24,7 +25,6 @@ const todos = [
 
 <template>
   <div class="mock" aria-hidden="true">
-    <div class="mock__glow" />
     <div class="win">
       <div class="win__bar">
         <span class="dot" /><span class="dot" /><span class="dot" />
@@ -68,11 +68,11 @@ const todos = [
         <small>本月支出</small>
         <b>¥ 3,286.50</b>
         <div class="bars">
-          <span style="--h: 70%; --c: var(--jk-mod-worklog)" />
-          <span style="--h: 45%; --c: var(--jk-mod-notes)" />
-          <span style="--h: 88%; --c: var(--jk-mod-memos)" />
-          <span style="--h: 32%; --c: var(--jk-mod-ledger)" />
-          <span style="--h: 58%; --c: var(--jk-teal-500)" />
+          <span style="--h: 70%" />
+          <span style="--h: 45%" />
+          <span class="hi" style="--h: 88%" />
+          <span style="--h: 32%" />
+          <span style="--h: 58%" />
         </div>
       </div>
       <div class="todo">
@@ -92,17 +92,9 @@ const todos = [
 .mock {
   position: relative;
   width: 100%;
-  max-width: 560px;
+  max-width: 680px;
   aspect-ratio: 560 / 440;
   margin: 0 auto;
-}
-.mock__glow {
-  position: absolute;
-  inset: 8% 4% 4% 10%;
-  background: var(--jk-gradient);
-  filter: blur(70px);
-  opacity: 0.35;
-  border-radius: 50%;
 }
 .win {
   position: absolute;
@@ -111,8 +103,8 @@ const todos = [
   width: 86%;
   border-radius: 14px;
   background: var(--vp-c-bg);
-  border: 1px solid var(--vp-c-divider);
-  box-shadow: 0 30px 60px -30px rgba(15, 23, 42, 0.45);
+  border: 1px solid var(--jk-line-strong);
+  box-shadow: 0 40px 80px -48px rgba(0, 0, 0, 0.25);
   overflow: hidden;
 }
 .win__bar {
@@ -158,13 +150,13 @@ const todos = [
   white-space: nowrap;
 }
 .side-item.active {
-  background: var(--vp-c-brand-soft);
-  color: var(--vp-c-brand-1);
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
   font-weight: 600;
 }
 .win__main {
   /* 右侧留出手机遮住的部分，文字不被挡住 */
-  padding: 14px calc(38% + 4px) 14px 16px;
+  padding: 14px calc(30% + 8px) 14px 16px;
 }
 .main__head {
   display: flex;
@@ -195,7 +187,8 @@ const todos = [
 }
 .log__date b {
   font-size: 18px;
-  color: var(--jk-mod-worklog);
+  font-weight: 600;
+  color: var(--vp-c-text-1);
 }
 .log__date small {
   font-size: 10px;
@@ -215,19 +208,19 @@ const todos = [
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 36%;
-  aspect-ratio: 9 / 18;
+  width: 30%;
+  aspect-ratio: 9 / 17;
   border-radius: 26px;
   padding: 26px 10px 12px;
   background: var(--vp-c-bg);
-  border: 6px solid #0f172a;
-  box-shadow: 0 30px 50px -24px rgba(15, 23, 42, 0.55);
+  border: 6px solid #0a0a0a;
+  box-shadow: 0 40px 70px -40px rgba(0, 0, 0, 0.35);
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 .dark .phone {
-  border-color: #334155;
+  border-color: #2a2a2a;
 }
 .phone__notch {
   position: absolute;
@@ -237,7 +230,10 @@ const todos = [
   height: 8px;
   border-radius: 6px;
   transform: translateX(-50%);
-  background: #0f172a;
+  background: #0a0a0a;
+}
+.dark .phone__notch {
+  background: #2a2a2a;
 }
 .notice {
   display: flex;
@@ -260,20 +256,20 @@ const todos = [
   height: 22px;
   border-radius: 7px;
   flex: none;
-  color: #fff;
-  background: var(--jk-mod-memos);
+  color: var(--jk-accent);
+  background: var(--vp-c-brand-soft);
 }
 .ledger {
   padding: 10px;
   border-radius: 12px;
-  background: var(--jk-gradient-strong);
-  color: #fff;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
   display: flex;
   flex-direction: column;
 }
 .ledger small {
   font-size: 10px;
-  opacity: 0.85;
+  color: var(--vp-c-text-3);
 }
 .ledger b {
   font-size: 15px;
@@ -290,8 +286,11 @@ const todos = [
 .bars span {
   flex: 1;
   height: var(--h);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.85);
+  border-radius: 3px;
+  background: var(--jk-line-strong);
+}
+.bars span.hi {
+  background: var(--jk-accent);
 }
 .todo {
   display: flex;
@@ -326,12 +325,12 @@ const todos = [
   width: 13px;
   height: 13px;
   border-radius: 4px;
-  border: 1.5px solid var(--vp-c-divider);
-  color: #fff;
+  border: 1.5px solid var(--jk-line-strong);
+  color: var(--vp-c-bg);
 }
 .done .todo__box {
-  border-color: var(--jk-mod-memos);
-  background: var(--jk-mod-memos);
+  border-color: var(--vp-c-text-1);
+  background: var(--vp-c-text-1);
 }
 /* 窄屏上只保留桌面窗口：缩小后的手机会盖住窗口与上方的文字 */
 @media (max-width: 640px) {
@@ -360,6 +359,6 @@ const todos = [
   align-items: center;
   gap: 4px;
   font-size: 10px;
-  color: var(--jk-mod-ledger);
+  color: var(--vp-c-text-3);
 }
 </style>

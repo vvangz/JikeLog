@@ -24,26 +24,20 @@ const platforms = [
 <template>
   <section class="jk-section">
     <div class="jk-section__inner">
-      <div class="jk-center">
-        <span class="jk-eyebrow">多端可用</span>
-        <h2 class="jk-h2">手机和电脑，用同一个账号</h2>
-        <p class="jk-lead">在任何一台设备上的修改，几秒内出现在其他设备上。</p>
-      </div>
-      <div class="grid">
+      <span class="jk-eyebrow">多端可用</span>
+      <h2 class="jk-h2">手机和电脑，用同一个账号</h2>
+      <p class="jk-lead">在任何一台设备上的修改，几秒内出现在其他设备上。</p>
+      <div class="grid jk-hairline-grid">
         <div v-for="p in platforms" :key="p.id" class="card">
-          <div class="card__head">
-            <span class="card__icon"><JkIcon :name="p.icon" :size="28" /></span>
-            <div>
-              <h3>{{ p.name }}</h3>
-              <span class="req">{{ p.req }}</span>
-            </div>
-          </div>
+          <JkIcon :name="p.icon" :size="28" />
+          <h3>{{ p.name }}</h3>
+          <span class="req">{{ p.req }}</span>
           <ul>
-            <li v-for="n in p.notes" :key="n"><JkIcon name="check" :size="16" />{{ n }}</li>
+            <li v-for="n in p.notes" :key="n">{{ n }}</li>
           </ul>
           <div class="card__actions">
             <a class="jk-btn jk-btn--primary" :href="`/download#${p.id}`"><JkIcon name="download" />下载</a>
-            <a class="jk-btn jk-btn--ghost" :href="p.guide"><JkIcon name="book" />安装说明</a>
+            <a class="jk-btn jk-btn--ghost" :href="p.guide">安装说明</a>
           </div>
         </div>
       </div>
@@ -53,65 +47,47 @@ const platforms = [
 
 <style scoped>
 .grid {
-  display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
-  max-width: 920px;
-  margin: 48px auto 0;
+  margin-top: 64px;
 }
 .card {
-  padding: 30px;
-  border-radius: 20px;
-  background: var(--vp-c-bg);
-  border: 1px solid var(--vp-c-divider);
-  box-shadow: var(--jk-card-shadow);
-  background-image: var(--jk-gradient-soft);
-}
-.card__head {
+  padding: 40px;
   display: flex;
-  align-items: center;
-  gap: 16px;
+  flex-direction: column;
 }
-.card__icon {
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  color: var(--vp-c-brand-1);
-  background: var(--vp-c-bg);
-  border: 1px solid var(--vp-c-divider);
+.card > :deep(svg) {
+  color: var(--vp-c-text-1);
 }
 h3 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 800;
+  margin: 32px 0 4px;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--vp-c-text-1);
 }
 .req {
   font-size: 14px;
-  color: var(--vp-c-text-2);
+  color: var(--vp-c-text-3);
 }
 ul {
   list-style: none;
   padding: 0;
-  margin: 22px 0 26px;
+  margin: 28px 0 36px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   font-size: 15px;
-  color: var(--vp-c-text-1);
+  color: var(--vp-c-text-2);
 }
-li :deep(svg) {
-  color: var(--vp-c-brand-2);
-  flex: none;
+li::before {
+  content: '—';
+  margin-right: 10px;
+  color: var(--vp-c-text-3);
 }
 .card__actions {
+  margin-top: auto;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -119,9 +95,10 @@ li :deep(svg) {
 @media (max-width: 760px) {
   .grid {
     grid-template-columns: 1fr;
+    margin-top: 48px;
   }
   .card {
-    padding: 24px 20px;
+    padding: 28px 22px;
   }
 }
 </style>

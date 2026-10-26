@@ -17,13 +17,11 @@ import HomeSecurity from './HomeSecurity.vue';
     <HomePlatforms />
     <HomeFaq />
     <section class="cta">
-      <div class="cta__inner">
-        <h2>现在开始，把每一天记下来</h2>
-        <p>下载即刻日志，注册账号，手机和电脑上的记录自动同步。</p>
-        <div class="cta__actions">
-          <a class="jk-btn cta__btn" href="/download"><JkIcon name="download" />立即下载</a>
-          <a class="jk-btn cta__btn--ghost" href="/guide/quick-start"><JkIcon name="book" />快速上手</a>
-        </div>
+      <h2>现在开始，把每一天记下来</h2>
+      <p>下载即刻日志，注册账号，手机和电脑上的记录自动同步。</p>
+      <div class="cta__actions">
+        <a class="jk-btn jk-btn--primary" href="/download"><JkIcon name="download" />立即下载</a>
+        <a class="jk-btn jk-btn--ghost" href="/guide/quick-start">快速上手</a>
       </div>
     </section>
   </div>
@@ -31,72 +29,38 @@ import HomeSecurity from './HomeSecurity.vue';
 
 <style scoped>
 .cta {
-  padding: 24px 24px 96px;
-}
-.cta__inner {
-  max-width: 1152px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 64px 32px;
-  border-radius: 28px;
+  padding: 136px 24px 144px;
   text-align: center;
-  color: #fff;
-  background: var(--jk-gradient-strong);
-  box-shadow: 0 30px 60px -30px rgba(13, 148, 136, 0.7);
-  position: relative;
-  overflow: hidden;
-}
-.cta__inner::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.18) 1px, transparent 1px);
-  background-size: 20px 20px;
-  mask-image: radial-gradient(70% 90% at 50% 50%, #000, transparent);
-  pointer-events: none;
+  border-top: 1px solid var(--vp-c-divider);
 }
 h2 {
-  position: relative;
-  margin: 0 0 12px;
-  font-size: clamp(26px, 4vw, 38px);
-  font-weight: 800;
-  color: #fff;
+  margin: 0 0 16px;
+  font-size: clamp(30px, 5vw, 52px);
+  line-height: 1.15;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--vp-c-text-1);
 }
 p {
-  position: relative;
   margin: 0;
   font-size: 17px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--vp-c-text-2);
 }
 .cta__actions {
-  position: relative;
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 30px;
-}
-.cta__btn {
-  color: #0f766e !important;
-  background: #fff;
-}
-.cta__btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 12px 24px -12px rgba(0, 0, 0, 0.4);
-}
-.cta__btn--ghost {
-  color: #fff !important;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-}
-.cta__btn--ghost:hover {
-  background: rgba(255, 255, 255, 0.12);
+  margin-top: 40px;
 }
 @media (max-width: 600px) {
   .cta {
-    padding: 8px 16px 64px;
+    padding: 88px 16px 96px;
   }
-  .cta__inner {
-    padding: 48px 20px;
-    border-radius: 22px;
+  .cta__actions .jk-btn {
+    flex: 1 1 100%;
   }
 }
 </style>

@@ -14,18 +14,14 @@ const items = [
 <template>
   <section class="jk-section alt">
     <div class="jk-section__inner">
-      <div class="jk-center">
-        <span class="jk-eyebrow">贴心细节</span>
-        <h2 class="jk-h2">记录这件事，应该顺手</h2>
-        <p class="jk-lead">从同步、搜索到导出，日常会用到的功能都考虑到了。</p>
-      </div>
+      <span class="jk-eyebrow">细节</span>
+      <h2 class="jk-h2">记录这件事，应该顺手</h2>
+      <p class="jk-lead">从同步、搜索到导出，日常会用到的功能都考虑到了。</p>
       <div class="grid">
         <a v-for="it in items" :key="it.title" class="item" :href="it.link">
-          <span class="item__icon"><JkIcon :name="it.icon" :size="22" /></span>
-          <div>
-            <h3>{{ it.title }}</h3>
-            <p>{{ it.desc }}</p>
-          </div>
+          <JkIcon :name="it.icon" :size="22" />
+          <h3>{{ it.title }}</h3>
+          <p>{{ it.desc }}</p>
         </a>
       </div>
     </div>
@@ -35,52 +31,42 @@ const items = [
 <style scoped>
 .alt {
   background: var(--vp-c-bg-alt);
+  border-top: 1px solid var(--vp-c-divider);
+  border-bottom: 1px solid var(--vp-c-divider);
 }
 .grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  margin-top: 48px;
+  gap: 56px 48px;
+  margin-top: 72px;
 }
 .item {
-  display: flex;
-  gap: 16px;
-  padding: 22px;
-  border-radius: 16px;
+  display: block;
   text-decoration: none;
   color: inherit;
-  border: 1px solid transparent;
-  transition: background-color 0.2s, border-color 0.2s;
 }
-.item:hover {
-  background: var(--vp-c-bg);
-  border-color: var(--vp-c-divider);
+.item :deep(svg) {
+  color: var(--vp-c-text-1);
 }
 .item:focus-visible {
-  outline: 2px solid var(--vp-c-brand-2);
-  outline-offset: 2px;
-}
-.item__icon {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  color: #fff;
-  background: var(--jk-gradient-strong);
-  box-shadow: 0 8px 18px -10px rgba(13, 148, 136, 0.8);
+  outline: 2px solid var(--jk-accent);
+  outline-offset: 6px;
+  border-radius: 4px;
 }
 h3 {
-  margin: 2px 0 6px;
+  margin: 20px 0 8px;
   font-size: 17px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--vp-c-text-1);
+  transition: color 0.2s;
+}
+.item:hover h3 {
+  color: var(--jk-accent);
 }
 p {
   margin: 0;
   font-size: 14.5px;
-  line-height: 1.7;
+  line-height: 1.75;
   color: var(--vp-c-text-2);
 }
 @media (max-width: 960px) {
@@ -91,9 +77,8 @@ p {
 @media (max-width: 600px) {
   .grid {
     grid-template-columns: 1fr;
-  }
-  .item {
-    padding: 16px 4px;
+    gap: 40px;
+    margin-top: 48px;
   }
 }
 </style>

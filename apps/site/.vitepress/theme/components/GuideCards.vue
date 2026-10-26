@@ -33,23 +33,23 @@ const chapters = nav.guide.map((g, i) => ({ ...g, no: String(i + 1).padStart(2, 
   background: var(--vp-c-bg);
   text-decoration: none !important;
   color: inherit !important;
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  transition: border-color 0.2s, background-color 0.2s;
 }
 .card:hover {
-  border-color: var(--vp-c-brand-2);
-  box-shadow: var(--jk-card-shadow-hover);
-  transform: translateY(-2px);
+  border-color: var(--jk-line-strong);
+  background: var(--vp-c-bg-alt);
 }
 .no {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: var(--vp-c-brand-1);
+  color: var(--vp-c-text-3);
   padding-top: 2px;
 }
 strong {
   display: block;
   font-size: 16px;
+  font-weight: 600;
   color: var(--vp-c-text-1);
 }
 .desc {

@@ -56,8 +56,8 @@ const columns = [
 <style scoped>
 .footer {
   border-top: 1px solid var(--vp-c-divider);
-  background: var(--vp-c-bg-alt);
-  padding: 56px 24px 28px;
+  background: var(--vp-c-bg);
+  padding: 64px 24px 32px;
 }
 @media (min-width: 960px) {
   .footer.has-sidebar {
@@ -70,7 +70,7 @@ const columns = [
   }
 }
 .footer__inner {
-  max-width: 1152px;
+  max-width: 1120px;
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1.6fr repeat(3, 1fr);
@@ -80,16 +80,16 @@ const columns = [
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-size: 18px;
-  font-weight: 800;
+  font-size: 16px;
+  font-weight: 600;
   color: var(--vp-c-text-1);
   text-decoration: none;
 }
 .brand p {
-  margin: 12px 0 0;
+  margin: 14px 0 0;
   font-size: 14px;
   line-height: 1.8;
-  color: var(--vp-c-text-2);
+  color: var(--vp-c-text-3);
 }
 .col {
   display: flex;
@@ -97,10 +97,10 @@ const columns = [
   gap: 10px;
 }
 .col h2 {
-  margin: 0 0 4px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--vp-c-text-1);
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vp-c-text-3);
 }
 .col a {
   font-size: 14px;
@@ -109,11 +109,11 @@ const columns = [
   width: fit-content;
 }
 .col a:hover {
-  color: var(--vp-c-brand-1);
+  color: var(--vp-c-text-1);
 }
 .footer__bottom {
-  max-width: 1152px;
-  margin: 40px auto 0;
+  max-width: 1120px;
+  margin: 56px auto 0;
   padding-top: 22px;
   border-top: 1px solid var(--vp-c-divider);
   display: flex;

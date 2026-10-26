@@ -35,11 +35,11 @@ const faqs = [
 </script>
 
 <template>
-  <section class="jk-section alt">
-    <div class="jk-section__inner narrow">
-      <div class="jk-center">
+  <section class="jk-section">
+    <div class="jk-section__inner layout">
+      <div>
         <span class="jk-eyebrow">常见问题</span>
-        <h2 class="jk-h2">使用前你可能想知道</h2>
+        <h2 class="jk-h2">使用前，<br />你可能想知道</h2>
       </div>
       <div class="list">
         <details v-for="f in faqs" :key="f.q">
@@ -55,69 +55,75 @@ const faqs = [
 </template>
 
 <style scoped>
-.alt {
-  background: var(--vp-c-bg-alt);
-}
-.narrow {
-  max-width: 820px;
+.layout {
+  display: grid;
+  grid-template-columns: 0.8fr 1.4fr;
+  gap: 80px;
+  align-items: start;
 }
 .list {
-  margin-top: 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  border-top: 1px solid var(--vp-c-divider);
 }
 details {
-  border-radius: 14px;
-  background: var(--vp-c-bg);
-  border: 1px solid var(--vp-c-divider);
-  transition: border-color 0.2s;
-}
-details[open] {
-  border-color: var(--vp-c-brand-2);
+  border-bottom: 1px solid var(--vp-c-divider);
 }
 summary {
   list-style: none;
   cursor: pointer;
-  padding: 18px 52px 18px 22px;
+  padding: 24px 48px 24px 0;
   position: relative;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 16.5px;
+  font-weight: 500;
   color: var(--vp-c-text-1);
 }
 summary::-webkit-details-marker {
   display: none;
 }
+/* 加号，展开后变为减号 */
+summary::before,
 summary::after {
   content: '';
   position: absolute;
-  right: 24px;
+  right: 4px;
   top: 50%;
-  width: 9px;
-  height: 9px;
-  border-right: 2px solid var(--vp-c-text-2);
-  border-bottom: 2px solid var(--vp-c-text-2);
-  transform: translateY(-70%) rotate(45deg);
+  width: 14px;
+  height: 1.5px;
+  background: var(--vp-c-text-2);
   transition: transform 0.2s;
 }
+summary::after {
+  transform: rotate(90deg);
+}
 details[open] summary::after {
-  transform: translateY(-30%) rotate(-135deg);
+  transform: rotate(0deg);
 }
 summary:focus-visible {
-  outline: 2px solid var(--vp-c-brand-2);
-  outline-offset: 2px;
-  border-radius: 14px;
+  outline: 2px solid var(--jk-accent);
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 details p {
   margin: 0;
-  padding: 0 22px 20px;
+  padding: 0 48px 26px 0;
   font-size: 15px;
-  line-height: 1.8;
+  line-height: 1.85;
   color: var(--vp-c-text-2);
 }
 details a {
-  color: var(--vp-c-brand-1);
-  font-weight: 600;
+  color: var(--vp-c-text-1);
+  font-weight: 500;
   white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--jk-line-strong);
+}
+details a:hover {
+  text-decoration-color: currentColor;
+}
+@media (max-width: 860px) {
+  .layout {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
 }
 </style>

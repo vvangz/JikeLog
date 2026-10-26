@@ -154,16 +154,14 @@ async function copy(text: string) {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding: 26px;
+  padding: 32px;
   border-radius: 20px;
   border: 1px solid var(--vp-c-divider);
   background-color: var(--vp-c-bg);
-  background-image: var(--jk-gradient-soft);
-  box-shadow: var(--jk-card-shadow);
   scroll-margin-top: calc(var(--vp-nav-height) + 24px);
 }
 .card:target {
-  border-color: var(--vp-c-brand-2);
+  border-color: var(--vp-c-text-1);
 }
 .card__head {
   display: flex;
@@ -173,19 +171,19 @@ async function copy(text: string) {
 .card__icon {
   display: grid;
   place-items: center;
-  width: 54px;
-  height: 54px;
-  border-radius: 16px;
-  color: var(--vp-c-brand-1);
-  background: var(--vp-c-bg);
-  border: 1px solid var(--vp-c-divider);
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  color: var(--vp-c-text-1);
+  background: var(--vp-c-bg-soft);
 }
 .vp-doc .card h2 {
   margin: 0;
   padding: 0;
   border: 0;
   font-size: 21px;
-  letter-spacing: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .req {
   font-size: 14px;
@@ -242,14 +240,14 @@ async function copy(text: string) {
   cursor: pointer;
 }
 .copy:hover {
-  color: var(--vp-c-brand-1);
-  border-color: var(--vp-c-brand-2);
+  color: var(--vp-c-text-1);
+  border-color: var(--jk-line-strong);
 }
 .cert {
-  padding: 14px 16px;
+  padding: 16px 18px;
   border-radius: 14px;
-  background: var(--vp-c-bg);
-  border: 1px dashed var(--vp-c-divider);
+  background: var(--vp-c-bg-alt);
+  border: 1px solid var(--vp-c-divider);
   font-size: 14px;
 }
 .cert p {
