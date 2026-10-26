@@ -98,31 +98,46 @@ async function copy(text: string) {
           <a v-else class="jk-btn jk-btn--primary" :href="RELEASES" target="_blank" rel="noopener noreferrer">
             <JkIcon name="github" />前往 GitHub 下载
           </a>
-          <a class="jk-btn jk-btn--ghost" :href="c.guide"><JkIcon name="book" />安装说明</a>
+          <a class="guide" :href="c.guide">安装说明 <JkIcon name="arrow" :size="14" /></a>
         </div>
 
-        <dl v-if="c.file" class="facts">
-          <dt>文件名</dt>
-          <dd><code>{{ c.file.name }}</code></dd>
-          <dt>SHA-256</dt>
-          <dd class="hash">
-            <code>{{ c.file.sha256 }}</code>
-            <button type="button" class="copy" :aria-label="`复制 ${c.name} 的 SHA-256`" @click="copy(c.file.sha256)">
-              <JkIcon :name="copied === c.file.sha256 ? 'check' : 'copy'" :size="15" />
-            </button>
-          </dd>
-        </dl>
+        <!-- 必须做的一步保持可见；指纹等核对信息收进下方的"校验信息" -->
+        <p v-if="c.id === 'windows'" class="note">
+          <JkIcon name="shield" :size="16" />
+          <span>
+            首次安装前需导入签名证书（只需一次）<br />
+            <a v-if="manifest?.files.windowsCert" :href="manifest.files.windowsCert.url" download>下载证书</a>
+            <span v-if="manifest?.files.windowsCert" class="sep">·</span>
+            <a href="/guide/windows">查看步骤</a>
+          </span>
+        </p>
 
-        <div v-if="c.id === 'windows'" class="cert">
-          <p>
-            <strong>首次安装前</strong>需要信任即刻日志的签名证书（只做一次）。核对指纹后按
-            <a href="/guide/windows">安装说明</a> 导入。
-          </p>
-          <p class="cert__fp">证书 SHA-1 指纹：<code>{{ certSha1 }}</code></p>
-          <a v-if="manifest?.files.windowsCert" class="cert__link" :href="manifest.files.windowsCert.url" download>
-            <JkIcon name="shield" :size="16" />下载证书 {{ manifest.files.windowsCert.name }}
-          </a>
-        </div>
+        <details v-if="c.file || c.id === 'windows'" class="verify">
+          <summary>校验信息</summary>
+          <p class="verify__hint">用于确认文件完整、未被篡改。</p>
+          <dl>
+            <template v-if="c.file">
+              <dt>文件名</dt>
+              <dd><code>{{ c.file.name }}</code></dd>
+              <dt>SHA-256</dt>
+              <dd class="hash">
+                <code>{{ c.file.sha256 }}</code>
+                <button type="button" class="copy" :aria-label="`复制 ${c.name} 的 SHA-256`" @click="copy(c.file.sha256)">
+                  <JkIcon :name="copied === c.file.sha256 ? 'check' : 'copy'" :size="14" />
+                </button>
+              </dd>
+            </template>
+            <template v-if="c.id === 'windows'">
+              <dt>证书指纹</dt>
+              <dd class="hash">
+                <code>{{ certSha1 }}</code>
+                <button type="button" class="copy" aria-label="复制证书 SHA-1 指纹" @click="copy(certSha1)">
+                  <JkIcon :name="copied === certSha1 ? 'check' : 'copy'" :size="14" />
+                </button>
+              </dd>
+            </template>
+          </dl>
+        </details>
 
         <p class="backup">
           下载慢或失败？<a :href="manifest?.releaseUrl ?? RELEASES" target="_blank" rel="noopener noreferrer">从 GitHub 下载</a>
@@ -192,7 +207,24 @@ async function copy(text: string) {
 .card__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  align-items: center;
+  gap: 12px 20px;
+}
+/* 安装说明：文字链接，放得下时与下载按钮同一行 */
+.vp-doc .guide {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--vp-c-text-1);
+  text-decoration: none;
+}
+.guide :deep(svg) {
+  transition: transform 0.2s;
+}
+.guide:hover :deep(svg) {
+  transform: translateX(3px);
 }
 .loading {
   cursor: progress;
@@ -203,22 +235,87 @@ async function copy(text: string) {
   opacity: 0.85;
   font-size: 13px;
 }
-.facts {
+.note {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--vp-c-text-2);
+}
+.note :deep(svg) {
+  flex: none;
+  margin-top: 4px;
+  color: var(--vp-c-text-1);
+}
+.note a {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.sep {
+  margin: 0 8px;
+  color: var(--vp-c-text-3);
+}
+/* 校验信息：默认收起，放在卡片底部 */
+.verify {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--vp-c-divider);
+}
+.verify summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--vp-c-text-2);
+  transition: color 0.2s;
+}
+.verify summary::-webkit-details-marker {
+  display: none;
+}
+/* 右侧的小三角，展开后朝下 */
+.verify summary::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.2s;
+}
+.verify[open] summary::after {
+  transform: rotate(45deg);
+}
+.verify summary:hover {
+  color: var(--vp-c-text-1);
+}
+.verify summary:focus-visible {
+  outline: 2px solid var(--jk-accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.verify__hint {
+  margin: 12px 0 10px !important;
+  font-size: 13px;
+  color: var(--vp-c-text-3);
+}
+.verify dl {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 6px 12px;
+  gap: 8px 14px;
   margin: 0;
   font-size: 13px;
 }
-.facts dt {
-  color: var(--vp-c-text-2);
+.verify dt {
+  color: var(--vp-c-text-3);
 }
-.facts dd {
+.verify dd {
   margin: 0;
   min-width: 0;
 }
-.facts code,
-.cert code {
+.verify code {
   font-size: 12px;
   word-break: break-all;
 }
@@ -231,44 +328,23 @@ async function copy(text: string) {
   flex: none;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  color: var(--vp-c-text-2);
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--vp-c-text-3);
   border: 1px solid var(--vp-c-divider);
   background: var(--vp-c-bg);
   cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
 }
 .copy:hover {
   color: var(--vp-c-text-1);
   border-color: var(--jk-line-strong);
 }
-.cert {
-  padding: 16px 18px;
-  border-radius: 14px;
-  background: var(--vp-c-bg-alt);
-  border: 1px solid var(--vp-c-divider);
-  font-size: 14px;
-}
-.cert p {
-  margin: 0;
-  line-height: 1.7;
-}
-.cert__fp {
-  margin-top: 6px !important;
-  color: var(--vp-c-text-2);
-}
-.cert__link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 10px;
-  font-weight: 600;
-}
 .backup {
-  margin: auto 0 0 !important;
+  margin: 0 !important;
   font-size: 13px;
-  color: var(--vp-c-text-2);
+  color: var(--vp-c-text-3);
 }
 @media (max-width: 820px) {
   .dl__grid {
