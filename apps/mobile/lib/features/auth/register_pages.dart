@@ -13,6 +13,7 @@ import '../../shared/ui/jk_feedback.dart';
 import '../../shared/ui/jk_form.dart';
 import 'auth_controller.dart';
 import 'auth_scaffold.dart';
+import 'captcha.dart';
 
 /// 用户名、昵称、密码、确认密码四个字段，注册与完善注册共用。
 class _AccountFields extends StatelessWidget {
@@ -100,7 +101,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
     title: '注册账号',
     subtitle: smsEnabled(ref)
         ? '注册后可在"帐号"中绑定手机号，用于验证码登录和找回密码'
-        : '请牢记用户名和密码：$smsUnavailableHint，暂时无法通过手机号找回密码',
+        : '请牢记用户名和密码：${smsUnavailableReason(ref)}，暂时无法通过手机号找回密码',
     showBack: true,
     child: Form(
       key: formKey,
@@ -259,13 +260,18 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage>
                 setState(() => fieldErrors = {'phone': '请输入正确的中国大陆手机号'});
                 return null;
               }
-              return sendCode(
-                () => ref
-                    .read(authApiProvider)
-                    .sendSms(
-                      JkValidators.normalizePhone(_phone.text),
-                      SmsPurpose.resetPassword,
-                    ),
+              return sendWithCaptcha(
+                context,
+                ref,
+                (captcha) => sendCode(
+                  () => ref
+                      .read(authApiProvider)
+                      .sendSms(
+                        JkValidators.normalizePhone(_phone.text),
+                        SmsPurpose.resetPassword,
+                        captchaVerifyParam: captcha,
+                      ),
+                ),
               );
             },
           ),

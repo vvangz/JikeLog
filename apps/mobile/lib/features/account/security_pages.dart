@@ -12,6 +12,7 @@ import '../../shared/ui/jk_feedback.dart';
 import '../../shared/ui/jk_form.dart';
 import '../../shared/ui/jk_page.dart';
 import '../auth/auth_controller.dart';
+import '../auth/captcha.dart';
 
 /// 身份验证方式：当前密码，或当前绑定手机号的验证码。
 enum _Verify { password, sms }
@@ -95,10 +96,17 @@ class _ChangePasswordPageState extends ConsumerState<ChangePasswordPage>
                   controller: _code,
                   errorText: errorOf('smsCode'),
                   validator: JkValidators.smsCode,
-                  onSend: () => sendCode(
-                    () => ref
-                        .read(accountApiProvider)
-                        .sendSms(SmsPurpose.verifyCurrent),
+                  onSend: () => sendWithCaptcha(
+                    context,
+                    ref,
+                    (captcha) => sendCode(
+                      () => ref
+                          .read(accountApiProvider)
+                          .sendSms(
+                            SmsPurpose.verifyCurrent,
+                            captchaVerifyParam: captcha,
+                          ),
+                    ),
                   ),
                 ),
               JkPasswordField(
@@ -194,10 +202,17 @@ class _PhonePageState extends ConsumerState<PhonePage> with ApiFormState {
                   controller: _currentCode,
                   errorText: errorOf('currentCode'),
                   validator: JkValidators.smsCode,
-                  onSend: () => sendCode(
-                    () => ref
-                        .read(accountApiProvider)
-                        .sendSms(SmsPurpose.verifyCurrent),
+                  onSend: () => sendWithCaptcha(
+                    context,
+                    ref,
+                    (captcha) => sendCode(
+                      () => ref
+                          .read(accountApiProvider)
+                          .sendSms(
+                            SmsPurpose.verifyCurrent,
+                            captchaVerifyParam: captcha,
+                          ),
+                    ),
                   ),
                 ),
               JkTextField(
@@ -217,13 +232,18 @@ class _PhonePageState extends ConsumerState<PhonePage> with ApiFormState {
                     setState(() => fieldErrors = {'phone': '请输入正确的中国大陆手机号'});
                     return null;
                   }
-                  return sendCode(
-                    () => ref
-                        .read(accountApiProvider)
-                        .sendSms(
-                          SmsPurpose.bindPhone,
-                          phone: JkValidators.normalizePhone(_phone.text),
-                        ),
+                  return sendWithCaptcha(
+                    context,
+                    ref,
+                    (captcha) => sendCode(
+                      () => ref
+                          .read(accountApiProvider)
+                          .sendSms(
+                            SmsPurpose.bindPhone,
+                            phone: JkValidators.normalizePhone(_phone.text),
+                            captchaVerifyParam: captcha,
+                          ),
+                    ),
                   );
                 },
               ),

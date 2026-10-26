@@ -14,6 +14,7 @@ class PlatformFeatures {
     required this.richTextEditor,
     required this.shareSheet,
     required this.exactAlarmPermission,
+    required this.webView,
   });
 
   static const android = PlatformFeatures(
@@ -23,6 +24,7 @@ class PlatformFeatures {
     richTextEditor: true,
     shareSheet: true,
     exactAlarmPermission: true,
+    webView: true,
   );
 
   static const windows = PlatformFeatures(
@@ -32,6 +34,7 @@ class PlatformFeatures {
     richTextEditor: false,
     shareSheet: false,
     exactAlarmPermission: false,
+    webView: false,
   );
 
   /// 运行平台对应的功能集。`flutter test` 中固定为 Android，
@@ -66,6 +69,9 @@ class PlatformFeatures {
 
   /// 精确闹钟权限（Android 12 起需要用户授权）。
   final bool exactAlarmPermission;
+
+  /// 内嵌网页（webview_flutter 没有 Windows 实现）：发送登录验证码前的人机验证需要它。
+  final bool webView;
 }
 
 final platformFeaturesProvider = Provider<PlatformFeatures>(
