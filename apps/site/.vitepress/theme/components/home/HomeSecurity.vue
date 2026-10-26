@@ -3,26 +3,10 @@
 import JkIcon from '../JkIcon.vue';
 
 const items = [
-  {
-    icon: 'lock',
-    title: '传输时两层加密',
-    desc: '全程 HTTPS；日志、笔记、备忘、账目的文字内容和附件文件名，在 HTTPS 之上再用 X25519 + AES-256-GCM 加密一次。',
-  },
-  {
-    icon: 'shield',
-    title: '存储时加密',
-    desc: '这些内容在服务器上以每个账号独立的密钥加密保存，管理员只能看到账号配置，看不到你记录的内容。',
-  },
-  {
-    icon: 'archive',
-    title: '定期加密备份',
-    desc: '每 14 天全量备份一次，备份加密后保存到异地，服务器出故障也能恢复。',
-  },
-  {
-    icon: 'export',
-    title: '数据由你掌控',
-    desc: '随时导出全部数据；注销账号后，账号与全部记录立即从服务器删除。',
-  },
+  { icon: 'lock', title: '双重传输加密', desc: 'HTTPS 之上，记录内容与附件文件名再经 AES-256-GCM 加密传输。' },
+  { icon: 'shield', title: '加密存储', desc: '记录内容在服务器上加密保存，每个账号使用独立密钥。' },
+  { icon: 'archive', title: '异地加密备份', desc: '每 14 天全量备份，加密后异地保存，故障时可完整恢复。' },
+  { icon: 'export', title: '数据自主可控', desc: '随时导出全部数据；注销后，账号与记录随即从服务器删除。' },
 ] as const;
 </script>
 
@@ -32,7 +16,7 @@ const items = [
       <div v-reveal class="sec__intro">
         <span class="eyebrow">安全与隐私</span>
         <h2>你的记录，只属于你</h2>
-        <p>工作安排、个人笔记、收支明细都是敏感信息。即刻日志在设计时就把加密和隐私放在前面。</p>
+        <p>从传输、存储到备份，每个环节都经过加密。</p>
         <a class="link" href="/privacy">阅读隐私政策 <JkIcon name="arrow" :size="15" /></a>
       </div>
       <div class="sec__grid">
@@ -110,6 +94,10 @@ h2 {
 .item:nth-child(even) {
   padding: 32px 0 32px 32px;
   border-left: 1px solid var(--jk-inverse-line);
+}
+/* 卡片之间以边框分隔：出现时只淡入不位移，避免线条在动画中错开 */
+.item.jk-reveal {
+  transform: none;
 }
 .item :deep(svg) {
   color: #fafafa;
