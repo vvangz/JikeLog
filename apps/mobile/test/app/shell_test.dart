@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jikelog/app/shell/app_shell.dart';
 import 'package:jikelog/app/shell/destinations.dart';
 import 'package:jikelog/app/shell/sidebar.dart';
+import 'package:jikelog/features/settings/about_page.dart';
 
 import '../support/app_harness.dart';
 
@@ -19,7 +20,9 @@ void main() {
 
   testWidgets('手机宽度：点击左上角入口自上而下展开侧栏，选择模块后收起', (tester) async {
     await pumpApp(tester, width: 400);
-    expect(find.text('工作日志'), findsWidgets); // AppBar 标题 + 空状态
+    // 默认首页是概览（AppBar 标题 + 侧栏入口在浮层收起时不显示）
+    expect(find.byKey(const Key('overview-page')), findsOneWidget);
+    expect(find.text('概览'), findsOneWidget);
     expect(find.byType(Sidebar), findsNothing);
 
     await tester.tap(find.byKey(const Key('sidebar-toggle')));
@@ -42,7 +45,14 @@ void main() {
     for (final d in allDestinations) {
       expect(find.byKey(Key('nav-${d.path}')), findsOneWidget);
     }
-    // 四个模块在上方，设置与帐号在下方
+    // 概览在最上方，四个模块其次，设置与帐号在下方
+    final overviewY = tester
+        .getCenter(find.byKey(const Key('nav-/overview')))
+        .dy;
+    expect(
+      overviewY,
+      lessThan(tester.getCenter(find.byKey(const Key('nav-/worklog'))).dy),
+    );
     final notesY = tester.getCenter(find.byKey(const Key('nav-/notes'))).dy;
     final settingsY = tester
         .getCenter(find.byKey(const Key('nav-/settings')))
@@ -65,6 +75,39 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byType(Sidebar), findsNothing);
+  });
+
+  testWidgets('模块页按返回键回到概览；子页面先返回上一级；概览页不拦截', (tester) async {
+    await pumpApp(tester, width: 400);
+    for (final path in ['/notes', '/settings']) {
+      await goTo(tester, path);
+      await tester.binding.handlePopRoute();
+      await settleApp(tester);
+      expect(find.byKey(const Key('overview-page')), findsOneWidget);
+    }
+
+    // 子页面（全屏）先回到其所在模块，再回到概览
+    await goTo(tester, '/settings');
+    final about = find.text('关于即刻日志');
+    await tester.ensureVisible(about); // 下一帧才滚动到位
+    await tester.pumpAndSettle();
+    await tapAndSettle(tester, about);
+    expect(find.byType(AboutPage), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await settleApp(tester);
+    expect(find.text('设置'), findsWidgets);
+    expect(find.byKey(const Key('overview-page')), findsNothing);
+    await tester.binding.handlePopRoute();
+    await settleApp(tester);
+    expect(find.byKey(const Key('overview-page')), findsOneWidget);
+
+    // 侧栏浮层打开时返回键先收起浮层，停在当前模块
+    await goTo(tester, '/ledger');
+    await tapAndSettle(tester, find.byKey(const Key('sidebar-toggle')));
+    await tester.binding.handlePopRoute();
+    await settleApp(tester);
+    expect(find.byType(Sidebar), findsNothing);
+    expect(find.byKey(const Key('overview-page')), findsNothing);
   });
 
   testWidgets('系统开启"减少动态效果"时侧栏直接展开', (tester) async {

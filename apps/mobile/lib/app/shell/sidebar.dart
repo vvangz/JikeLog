@@ -28,7 +28,7 @@ class SidebarToggle extends StatelessWidget {
   );
 }
 
-/// 侧栏：上方四个模块入口，下方设置与帐号。[expanded] 为 false 时只显示图标（导航栏样式）。
+/// 侧栏：上方概览与四个模块入口，下方设置与帐号。[expanded] 为 false 时只显示图标（导航栏样式）。
 class Sidebar extends StatelessWidget {
   const Sidebar({
     super.key,
@@ -72,6 +72,7 @@ class Sidebar extends StatelessWidget {
                   expanded: expanded,
                   onTap: onSearch,
                 ),
+                _item(overviewDestination),
                 for (final d in moduleDestinations) _item(d),
                 const Spacer(),
                 Divider(height: 1, color: c.divider),

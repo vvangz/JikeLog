@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// 即刻日志自绘图标：24 栅格、1.5 描边、圆角端点（与 Lucide 风格一致），随文字颜色变化。
-enum JkIcons { worklog, notes, memos, ledger, settings, account }
+enum JkIcons { overview, worklog, notes, memos, ledger, settings, account }
 
 class JkIcon extends StatelessWidget {
   const JkIcon(
@@ -55,6 +55,11 @@ class _IconPainter extends CustomPainter {
     void rect(double l, double t, double w, double h, double r) => canvas
         .drawRRect(RRect.fromLTRBR(l, t, l + w, t + h, Radius.circular(r)), p);
     switch (icon) {
+      case JkIcons.overview: // 仪表盘：大小不一的四个圆角块
+        rect(3.5, 3.5, 7.5, 9, 2);
+        rect(13, 3.5, 7.5, 5.5, 2);
+        rect(3.5, 15, 7.5, 5.5, 2);
+        rect(13, 11.5, 7.5, 9, 2);
       case JkIcons.worklog: // 公文包
         rect(3, 7, 18, 13, 2);
         canvas.drawPath(

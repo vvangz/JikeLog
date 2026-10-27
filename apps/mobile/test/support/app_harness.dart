@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jikelog/core/platform/platform_features.dart';
 import 'package:jikelog/core/config.dart';
 import 'package:jikelog/app/app.dart';
+import 'package:jikelog/app/router.dart';
 import 'package:jikelog/core/api/models.dart';
 import 'package:jikelog/core/storage/stores.dart';
 
@@ -39,6 +40,7 @@ FakeBackend standardBackend({Map<String, dynamic>? user}) => FakeBackend()
   );
 
 /// 启动完整应用。[signedIn] 为 true 时预置令牌与缓存的账号信息；[consented] 控制是否已同意隐私政策。
+/// [path] 不为空时启动后转到该页面（默认停在首页"概览"）。
 Future<FakeBackend> pumpApp(
   WidgetTester tester, {
   FakeBackend? backend,
@@ -50,6 +52,7 @@ Future<FakeBackend> pumpApp(
   Map<String, dynamic>? user,
   FakeSyncServer? syncServer,
   PlatformFeatures features = PlatformFeatures.android,
+  String? path,
 }) async {
   final b = backend ?? standardBackend(user: user);
   tester.view.physicalSize = Size(width, height);
@@ -74,7 +77,16 @@ Future<FakeBackend> pumpApp(
     ),
   );
   await settleApp(tester);
+  if (path != null) await goTo(tester, path);
   return b;
+}
+
+/// 转到某个页面（替换当前页面栈）。
+Future<void> goTo(WidgetTester tester, String path) async {
+  ProviderScope.containerOf(tester.element(find.byType(Navigator).first))
+      .read(routerProvider)
+      .go(path);
+  await settleApp(tester);
 }
 
 /// 让异步请求完成并结束动画。

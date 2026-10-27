@@ -17,6 +17,13 @@ class Destination {
   final String description;
 }
 
+/// 侧栏最上方：跨模块的概览（默认首页）。
+const overviewDestination = Destination(
+  path: '/overview',
+  label: '概览',
+  icon: JkIcons.overview,
+);
+
 /// 侧栏上方：四个核心模块。
 const moduleDestinations = [
   Destination(
@@ -51,7 +58,11 @@ const generalDestinations = [
   Destination(path: '/account', label: '帐号', icon: JkIcons.account),
 ];
 
-const allDestinations = [...moduleDestinations, ...generalDestinations];
+const allDestinations = [
+  overviewDestination,
+  ...moduleDestinations,
+  ...generalDestinations,
+];
 
 /// 当前路径所属的入口（子页面归属于其上级入口）。
 Destination? destinationFor(String location) {

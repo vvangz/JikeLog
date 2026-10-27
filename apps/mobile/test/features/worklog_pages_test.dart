@@ -53,7 +53,7 @@ Future<void> _run(WidgetTester tester, Future<void> Function() body) async {
 void main() {
   testWidgets('空状态 → 写日志 → 自动保存并同步 → 回到列表', (tester) async {
     final server = FakeSyncServer();
-    await pumpApp(tester, syncServer: server);
+    await pumpApp(tester, syncServer: server, path: '/worklog');
     expect(find.text('还没有工作日志'), findsOneWidget);
 
     await tapAndSettle(tester, find.byKey(const Key('worklog-create')));
@@ -78,7 +78,7 @@ void main() {
 
   testWidgets('离线编辑显示已保存在本机，列表标记待同步', (tester) async {
     final server = FakeSyncServer();
-    await pumpApp(tester, syncServer: server);
+    await pumpApp(tester, syncServer: server, path: '/worklog');
     final c = _container(tester);
     (c.read(syncTransportProvider) as FakeTransport).online = false;
 
@@ -94,7 +94,7 @@ void main() {
 
   testWidgets('编辑框有未保存的输入时，其他设备的修改合并进来而不是被覆盖', (tester) async {
     final server = FakeSyncServer();
-    await pumpApp(tester, syncServer: server);
+    await pumpApp(tester, syncServer: server, path: '/worklog');
     await tapAndSettle(tester, find.byKey(const Key('worklog-create')));
     final field = find.byKey(const Key('worklog-content'));
     await tester.enterText(field, '第一段\n第二段');
@@ -129,7 +129,7 @@ void main() {
   });
 
   testWidgets('Markdown 工具栏插入格式，预览渲染内容', (tester) async {
-    await pumpApp(tester, syncServer: FakeSyncServer());
+    await pumpApp(tester, syncServer: FakeSyncServer(), path: '/worklog');
     await tapAndSettle(tester, find.byKey(const Key('worklog-create')));
     final field = find.byKey(const Key('worklog-content'));
     await tester.enterText(field, '今天');
@@ -149,7 +149,7 @@ void main() {
   });
 
   testWidgets('工作地点联想历史地点', (tester) async {
-    await pumpApp(tester, syncServer: FakeSyncServer());
+    await pumpApp(tester, syncServer: FakeSyncServer(), path: '/worklog');
     final repo = _container(tester).read(worklogRepositoryProvider);
     await _run(tester, () async {
       final id = await repo.create();
@@ -172,7 +172,7 @@ void main() {
 
   testWidgets('冲突版本提示，删除日志后从列表消失', (tester) async {
     final server = FakeSyncServer();
-    await pumpApp(tester, syncServer: server);
+    await pumpApp(tester, syncServer: server, path: '/worklog');
     final c = _container(tester);
     late String id;
     await _run(tester, () async {
