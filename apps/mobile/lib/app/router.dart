@@ -22,6 +22,7 @@ import '../features/modules/module_page.dart';
 import '../features/settings/about_page.dart';
 import '../features/settings/settings_page.dart';
 import '../features/notes/note_editor_page.dart';
+import '../features/overview/overview_page.dart';
 import '../features/notes/notes_list_page.dart';
 import '../features/revisions/revisions_page.dart';
 import '../features/export/export_page.dart';
@@ -41,8 +42,8 @@ const _publicPaths = {
   '/password/reset',
 };
 
-/// 默认进入的模块。
-const homePath = '/worklog';
+/// 默认进入的页面：概览。
+const homePath = '/overview';
 
 /// 路由守卫（纯函数，便于测试）：
 /// 未同意隐私政策 → 同意页；恢复登录态中 → 启动页；未登录 → 登录页；已登录访问登录类页面 → 首页。
@@ -116,6 +117,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           child: child,
         ),
         routes: [
+          GoRoute(
+            path: overviewDestination.path,
+            pageBuilder: (_, _) =>
+                const NoTransitionPage(child: OverviewPage()),
+          ),
           for (final d in moduleDestinations)
             GoRoute(
               path: d.path,

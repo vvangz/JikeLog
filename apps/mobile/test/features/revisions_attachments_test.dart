@@ -66,6 +66,7 @@ final class _TestFile extends PlatformFile {
 
 /// 启动应用并新建一条已同步的日志，进入其编辑页。返回日志 ID。
 Future<String> _openNewWorklog(WidgetTester tester) async {
+  await goTo(tester, '/worklog');
   await tapAndSettle(tester, find.byKey(const Key('worklog-create')));
   await tester.enterText(find.byKey(const Key('worklog-content')), '现在的内容');
   await tester.pump(const Duration(seconds: 1));

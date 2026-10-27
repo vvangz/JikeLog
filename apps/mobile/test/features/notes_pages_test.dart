@@ -376,7 +376,7 @@ void main() {
   });
 
   testWidgets('工作日志中新建、关联与取消关联笔记', (tester) async {
-    await pumpApp(tester, syncServer: FakeSyncServer());
+    await pumpApp(tester, syncServer: FakeSyncServer(), path: '/worklog');
     final c = _c(tester);
     final other = await _run(tester, () async {
       final repo = c.read(noteRepositoryProvider);

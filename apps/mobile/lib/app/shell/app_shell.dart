@@ -211,10 +211,17 @@ class _AppShellState extends ConsumerState<AppShell>
       ),
     };
 
+    // 返回键：先收起侧栏浮层；在模块、设置、帐号页回到概览；只有在概览页才退出应用
+    final atHome = widget.location == overviewDestination.path;
     return PopScope(
-      canPop: !_overlayOpen,
+      canPop: !_overlayOpen && atHome,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _closeOverlay();
+        if (didPop) return;
+        if (_overlayOpen) {
+          _closeOverlay();
+        } else if (!atHome) {
+          context.go(overviewDestination.path);
+        }
       },
       child: Scaffold(
         appBar: layout == ShellLayout.compact
