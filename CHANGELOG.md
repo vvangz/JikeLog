@@ -2,6 +2,18 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [1.5.0](https://github.com/vvangz/JikeLog/compare/v1.4.0...v1.5.0) (2026-10-27)
+
+
+### 新功能
+
+* **mobile:** 新增概览首页，汇总四个模块的统计 ([8cad52c](https://github.com/vvangz/JikeLog/commit/8cad52c9adb559bbcf05c3c78aa4dddfbe48f5c8))
+
+
+### 文档
+
+* v1.5.0 概览首页的开发日志、发布说明与使用说明 ([db4e53d](https://github.com/vvangz/JikeLog/commit/db4e53d67fd9f76f344d149e72f31ee9bb36799f))
+
 ## [1.4.0](https://github.com/vvangz/JikeLog/compare/v1.3.0...v1.4.0) (2026-10-26)
 
 
