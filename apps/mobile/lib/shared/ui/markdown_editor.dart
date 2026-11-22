@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../app/theme/app_theme.dart';
@@ -187,21 +188,106 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
       );
       return widget.expand ? SingleChildScrollView(child: preview) : preview;
     }
-    return TextField(
-      key: widget.fieldKey,
-      controller: _c,
-      focusNode: widget.focusNode,
-      minLines: widget.expand ? null : 10,
-      maxLines: null,
-      expands: widget.expand,
-      textAlignVertical: TextAlignVertical.top,
-      maxLength: 100000,
-      keyboardType: TextInputType.multiline,
-      decoration: InputDecoration(
-        hintText: widget.hint,
-        counterText: '',
-        alignLabelWithHint: true,
+    return Focus(
+      onKeyEvent: _onKeyEvent,
+      child: TextField(
+        key: widget.fieldKey,
+        controller: _c,
+        focusNode: widget.focusNode,
+        inputFormatters: const [MarkdownInputFormatter()],
+        minLines: widget.expand ? null : 10,
+        maxLines: null,
+        expands: widget.expand,
+        textAlignVertical: TextAlignVertical.top,
+        maxLength: 100000,
+        keyboardType: TextInputType.multiline,
+        decoration: InputDecoration(
+          hintText: widget.hint,
+          counterText: '',
+          alignLabelWithHint: true,
+        ),
       ),
+    );
+  }
+
+  KeyEventResult _onKeyEvent(FocusNode _, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final keys = HardwareKeyboard.instance;
+    if (keys.isAltPressed) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.tab) {
+      _indent(outdent: keys.isShiftPressed);
+      return KeyEventResult.handled;
+    }
+
+    final command = keys.isControlPressed || keys.isMetaPressed;
+    if (!command) return KeyEventResult.ignored;
+    final heading = switch (event.logicalKey) {
+      LogicalKeyboardKey.digit1 => 1,
+      LogicalKeyboardKey.digit2 => 2,
+      LogicalKeyboardKey.digit3 => 3,
+      LogicalKeyboardKey.digit4 => 4,
+      LogicalKeyboardKey.digit5 => 5,
+      LogicalKeyboardKey.digit6 => 6,
+      _ => 0,
+    };
+    if (heading > 0 && !keys.isShiftPressed) {
+      _linePrefix('${List.filled(heading, '#').join()} ');
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyB) {
+      _wrap('**', '**', '加粗文字');
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyI) {
+      _wrap('*', '*', '斜体文字');
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyX && keys.isShiftPressed) {
+      _wrap('~~', '~~', '删除线文字');
+      return KeyEventResult.handled;
+    }
+    if (keys.isShiftPressed && event.logicalKey == LogicalKeyboardKey.digit7) {
+      _linePrefix('1. ');
+      return KeyEventResult.handled;
+    }
+    if (keys.isShiftPressed && event.logicalKey == LogicalKeyboardKey.digit8) {
+      _linePrefix('- ');
+      return KeyEventResult.handled;
+    }
+    if (keys.isShiftPressed && event.logicalKey == LogicalKeyboardKey.digit9) {
+      _linePrefix('- [ ] ');
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _indent({required bool outdent}) {
+    final selection = _c.selection;
+    if (!selection.isValid) return;
+    final text = _c.text;
+    final pos = selection.start;
+    final lineStart = text.lastIndexOf('\n', pos == 0 ? 0 : pos - 1) + 1;
+    if (outdent) {
+      final remove = text.startsWith('\t', lineStart)
+          ? 1
+          : text.startsWith('  ', lineStart)
+          ? 2
+          : text.startsWith(' ', lineStart)
+          ? 1
+          : 0;
+      if (remove == 0) return;
+      _c.value = TextEditingValue(
+        text: text.replaceRange(lineStart, lineStart + remove, ''),
+        selection: TextSelection.collapsed(
+          offset: (pos - remove).clamp(lineStart, text.length - remove),
+        ),
+      );
+      return;
+    }
+    _c.value = TextEditingValue(
+      text: text.replaceRange(lineStart, lineStart, '  '),
+      selection: TextSelection.collapsed(offset: pos + 2),
     );
   }
 
@@ -218,6 +304,104 @@ class _MarkdownEditorState extends State<MarkdownEditor> {
     // 预览时禁用编辑类按钮
     onPressed: edit && _preview ? null : onPressed,
   );
+}
+
+/// Markdown 输入规则：回车续接列表，空列表项回车退出列表。
+///
+/// 只处理单字符的用户输入，不改写粘贴内容或正在进行的输入法组合文本。
+class MarkdownInputFormatter extends TextInputFormatter {
+  const MarkdownInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final insertion = _singleCharacterInsertion(oldValue, newValue);
+    if (insertion == null || newValue.composing.isValid) return newValue;
+    if (insertion.character != '\n') return newValue;
+
+    final lineStart =
+        oldValue.text.lastIndexOf(
+          '\n',
+          insertion.offset == 0 ? 0 : insertion.offset - 1,
+        ) +
+        1;
+    final line = oldValue.text.substring(lineStart, insertion.offset);
+    final ordered = RegExp(r'^([ \t]*)(\d+)\.\s+(.*)$').firstMatch(line);
+    final task = RegExp(r'^([ \t]*)-[ \t]+\[[ xX]\][ \t]+(.*)$')
+        .firstMatch(line);
+    final unordered = RegExp(r'^([ \t]*)([-+*])[ \t]+(.*)$').firstMatch(line);
+    final match = ordered ?? task ?? unordered;
+    if (match == null) return newValue;
+
+    final indent = match.group(1)!;
+    final body = ordered != null
+        ? ordered.group(3)!
+        : task != null
+        ? task.group(2)!
+        : unordered!.group(3)!;
+    final marker = ordered != null
+        ? '${int.parse(ordered.group(2)!) + 1}. '
+        : task != null
+        ? '- [ ] '
+        : '${unordered!.group(2)!} ';
+
+    if (body.trim().isEmpty) {
+      final text = newValue.text.replaceRange(
+        lineStart,
+        insertion.offset + 1,
+        '',
+      );
+      return newValue.copyWith(
+        text: text,
+        selection: TextSelection.collapsed(offset: lineStart),
+        composing: TextRange.empty,
+      );
+    }
+
+    final continuation = '$indent$marker';
+    final text = newValue.text.replaceRange(
+      insertion.offset + 1,
+      insertion.offset + 1,
+      continuation,
+    );
+    return newValue.copyWith(
+      text: text,
+      selection: TextSelection.collapsed(
+        offset: insertion.offset + 1 + continuation.length,
+      ),
+      composing: TextRange.empty,
+    );
+  }
+}
+
+class _MarkdownInsertion {
+  const _MarkdownInsertion(this.offset, this.character);
+
+  final int offset;
+  final String character;
+}
+
+_MarkdownInsertion? _singleCharacterInsertion(
+  TextEditingValue oldValue,
+  TextEditingValue newValue,
+) {
+  if (!oldValue.selection.isValid ||
+      !oldValue.selection.isCollapsed ||
+      !newValue.selection.isValid ||
+      !newValue.selection.isCollapsed ||
+      newValue.text.length != oldValue.text.length + 1) {
+    return null;
+  }
+  final offset = newValue.selection.baseOffset - 1;
+  if (offset < 0 || offset >= newValue.text.length) return null;
+  if (newValue.text.substring(0, offset) !=
+          oldValue.text.substring(0, offset) ||
+      newValue.text.substring(offset + 1) != oldValue.text.substring(offset)) {
+    return null;
+  }
+  return _MarkdownInsertion(offset, newValue.text[offset]);
 }
 
 /// 在光标处插入一段独立的块（前后补空行）。光标移到块内 [cursorOffset] 处，默认在块之后。
