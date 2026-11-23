@@ -110,7 +110,7 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage>
     _format = format;
     final sync = _body!;
     if (format == NoteFormat.markdown) {
-      _md = TextEditingController(text: sync.local)
+      _md = MarkdownTextEditingController(text: sync.local)
         ..addListener(() => sync.edited(_md!.text));
       return;
     }
@@ -571,6 +571,9 @@ class _NoteEditorPageState extends ConsumerState<NoteEditorPage>
                     fieldKey: const Key('note-body'),
                     hint: '开始记录，支持 Markdown',
                     imageBuilder: markdownImage,
+                    onTapLink: (_, href, _) {
+                      if (href != null) unawaited(_openLink(href));
+                    },
                     extraTools: [
                       IconButton(
                         key: const Key('note-insert-image'),
