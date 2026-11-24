@@ -19,6 +19,7 @@ import 'package:jikelog/core/sync/hlc.dart';
 import 'package:jikelog/core/sync/realtime.dart';
 import 'package:jikelog/core/sync/sync_providers.dart';
 import 'package:flutter/widgets.dart' show Text;
+import 'package:jikelog/features/account/avatar_service.dart';
 import 'package:jikelog/features/attachments/attachment_providers.dart';
 import 'package:jikelog/features/attachments/attachment_viewers.dart';
 import 'package:jikelog/features/attachments/media.dart';
@@ -49,13 +50,25 @@ class RecordedRequest {
 
 /// 测试用响应。
 class FakeResponse {
-  const FakeResponse(this.status, [this.json]);
+  const FakeResponse(
+    this.status, [
+    this.json,
+    this.bytes,
+    this.contentType = Headers.jsonContentType,
+  ]);
 
   /// 成功信封。
   factory FakeResponse.ok(Object? data, {int status = 200}) => FakeResponse(
     status,
     {'success': true, 'requestId': 'test', 'data': data},
   );
+
+  /// 二进制响应（如自定义头像图片）。
+  factory FakeResponse.bytes(
+    Uint8List bytes, {
+    int status = 200,
+    String contentType = 'image/png',
+  }) => FakeResponse(status, null, bytes, contentType);
 
   /// 错误信封。
   factory FakeResponse.error(
@@ -71,6 +84,8 @@ class FakeResponse {
 
   final int status;
   final Object? json;
+  final Uint8List? bytes;
+  final String contentType;
 }
 
 typedef FakeHandler = FutureOr<FakeResponse> Function(RecordedRequest req);
@@ -119,11 +134,20 @@ class FakeBackend implements HttpClientAdapter {
     final res = handler == null
         ? FakeResponse.error(404, 'NOT_FOUND')
         : await handler(req);
+    if (res.bytes != null) {
+      return ResponseBody.fromBytes(
+        res.bytes!,
+        res.status,
+        headers: {
+          Headers.contentTypeHeader: [res.contentType],
+        },
+      );
+    }
     return ResponseBody.fromString(
       res.json == null ? '' : jsonEncode(res.json),
       res.status,
       headers: {
-        Headers.contentTypeHeader: [Headers.jsonContentType],
+        Headers.contentTypeHeader: [res.contentType],
       },
     );
   }
@@ -217,6 +241,14 @@ List<Override> testOverrides({
   ),
   launchLinkProvider.overrideWithValue((uri) async => TestHooks.launch(uri)),
   imagePickerProvider.overrideWithValue(() => TestHooks.pickImage()),
+  avatarPickerProvider.overrideWithValue(() => TestHooks.pickAvatar()),
+  avatarServiceProvider.overrideWith(
+    (ref) => AvatarService(
+      api: ref.watch(accountApiProvider),
+      cacheDir: filesDir ?? testFilesDir,
+      prepare: TestHooks.prepareAvatar,
+    ),
+  ),
   captchaSolverProvider.overrideWithValue(
     (_, config) async => TestHooks.solveCaptcha(config),
   ),
@@ -261,6 +293,8 @@ List<Override> testOverrides({
 /// 组件测试中可替换的平台行为（每个测试结束后由 [TestHooks.reset] 恢复）。
 abstract final class TestHooks {
   static Future<List<PlatformFile>> Function() pickImage = _none;
+  static Future<Uint8List?> Function() pickAvatar = _noAvatar;
+  static AvatarPreparer? prepareAvatar;
   static bool Function(Uri) launch = _yes;
   static bool Function(File, String) openExternal = _yes2;
   static bool micPermitted = true;
@@ -280,6 +314,7 @@ abstract final class TestHooks {
   static final captchas = <CaptchaConfig>[];
 
   static Future<List<PlatformFile>> _none() async => const [];
+  static Future<Uint8List?> _noAvatar() async => null;
   static bool _yes(Uri u) {
     launched.add(u);
     return true;
@@ -311,6 +346,8 @@ abstract final class TestHooks {
     FakeRichEditor.autoReady = true;
     FakeRichEditor.silent = false;
     pickImage = _none;
+    pickAvatar = _noAvatar;
+    prepareAvatar = null;
     launch = _yes;
     openExternal = _yes2;
     micPermitted = true;

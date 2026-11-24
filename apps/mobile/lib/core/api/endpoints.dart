@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import '../device/device_identity.dart';
 import 'api_client.dart';
 import 'models.dart';
@@ -106,6 +109,23 @@ class AccountApi {
     await _c.patch('/api/v1/me', {'nickname': nickname})
         as Map<String, dynamic>,
   );
+
+  /// 上传或更换自定义头像（服务端按魔数校验 JPEG/PNG/WebP 且不超过 2 MiB）。
+  Future<User> uploadAvatar(Uint8List bytes, String contentType) async =>
+      User.fromJson(
+        await _c.put('/api/v1/me/avatar', {
+          'contentType': contentType,
+          'data': base64Encode(bytes),
+        }) as Map<String, dynamic>,
+      );
+
+  /// 清除自定义头像，恢复默认首字母头像。
+  Future<User> deleteAvatar() async => User.fromJson(
+    await _c.delete('/api/v1/me/avatar') as Map<String, dynamic>,
+  );
+
+  /// 下载当前用户的自定义头像二进制内容。
+  Future<Uint8List> downloadAvatar() => _c.getBytes('/api/v1/me/avatar');
 
   /// 发送绑定新号码（[phone] 必填）或验证当前号码的验证码，返回冷却秒数。
   /// 服务端要求人机验证时需带上 [captchaVerifyParam]。
