@@ -2,6 +2,25 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [1.6.0](https://github.com/vvangz/JikeLog/compare/v1.5.0...v1.6.0) (2026-11-24)
+
+
+### 新功能
+
+* **mobile:** improve markdown editing ([f52af28](https://github.com/vvangz/JikeLog/commit/f52af28cfeeb466e437aeb5cbd357f2520269fea))
+* **mobile:** 增强 Markdown 实时语法高亮、列表续接重排、快捷键与交互预览 ([7b7f1b7](https://github.com/vvangz/JikeLog/commit/7b7f1b7560e075913ec66c8ee71ec1055894f4b6))
+
+
+### 问题修复
+
+* **server:** address vulnerability scan findings ([b58acc4](https://github.com/vvangz/JikeLog/commit/b58acc46b439d0e39894326a31948703e1f3e212))
+* **server:** 升级 opentelemetry 依赖修复 GO-2026-6974 漏洞 ([459528d](https://github.com/vvangz/JikeLog/commit/459528dcc8e45af314858ca2d7a3faae09014bf5))
+
+
+### 文档
+
+* 更新 Markdown 使用说明与 v1.6.0 开发日志和发布说明 ([b371f4c](https://github.com/vvangz/JikeLog/commit/b371f4ce8bcb31a953744c3167d78e19ab3a7ee5))
+
 ## [1.5.0](https://github.com/vvangz/JikeLog/compare/v1.4.0...v1.5.0) (2026-10-27)
 
 
