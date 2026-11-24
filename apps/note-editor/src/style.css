@@ -1,13 +1,13 @@
 /* 颜色由 Flutter 按当前主题注入（--jk-*），这里的值只是加载前的兜底 */
 :root {
-  --jk-background: #faf7f2;
-  --jk-surface-variant: #f1ebe2;
-  --jk-text: #2b211b;
-  --jk-text-secondary: #6b5d53;
-  --jk-text-disabled: #a89b90;
-  --jk-primary: #6f4e37;
-  --jk-border: #e3d9cc;
-  --jk-selection: #e8d9c8;
+  --jk-background: #f6f8fc;
+  --jk-surface-variant: #ecf0f7;
+  --jk-text: #1e2636;
+  --jk-text-secondary: #4f5b70;
+  --jk-text-disabled: #8e9bb0;
+  --jk-primary: #334ac0;
+  --jk-border: #c5d0e0;
+  --jk-selection: #e0e7ff;
   color-scheme: light;
 }
 

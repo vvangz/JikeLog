@@ -49,7 +49,7 @@ abstract final class AppTheme {
     );
     return base.copyWith(
       textTheme: _textTheme(base.textTheme),
-      // 顶栏与页面同色（奶油白 / 深咖黑），滚动时不叠加主色色调
+      // 顶栏与页面同色（云雾白 / 深夜蓝灰），滚动时不叠加主色色调
       appBarTheme: AppBarTheme(
         backgroundColor: c.background,
         foregroundColor: c.textPrimary,

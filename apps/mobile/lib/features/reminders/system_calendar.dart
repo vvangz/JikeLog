@@ -105,7 +105,7 @@ class PluginSystemCalendar implements SystemCalendar {
 
   @override
   Future<String> createCalendar(String name) =>
-      _cal.createCalendar(name: name, colorHex: '#6F4E37');
+      _cal.createCalendar(name: name, colorHex: '#334AC0');
 
   @override
   Future<void> deleteCalendar(String calendarId) =>
