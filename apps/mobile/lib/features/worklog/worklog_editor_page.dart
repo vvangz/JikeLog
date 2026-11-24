@@ -30,7 +30,7 @@ class WorklogEditorPage extends ConsumerStatefulWidget {
 class _WorklogEditorPageState extends ConsumerState<WorklogEditorPage> {
   static const _autosave = Duration(seconds: 1);
 
-  final _content = TextEditingController();
+  final _content = MarkdownTextEditingController();
   final _location = TextEditingController();
   late final WorklogRepository _repo;
   Timer? _timer;
