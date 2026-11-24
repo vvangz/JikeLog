@@ -106,16 +106,16 @@ final statsDataProvider = Provider<StatsData>((ref) {
   );
 });
 
-/// 饼图配色：咖色系与互补色，依次使用。
+/// 饼图配色：群青与互补色系，依次使用。
 const _palette = [
-  Color(0xFF6F4E37),
-  Color(0xFFC8A27C),
-  Color(0xFF8C6A4F),
-  Color(0xFF4F7C82),
-  Color(0xFFB5838D),
-  Color(0xFF7D8F69),
-  Color(0xFFD9B38C),
-  Color(0xFF9E9E9E),
+  Color(0xFF334AC0),
+  Color(0xFF2889A8),
+  Color(0xFF2E8B57),
+  Color(0xFF7B61D6),
+  Color(0xFFD97736),
+  Color(0xFFC75B7A),
+  Color(0xFF6B87F5),
+  Color(0xFF8E9BB0),
 ];
 
 /// 饼图最多单独显示的分类数，其余合并为"其他"。

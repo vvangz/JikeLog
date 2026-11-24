@@ -12,6 +12,8 @@ import '../../shared/ui/jk_icon.dart';
 import '../auth/auth_controller.dart';
 import '../memos/memos_page.dart';
 import '../notes/notes_list_page.dart';
+import '../update/update_dialog.dart';
+import '../update/update_service.dart';
 import '../worklog/worklog_list_page.dart';
 import 'overview_cards.dart';
 import 'overview_providers.dart';
@@ -47,6 +49,13 @@ class _OverviewPageState extends ConsumerState<OverviewPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _scheduleMidnight();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(
+          ref.read(appUpdateControllerProvider.notifier).checkSilentlyOnce(),
+        );
+      }
+    });
   }
 
   void _scheduleMidnight() {
@@ -145,6 +154,7 @@ class _OverviewPageState extends ConsumerState<OverviewPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      const UpdateBanner(),
                       _item(0, const _Hero()),
                       gap,
                       if (wide) ...[

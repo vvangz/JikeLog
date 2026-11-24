@@ -4,7 +4,7 @@ import { buildAntdTheme } from './antdTheme';
 import { colors, tokens } from './tokens.gen';
 
 describe('buildAntdTheme', () => {
-  it('浅色主题使用设计令牌中的咖色主色与默认算法', () => {
+  it('浅色主题使用设计令牌中的群青主色与默认算法', () => {
     const cfg = buildAntdTheme('light');
     expect(cfg.token?.colorPrimary).toBe(colors.light.primary);
     expect(cfg.token?.colorBgLayout).toBe(colors.light.background);

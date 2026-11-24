@@ -11,6 +11,8 @@
     <!-- 备忘录同步到系统日历（设置中开启后才请求授权） -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <!-- 应用内更新：安装校验通过的新版本 APK -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- 极光推送 SDK 自带的权限中，推送用不到的一律移除（最小权限，ADR-008） -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
@@ -63,6 +65,16 @@
             android:name="cn.jpush.android.service.InitProvider"
             android:authorities="${applicationId}.jiguang.InitProvider"
             tools:node="remove" />
+        <!-- 应用内更新：向系统安装器共享下载并校验通过的 APK -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.update.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_file_paths" />
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

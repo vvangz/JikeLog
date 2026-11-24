@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 仅开放应用内更新下载缓存目录给系统安装器读取 -->
+    <cache-path name="updates" path="jikelog-update/" />
+</paths>

@@ -5,7 +5,7 @@ import 'package:jikelog/app/theme/jk_tokens.g.dart';
 
 void main() {
   group('AppTheme', () {
-    test('浅色主题使用咖色主色与奶油白背景', () {
+    test('浅色主题使用群青主色与云雾白背景', () {
       final theme = AppTheme.light();
       expect(theme.brightness, Brightness.light);
       expect(theme.colorScheme.primary, JkColorTokens.light.primary);

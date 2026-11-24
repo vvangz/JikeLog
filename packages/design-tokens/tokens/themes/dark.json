@@ -1,22 +1,22 @@
 {
   "color": {
     "$type": "color",
-    "primary":            { "$value": "{palette.coffee.300}" },
-    "onPrimary":          { "$value": "{palette.coffee.900}" },
-    "primaryContainer":   { "$value": "{palette.coffee.700}" },
-    "onPrimaryContainer": { "$value": "{palette.coffee.100}" },
+    "primary":            { "$value": "{palette.indigo.300}" },
+    "onPrimary":          { "$value": "{palette.indigo.900}" },
+    "primaryContainer":   { "$value": "{palette.indigo.700}" },
+    "onPrimaryContainer": { "$value": "{palette.indigo.100}" },
 
-    "background":     { "$value": "{palette.sand.900}" },
-    "surface":        { "$value": "{palette.sand.850}" },
-    "surfaceVariant": { "$value": "{palette.sand.800}" },
+    "background":     { "$value": "{palette.slate.900}" },
+    "surface":        { "$value": "{palette.slate.850}" },
+    "surfaceVariant": { "$value": "{palette.slate.800}" },
     "scrim":          { "$value": "#000000A3" },
 
-    "textPrimary":   { "$value": "{palette.sand.150}" },
-    "textSecondary": { "$value": "{palette.sand.300}" },
-    "textDisabled":  { "$value": "{palette.sand.500}" },
+    "textPrimary":   { "$value": "{palette.slate.150}" },
+    "textSecondary": { "$value": "{palette.slate.300}" },
+    "textDisabled":  { "$value": "{palette.slate.500}" },
 
-    "border":  { "$value": "{palette.sand.600}" },
-    "divider": { "$value": "{palette.sand.700}" },
+    "border":  { "$value": "{palette.slate.600}" },
+    "divider": { "$value": "{palette.slate.700}" },
 
     "success":            { "$value": "{palette.green.300}" },
     "onSuccess":          { "$value": "{palette.green.900}" },
@@ -33,9 +33,9 @@
     "errorContainer":   { "$value": "{palette.red.800}" },
     "onErrorContainer": { "$value": "{palette.red.50}" },
 
-    "info":            { "$value": "{palette.blue.300}" },
-    "onInfo":          { "$value": "{palette.blue.900}" },
-    "infoContainer":   { "$value": "{palette.blue.800}" },
-    "onInfoContainer": { "$value": "{palette.blue.50}" }
+    "info":            { "$value": "{palette.cyan.300}" },
+    "onInfo":          { "$value": "{palette.cyan.900}" },
+    "infoContainer":   { "$value": "{palette.cyan.800}" },
+    "onInfoContainer": { "$value": "{palette.cyan.50}" }
   }
 }

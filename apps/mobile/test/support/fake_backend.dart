@@ -27,6 +27,9 @@ import 'package:jikelog/features/export/export_api.dart';
 import 'package:jikelog/features/notes/editor/rich_editor_view.dart';
 import 'package:jikelog/features/notes/note_editor_page.dart';
 import 'package:jikelog/features/reminders/reminder_coordinator.dart';
+import 'package:jikelog/features/update/update_models.dart';
+import 'package:jikelog/features/update/update_service.dart';
+import 'package:jikelog/app/version.dart';
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 
@@ -226,6 +229,33 @@ List<Override> testOverrides({
   systemCalendarProvider.overrideWith((_) => TestHooks.calendar),
   deviceTimeZoneProvider.overrideWith((_) => TestHooks.timeZone),
   exportFilesProvider.overrideWith((_) => TestHooks.exportFiles),
+  appUpdateServiceProvider.overrideWith(
+    (ref) =>
+        TestHooks.updateService ??
+        AppUpdateService(
+          baseUrl: 'http://test',
+          dio: Dio()
+            ..httpClientAdapter = (FakeBackend()
+              ..on(
+                'GET',
+                '/download/latest.json',
+                (_) => FakeResponse(200, {
+                  'version': appVersion,
+                  'files': {
+                    'android': {
+                      'name': 'jikelog-$appVersion.apk',
+                      'size': 1024,
+                      'sha256': '0' * 64,
+                    },
+                  },
+                }),
+              )),
+          isDesktop: ref.watch(platformFeaturesProvider).isDesktop,
+          currentVersion: appVersion,
+          updateDir: filesDir ?? testFilesDir,
+          installPackage: (file) async => TestHooks.installUpdate(file),
+        ),
+  ),
 ];
 
 /// 组件测试中可替换的平台行为（每个测试结束后由 [TestHooks.reset] 恢复）。
@@ -239,6 +269,9 @@ abstract final class TestHooks {
   static FakeSystemCalendar calendar = FakeSystemCalendar();
   static FakeTimeZone timeZone = FakeTimeZone();
   static FakeExportFiles exportFiles = FakeExportFiles();
+  static AppUpdateService? updateService;
+  static InstallOutcome Function(File) installUpdate = _installed;
+  static final installed = <String>[];
   static final launched = <Uri>[];
   static final opened = <String>[];
 
@@ -262,12 +295,19 @@ abstract final class TestHooks {
     return true;
   }
 
+  static InstallOutcome _installed(File f) {
+    installed.add(f.path);
+    return InstallOutcome.launched;
+  }
+
   static void reset() {
     notifier = FakeLocalNotifier();
     push = FakePushClient();
     calendar = FakeSystemCalendar();
     timeZone = FakeTimeZone();
     exportFiles = FakeExportFiles();
+    updateService = null;
+    installUpdate = _installed;
     FakeRichEditor.autoReady = true;
     FakeRichEditor.silent = false;
     pickImage = _none;
@@ -278,6 +318,7 @@ abstract final class TestHooks {
     launched.clear();
     opened.clear();
     captchas.clear();
+    installed.clear();
   }
 }
 

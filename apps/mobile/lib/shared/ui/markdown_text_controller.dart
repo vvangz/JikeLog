@@ -538,12 +538,12 @@ TextSpan buildMarkdownTextSpanForTest(
   text: text,
   baseStyle: baseStyle,
   palette: const _MarkdownPalette(
-    accent: Color(0xFF6F4E37),
-    muted: Color(0xFFA89C8F),
-    secondary: Color(0xFF5E554D),
-    success: Color(0xFF2F7A4D),
-    link: Color(0xFF2F6596),
-    codeBg: Color(0xFFF2EDE6),
+    accent: Color(0xFF334AC0),
+    muted: Color(0xFF8E9BB0),
+    secondary: Color(0xFF4F5B70),
+    success: Color(0xFF1E7A4C),
+    link: Color(0xFF1B6B8A),
+    codeBg: Color(0xFFECF0F7),
   ),
   composing: composing,
 );
