@@ -23,6 +23,7 @@ class User {
     required this.hasPhone,
     required this.createdAt,
     this.phoneMasked,
+    this.avatarVersion,
   });
 
   factory User.fromJson(Map<String, dynamic> j) => User(
@@ -31,6 +32,7 @@ class User {
     nickname: _req(j, 'nickname'),
     hasPhone: _req(j, 'hasPhone'),
     phoneMasked: j['phoneMasked'] as String?,
+    avatarVersion: j['avatarVersion'] as String?,
     createdAt: _time(j, 'createdAt'),
   );
 
@@ -39,10 +41,16 @@ class User {
   final String nickname;
   final bool hasPhone;
   final String? phoneMasked;
+
+  /// 自定义头像版本标识（内容哈希前缀）；为空表示使用默认首字母头像。
+  final String? avatarVersion;
   final DateTime createdAt;
 
   /// 界面上显示的名字：有昵称用昵称，否则用用户名。
   String get displayName => nickname.isNotEmpty ? nickname : username;
+
+  /// 是否已设置自定义头像。
+  bool get hasAvatar => avatarVersion != null && avatarVersion!.isNotEmpty;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -50,6 +58,7 @@ class User {
     'nickname': nickname,
     'hasPhone': hasPhone,
     if (phoneMasked != null) 'phoneMasked': phoneMasked,
+    if (avatarVersion != null) 'avatarVersion': avatarVersion,
     'createdAt': createdAt.toUtc().toIso8601String(),
   };
 }

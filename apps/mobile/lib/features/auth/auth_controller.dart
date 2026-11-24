@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/models.dart';
+import '../account/avatar_service.dart';
 import '../consent/consent_controller.dart';
 import '../settings/settings_controller.dart';
 
@@ -192,6 +193,7 @@ class AuthController extends Notifier<AuthState> {
     await store.remove(deviceIdKey);
     // 未同步的设置属于上一个账号，不能在下一个账号登录时被上传
     await store.remove(settingsDirtyKey);
+    await ref.read(avatarServiceProvider).clearAll(disk: wipe);
     state = SignedOut(reason: reason, wipeLocalData: wipe);
   }
 }

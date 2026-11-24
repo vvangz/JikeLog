@@ -155,6 +155,9 @@ type User struct {
 	PasswordChangedAt time.Time
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+	AvatarKey         *string
+	AvatarMime        *string
+	AvatarEtag        *string
 }
 
 type UserKey struct {

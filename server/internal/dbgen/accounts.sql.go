@@ -28,6 +28,32 @@ func (q *Queries) ClearPushByToken(ctx context.Context, arg ClearPushByTokenPara
 	return err
 }
 
+const clearUserAvatar = `-- name: ClearUserAvatar :one
+UPDATE users
+SET avatar_key = NULL, avatar_mime = NULL, avatar_etag = NULL, updated_at = now()
+WHERE id = $1
+RETURNING id, username, nickname, phone, password_hash, password_changed_at, created_at, updated_at, avatar_key, avatar_mime, avatar_etag
+`
+
+func (q *Queries) ClearUserAvatar(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, clearUserAvatar, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Nickname,
+		&i.Phone,
+		&i.PasswordHash,
+		&i.PasswordChangedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AvatarKey,
+		&i.AvatarMime,
+		&i.AvatarEtag,
+	)
+	return i, err
+}
+
 const createDefaultSettings = `-- name: CreateDefaultSettings :exec
 INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING
 `
@@ -41,7 +67,7 @@ const createUser = `-- name: CreateUser :one
 
 INSERT INTO users (id, username, nickname, phone, password_hash)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, username, nickname, phone, password_hash, password_changed_at, created_at, updated_at
+RETURNING id, username, nickname, phone, password_hash, password_changed_at, created_at, updated_at, avatar_key, avatar_mime, avatar_etag
 `
 
 type CreateUserParams struct {
@@ -71,6 +97,9 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.PasswordChangedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AvatarKey,
+		&i.AvatarMime,
+		&i.AvatarEtag,
 	)
 	return i, err
 }
@@ -195,7 +224,7 @@ func (q *Queries) GetSettings(ctx context.Context, userID uuid.UUID) (UserSettin
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, username, nickname, phone, password_hash, password_changed_at, created_at, updated_at FROM users WHERE id = $1
+SELECT id, username, nickname, phone, password_hash, password_changed_at, created_at, updated_at, avatar_key, avatar_mime, avatar_etag FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -210,12 +239,15 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.PasswordChangedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AvatarKey,
+		&i.AvatarMime,
+		&i.AvatarEtag,
 	)
 	return i, err
 }
 
 const getUserByPhone = `-- name: GetUserByPhone :one
-SELECT id, username, nickname, phone, password_hash, password_changed_at, created_at, updated_at FROM users WHERE phone = $1::text
+SELECT id, username, nickname, phone, password_hash, password_changed_at, created_at, updated_at, avatar_key, avatar_mime, avatar_etag FROM users WHERE phone = $1::text
 `
 
 func (q *Queries) GetUserByPhone(ctx context.Context, phone string) (User, error) {
@@ -230,12 +262,15 @@ func (q *Queries) GetUserByPhone(ctx context.Context, phone string) (User, error
 		&i.PasswordChangedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AvatarKey,
+		&i.AvatarMime,
+		&i.AvatarEtag,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, nickname, phone, password_hash, password_changed_at, created_at, updated_at FROM users WHERE lower(username) = lower($1)
+SELECT id, username, nickname, phone, password_hash, password_changed_at, created_at, updated_at, avatar_key, avatar_mime, avatar_etag FROM users WHERE lower(username) = lower($1)
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -250,6 +285,9 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.PasswordChangedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AvatarKey,
+		&i.AvatarMime,
+		&i.AvatarEtag,
 	)
 	return i, err
 }
@@ -536,9 +574,47 @@ func (q *Queries) UpdateSettings(ctx context.Context, arg UpdateSettingsParams) 
 	return i, err
 }
 
+const updateUserAvatar = `-- name: UpdateUserAvatar :one
+UPDATE users
+SET avatar_key = $1, avatar_mime = $2, avatar_etag = $3, updated_at = now()
+WHERE id = $4
+RETURNING id, username, nickname, phone, password_hash, password_changed_at, created_at, updated_at, avatar_key, avatar_mime, avatar_etag
+`
+
+type UpdateUserAvatarParams struct {
+	AvatarKey  *string
+	AvatarMime *string
+	AvatarEtag *string
+	ID         uuid.UUID
+}
+
+func (q *Queries) UpdateUserAvatar(ctx context.Context, arg UpdateUserAvatarParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserAvatar,
+		arg.AvatarKey,
+		arg.AvatarMime,
+		arg.AvatarEtag,
+		arg.ID,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Nickname,
+		&i.Phone,
+		&i.PasswordHash,
+		&i.PasswordChangedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AvatarKey,
+		&i.AvatarMime,
+		&i.AvatarEtag,
+	)
+	return i, err
+}
+
 const updateUserNickname = `-- name: UpdateUserNickname :one
 UPDATE users SET nickname = $1, updated_at = now() WHERE id = $2
-RETURNING id, username, nickname, phone, password_hash, password_changed_at, created_at, updated_at
+RETURNING id, username, nickname, phone, password_hash, password_changed_at, created_at, updated_at, avatar_key, avatar_mime, avatar_etag
 `
 
 type UpdateUserNicknameParams struct {
@@ -558,6 +634,9 @@ func (q *Queries) UpdateUserNickname(ctx context.Context, arg UpdateUserNickname
 		&i.PasswordChangedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AvatarKey,
+		&i.AvatarMime,
+		&i.AvatarEtag,
 	)
 	return i, err
 }

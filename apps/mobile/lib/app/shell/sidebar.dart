@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../core/api/models.dart';
 import '../../shared/ui/jk_icon.dart';
 import '../../shared/ui/jk_logo.dart';
 import '../../shared/ui/jk_page.dart';
+import '../../shared/ui/user_avatar.dart';
 import '../theme/app_theme.dart';
 import '../theme/jk_tokens.g.dart';
 import 'destinations.dart';
@@ -38,6 +40,7 @@ class Sidebar extends StatelessWidget {
     required this.onToggle,
     required this.onSearch,
     this.userName,
+    this.user,
   });
 
   final String? selectedPath;
@@ -48,6 +51,7 @@ class Sidebar extends StatelessWidget {
   /// 打开全局搜索。
   final VoidCallback onSearch;
   final String? userName;
+  final User? user;
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +82,8 @@ class Sidebar extends StatelessWidget {
                 Divider(height: 1, color: c.divider),
                 const SizedBox(height: JkTokens.spacingSm),
                 for (final d in generalDestinations) _item(d),
-                if (expanded && userName != null) _Footer(userName: userName!),
+                if (expanded && (user != null || userName != null))
+                  _Footer(userName: user?.displayName ?? userName!, user: user),
                 const SizedBox(height: JkTokens.spacingSm),
               ],
             ),
@@ -199,16 +204,17 @@ class _SidebarItem extends StatelessWidget {
 }
 
 class _Footer extends StatelessWidget {
-  const _Footer({required this.userName});
+  const _Footer({required this.userName, this.user});
 
   final String userName;
+  final User? user;
 
   @override
   Widget build(BuildContext context) {
     final c = context.jkColors;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        JkTokens.spacingXl,
+        JkTokens.spacingLg,
         JkTokens.spacingSm,
         JkTokens.spacingLg,
         0,
@@ -218,8 +224,12 @@ class _Footer extends StatelessWidget {
         children: [
           Row(
             children: [
+              if (user != null) ...[
+                UserAvatar(user: user!, size: 28),
+                const SizedBox(width: JkTokens.spacingSm),
+              ],
               Icon(Icons.circle, size: 8, color: c.success),
-              const SizedBox(width: JkTokens.spacingSm),
+              const SizedBox(width: JkTokens.spacingXs),
               Expanded(
                 child: Text(
                   '$userName · 已登录',

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 /// 服务端错误码（与 server/api/openapi.yaml 及服务端常量一致）。
@@ -21,6 +23,7 @@ abstract final class ApiErrorCode {
   static const uploadIncomplete = 'UPLOAD_INCOMPLETE';
   static const quotaExceeded = 'QUOTA_EXCEEDED';
   static const attachmentTooLarge = 'ATTACHMENT_TOO_LARGE';
+  static const avatarNotFound = 'AVATAR_NOT_FOUND';
 
   /// 客户端自定义：网络不可达或超时。
   static const network = 'NETWORK_ERROR';
@@ -42,7 +45,14 @@ class ApiException implements Exception {
   /// 把 dio 错误转换为 ApiException：优先读取服务端错误信封。
   factory ApiException.fromDio(DioException e) {
     final res = e.response;
-    final data = res?.data;
+    var data = res?.data;
+    if (data is List<int>) {
+      try {
+        data = jsonDecode(utf8.decode(data));
+      } on Object {
+        // 非 JSON 响应体，按未知错误处理
+      }
+    }
     if (data is Map<String, dynamic> && data['error'] is Map<String, dynamic>) {
       final err = data['error'] as Map<String, dynamic>;
       final details = err['details'];

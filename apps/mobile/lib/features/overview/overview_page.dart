@@ -9,6 +9,7 @@ import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
 import '../../core/sync/sync_providers.dart';
 import '../../shared/ui/jk_icon.dart';
+import '../../shared/ui/user_avatar.dart';
 import '../auth/auth_controller.dart';
 import '../memos/memos_page.dart';
 import '../notes/notes_list_page.dart';
@@ -222,7 +223,8 @@ class _Hero extends ConsumerWidget {
     final fg = dark ? c.onPrimaryContainer : c.onPrimary;
     final now = DateTime.now();
     final auth = ref.watch(authControllerProvider);
-    final name = auth is SignedIn ? auth.user.displayName : null;
+    final user = auth is SignedIn ? auth.user : null;
+    final name = user?.displayName;
     final greeting = name == null || name.isEmpty
         ? greetingFor(now)
         : '${greetingFor(now)}，$name';
@@ -256,19 +258,43 @@ class _Hero extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                '${now.month}月${now.day}日 ${_weekdays[now.weekday - 1]}',
-                style: t.bodySmall?.copyWith(
-                  color: fg.withValues(alpha: 0.72),
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: JkTokens.spacingXs),
-              Text(
-                greeting,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.headlineSmall?.copyWith(color: fg),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${now.month}月${now.day}日 ${_weekdays[now.weekday - 1]}',
+                          style: t.bodySmall?.copyWith(
+                            color: fg.withValues(alpha: 0.72),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: JkTokens.spacingXs),
+                        Text(
+                          greeting,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: t.headlineSmall?.copyWith(color: fg),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (user != null) ...[
+                    const SizedBox(width: JkTokens.spacingMd),
+                    UserAvatar(
+                      key: const Key('overview-hero-avatar'),
+                      user: user,
+                      size: 46,
+                      backgroundColor: fg.withValues(alpha: 0.16),
+                      foregroundColor: fg,
+                      ringColor: fg.withValues(alpha: 0.34),
+                      onTap: () => context.go('/account'),
+                    ),
+                  ],
+                ],
               ),
               if (summary.isNotEmpty) ...[
                 const SizedBox(height: JkTokens.spacingXs),

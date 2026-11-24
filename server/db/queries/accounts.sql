@@ -30,6 +30,18 @@ UPDATE users SET phone = sqlc.narg(phone), updated_at = now() WHERE id = @id;
 UPDATE users SET nickname = @nickname, updated_at = now() WHERE id = @id
 RETURNING *;
 
+-- name: UpdateUserAvatar :one
+UPDATE users
+SET avatar_key = @avatar_key, avatar_mime = @avatar_mime, avatar_etag = @avatar_etag, updated_at = now()
+WHERE id = @id
+RETURNING *;
+
+-- name: ClearUserAvatar :one
+UPDATE users
+SET avatar_key = NULL, avatar_mime = NULL, avatar_etag = NULL, updated_at = now()
+WHERE id = @id
+RETURNING *;
+
 -- name: DeleteUser :execrows
 DELETE FROM users WHERE id = @id;
 

@@ -71,6 +71,35 @@ class ApiClient {
 
   Future<dynamic> get(String path, {Map<String, String>? headers}) =>
       _send('GET', path, null, headers);
+
+  /// 下载二进制内容（如自定义头像），自动复用鉴权与 401 刷新重试。
+  Future<Uint8List> getBytes(
+    String path, {
+    Map<String, String>? headers,
+  }) async {
+    try {
+      final res = await _dio.request<List<int>>(
+        path,
+        options: Options(
+          method: 'GET',
+          headers: headers,
+          responseType: ResponseType.bytes,
+        ),
+      );
+      final data = res.data;
+      if (data != null && data.isNotEmpty) {
+        return data is Uint8List ? data : Uint8List.fromList(data);
+      }
+      throw ApiException(
+        code: ApiErrorCode.unexpected,
+        message: '服务器响应内容为空',
+        status: res.statusCode,
+      );
+    } on DioException catch (e) {
+      throw ApiException.fromDio(e);
+    }
+  }
+
   Future<dynamic> post(
     String path, [
     Object? body,

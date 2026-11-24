@@ -2,38 +2,67 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/api/server_features.dart';
 import '../../app/providers.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/models.dart';
+import '../../core/api/server_features.dart';
 import '../../core/sync/sync_providers.dart';
 import '../../shared/ui/jk_feedback.dart';
 import '../../shared/ui/jk_form.dart';
 import '../../shared/ui/jk_page.dart';
+import '../../shared/ui/user_avatar.dart';
 import '../auth/auth_controller.dart';
+import 'avatar_service.dart';
 
-/// 帐号页：资料、安全（手机号、密码、登录设备）、退出与注销。
-class AccountPage extends ConsumerWidget {
+/// 帐号页：资料（头像、昵称）、安全（手机号、密码、登录设备）、退出与注销。
+class AccountPage extends ConsumerStatefulWidget {
   const AccountPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AccountPage> createState() => _AccountPageState();
+}
+
+class _AccountPageState extends ConsumerState<AccountPage> {
+  bool _updatingAvatar = false;
+
+  @override
+  Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     if (auth is! SignedIn) return const SizedBox.shrink();
     final user = auth.user;
     return JkPage(
       children: [
-        _ProfileHeader(user: user),
+        _ProfileHeader(
+          user: user,
+          updatingAvatar: _updatingAvatar,
+          onTapAvatar: () => _openAvatarActions(user),
+        ),
         const JkSectionTitle('资料'),
         JkCard(
           children: [
             ListTile(
+              key: const Key('account-avatar-tile'),
+              title: const Text('头像'),
+              subtitle: Text(user.hasAvatar ? '已设置自定义头像' : '使用默认首字母头像'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  UserAvatar(user: user, size: 32, loading: _updatingAvatar),
+                  const SizedBox(width: JkTokens.spacingXs),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
+              enabled: !_updatingAvatar,
+              onTap: () => _openAvatarActions(user),
+            ),
+            const Divider(height: 1),
+            ListTile(
               title: const Text('昵称'),
               subtitle: Text(user.nickname.isEmpty ? '未设置' : user.nickname),
               trailing: const Icon(Icons.edit_outlined),
-              onTap: () => _editNickname(context, ref, user),
+              onTap: () => _editNickname(user),
             ),
           ],
         ),
@@ -80,7 +109,7 @@ class AccountPage extends ConsumerWidget {
               key: const Key('account-logout'),
               leading: const Icon(Icons.logout),
               title: const Text('退出登录'),
-              onTap: () => _logout(context, ref),
+              onTap: _logout,
             ),
             const Divider(height: 1),
             ListTile(
@@ -100,12 +129,103 @@ class AccountPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _logout(BuildContext context, WidgetRef ref) async {
+  Future<void> _openAvatarActions(User user) async {
+    if (_updatingAvatar) return;
+    if (!user.hasAvatar) {
+      await _pickAndUploadAvatar();
+      return;
+    }
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    final action = await showModalBottomSheet<_AvatarAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const Key('avatar-action-pick'),
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('选择新头像'),
+              onTap: () => Navigator.of(ctx).pop(_AvatarAction.pick),
+            ),
+            ListTile(
+              key: const Key('avatar-action-reset'),
+              leading: Icon(Icons.restart_alt, color: ctx.jkColors.error),
+              title: Text(
+                '恢复默认头像',
+                style: TextStyle(color: ctx.jkColors.error),
+              ),
+              onTap: () => Navigator.of(ctx).pop(_AvatarAction.reset),
+            ),
+            const SizedBox(height: JkTokens.spacingSm),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case _AvatarAction.pick:
+        await _pickAndUploadAvatar();
+      case _AvatarAction.reset:
+        await _resetAvatar(user);
+    }
+  }
+
+  Future<void> _pickAndUploadAvatar() async {
+    final bytes = await ref.read(avatarPickerProvider)();
+    if (bytes == null || !mounted) return;
+    if (bytes.isEmpty) {
+      showJkToast(context, '无法读取所选图片，请重试', kind: JkToastKind.error);
+      return;
+    }
+    setState(() => _updatingAvatar = true);
+    try {
+      final updated = await ref.read(avatarServiceProvider).upload(bytes);
+      await ref.read(authControllerProvider.notifier).updateUser(updated);
+      if (mounted) {
+        showJkToast(context, '头像已更新', kind: JkToastKind.success);
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        showJkToast(context, e.message, kind: JkToastKind.error);
+      }
+    } on Object {
+      if (mounted) {
+        showJkToast(context, '头像上传失败，请稍后重试', kind: JkToastKind.error);
+      }
+    } finally {
+      if (mounted) setState(() => _updatingAvatar = false);
+    }
+  }
+
+  Future<void> _resetAvatar(User user) async {
+    setState(() => _updatingAvatar = true);
+    try {
+      final updated = await ref.read(avatarServiceProvider).remove(user.id);
+      await ref.read(authControllerProvider.notifier).updateUser(updated);
+      if (mounted) {
+        showJkToast(context, '已恢复默认头像', kind: JkToastKind.success);
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        showJkToast(context, e.message, kind: JkToastKind.error);
+      }
+    } on Object {
+      if (mounted) {
+        showJkToast(context, '恢复默认头像失败，请稍后重试', kind: JkToastKind.error);
+      }
+    } finally {
+      if (mounted) setState(() => _updatingAvatar = false);
+    }
+  }
+
+  Future<void> _logout() async {
     // 退出时清空本机数据：先尝试把未同步的修改推送上去
     final engine = ref.read(syncEngineProvider);
     await engine.sync();
     final pending = await ref.read(pendingChangesProvider.future);
-    if (!context.mounted) return;
+    if (!mounted) return;
     final ok = await showJkConfirm(
       context,
       title: '退出登录',
@@ -118,31 +238,29 @@ class AccountPage extends ConsumerWidget {
     if (ok) await ref.read(authControllerProvider.notifier).logout();
   }
 
-  Future<void> _editNickname(
-    BuildContext context,
-    WidgetRef ref,
-    User user,
-  ) async {
+  Future<void> _editNickname(User user) async {
     final value = await showDialog<String>(
       context: context,
       builder: (_) => _NicknameDialog(initial: user.nickname),
     );
-    if (value == null || value == user.nickname || !context.mounted) return;
+    if (value == null || value == user.nickname || !mounted) return;
     final err = JkValidators.nickname(value);
     if (err != null) return showJkToast(context, err, kind: JkToastKind.error);
     try {
       final updated = await ref.read(accountApiProvider).updateNickname(value);
       await ref.read(authControllerProvider.notifier).updateUser(updated);
-      if (context.mounted) {
+      if (mounted) {
         showJkToast(context, '昵称已更新', kind: JkToastKind.success);
       }
     } on ApiException catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         showJkToast(context, e.message, kind: JkToastKind.error);
       }
     }
   }
 }
+
+enum _AvatarAction { pick, reset }
 
 /// 修改昵称弹窗；输入框控制器随弹窗销毁（弹窗关闭动画期间仍会使用它）。
 class _NicknameDialog extends StatefulWidget {
@@ -187,9 +305,15 @@ class _NicknameDialogState extends State<_NicknameDialog> {
 }
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.user});
+  const _ProfileHeader({
+    required this.user,
+    required this.updatingAvatar,
+    required this.onTapAvatar,
+  });
 
   final User user;
+  final bool updatingAvatar;
+  final VoidCallback onTapAvatar;
 
   @override
   Widget build(BuildContext context) {
@@ -197,13 +321,13 @@ class _ProfileHeader extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     return Row(
       children: [
-        CircleAvatar(
-          radius: 32,
-          backgroundColor: c.primaryContainer,
-          child: Text(
-            user.displayName.characters.first.toUpperCase(),
-            style: text.headlineSmall?.copyWith(color: c.onPrimaryContainer),
-          ),
+        UserAvatar(
+          key: const Key('account-avatar-header'),
+          user: user,
+          size: 64,
+          editable: true,
+          loading: updatingAvatar,
+          onTap: onTapAvatar,
         ),
         const SizedBox(width: JkTokens.spacingLg),
         Expanded(

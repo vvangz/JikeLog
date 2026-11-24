@@ -16,6 +16,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/vvangz/JikeLog/server/internal/platform/config"
+	"github.com/vvangz/JikeLog/server/internal/platform/httpx"
 )
 
 // ErrNotFound 表示对象不存在（客户端尚未上传）。
@@ -73,6 +74,7 @@ func newClient(endpoint string, cfg config.Storage) (*minio.Client, error) {
 
 // EnsureBucket 在桶不存在时创建（仅开发环境调用；生产环境的桶与权限由运维预先配置）。
 func (s *Store) EnsureBucket(ctx context.Context) error {
+	ctx = httpx.RequestContext(ctx)
 	ok, err := s.internal.BucketExists(ctx, s.bucket)
 	if err != nil {
 		return fmt.Errorf("检查存储桶失败: %w", err)
@@ -88,6 +90,7 @@ func (s *Store) EnsureBucket(ctx context.Context) error {
 
 // PresignPut 生成直传地址。Content-Length 与 Content-Type 纳入签名，客户端上传的大小必须与申请一致。
 func (s *Store) PresignPut(ctx context.Context, key string, size int64, contentType string, ttl time.Duration) (Upload, error) {
+	ctx = httpx.RequestContext(ctx)
 	headers := http.Header{}
 	headers.Set("Content-Type", contentType)
 	headers.Set("Content-Length", strconv.FormatInt(size, 10))
@@ -104,6 +107,7 @@ func (s *Store) PresignPut(ctx context.Context, key string, size int64, contentT
 
 // PresignGet 生成下载地址，响应以附件形式返回（不在浏览器中内联渲染）。
 func (s *Store) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, time.Time, error) {
+	ctx = httpx.RequestContext(ctx)
 	params := url.Values{}
 	params.Set("response-content-disposition", "attachment")
 	u, err := s.public.PresignedGetObject(ctx, s.bucket, key, ttl, params)
@@ -115,6 +119,7 @@ func (s *Store) PresignGet(ctx context.Context, key string, ttl time.Duration) (
 
 // Size 返回对象大小；对象不存在时返回 ErrNotFound。
 func (s *Store) Size(ctx context.Context, key string) (int64, error) {
+	ctx = httpx.RequestContext(ctx)
 	info, err := s.internal.StatObject(ctx, s.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
 		if isNotFound(err) {
@@ -127,6 +132,7 @@ func (s *Store) Size(ctx context.Context, key string) (int64, error) {
 
 // Delete 删除对象；对象不存在不算错误。
 func (s *Store) Delete(ctx context.Context, key string) error {
+	ctx = httpx.RequestContext(ctx)
 	if err := s.internal.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{}); err != nil {
 		return fmt.Errorf("删除对象失败: %w", err)
 	}
@@ -135,6 +141,7 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 
 // DeletePrefix 删除某个前缀下的全部对象（注销账号时清理该账号的附件）。
 func (s *Store) DeletePrefix(ctx context.Context, prefix string) error {
+	ctx = httpx.RequestContext(ctx)
 	objects := s.internal.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{Prefix: prefix, Recursive: true})
 	for res := range s.internal.RemoveObjects(ctx, s.bucket, objects, minio.RemoveObjectsOptions{}) {
 		if res.Err != nil {
@@ -146,6 +153,7 @@ func (s *Store) DeletePrefix(ctx context.Context, prefix string) error {
 
 // Open 读取对象内容；对象不存在时返回 ErrNotFound。调用方负责关闭。
 func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, error) {
+	ctx = httpx.RequestContext(ctx)
 	obj, err := s.internal.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("读取对象失败: %w", err)
@@ -163,7 +171,17 @@ func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, error) {
 
 // PutFile 把本地文件上传为对象。
 func (s *Store) PutFile(ctx context.Context, key, path, contentType string) error {
+	ctx = httpx.RequestContext(ctx)
 	if _, err := s.internal.FPutObject(ctx, s.bucket, key, path, minio.PutObjectOptions{ContentType: contentType}); err != nil {
+		return fmt.Errorf("上传对象失败: %w", err)
+	}
+	return nil
+}
+
+// Put 把数据流直接上传为对象（用于头像等服务端校验后的小文件）。
+func (s *Store) Put(ctx context.Context, key string, r io.Reader, size int64, contentType string) error {
+	ctx = httpx.RequestContext(ctx)
+	if _, err := s.internal.PutObject(ctx, s.bucket, key, r, size, minio.PutObjectOptions{ContentType: contentType}); err != nil {
 		return fmt.Errorf("上传对象失败: %w", err)
 	}
 	return nil

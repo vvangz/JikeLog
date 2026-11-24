@@ -3,6 +3,7 @@
 // - 每个响应模型能解析只包含契约必填字段的数据，序列化出的字段都在契约中声明。
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jikelog/core/api/api_client.dart';
@@ -145,6 +146,11 @@ void main() {
       ),
       ('PATCH', '/api/v1/me', () => account.updateNickname('n')),
       (
+        'PUT',
+        '/api/v1/me/avatar',
+        () => account.uploadAvatar(Uint8List.fromList([1, 2, 3]), 'image/png'),
+      ),
+      (
         'POST',
         '/api/v1/me/sms/send',
         () => account.sendSms(SmsPurpose.bindPhone, phone: '138'),
@@ -250,6 +256,15 @@ void main() {
       _sample(_schema('User'))! as Map<String, dynamic>,
     );
     expect(_props(_schema('User')).containsAll(user.toJson().keys), isTrue);
+    final userWithAvatar = User.fromJson({
+      ...(_sample(_schema('User'))! as Map<String, dynamic>),
+      'avatarVersion': 'a1b2c3d4e5f60718',
+    });
+    expect(userWithAvatar.hasAvatar, isTrue);
+    expect(
+      _props(_schema('User')).containsAll(userWithAvatar.toJson().keys),
+      isTrue,
+    );
 
     final tokens = TokenPair.fromJson(
       _sample(_schema('TokenPair'))! as Map<String, dynamic>,

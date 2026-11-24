@@ -177,7 +177,8 @@ class _AppShellState extends ConsumerState<AppShell>
       });
     }
     final auth = ref.watch(authControllerProvider);
-    final userName = auth is SignedIn ? auth.user.displayName : null;
+    final user = auth is SignedIn ? auth.user : null;
+    final userName = user?.displayName;
     final selected = destinationFor(widget.location)?.path;
 
     Widget sidebar({required bool expanded, required VoidCallback onToggle}) =>
@@ -188,6 +189,7 @@ class _AppShellState extends ConsumerState<AppShell>
           onToggle: onToggle,
           onSearch: _search,
           userName: userName,
+          user: user,
         );
 
     final Widget body = switch (layout) {
