@@ -4,10 +4,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
+import '../../app/version.dart';
 import '../../core/api/models.dart';
 import '../../core/platform/platform_features.dart';
 import '../../shared/ui/jk_feedback.dart';
 import '../../shared/ui/jk_page.dart';
+import '../update/update_dialog.dart';
+import '../update/update_service.dart';
 import 'reminder_settings.dart';
 import 'settings_controller.dart';
 
@@ -40,6 +43,8 @@ class SettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(settingsControllerProvider);
+    final update = ref.watch(appUpdateControllerProvider);
+    final c = context.jkColors;
     return JkPage(
       children: [
         const JkSectionTitle('外观'),
@@ -134,6 +139,29 @@ class SettingsPage extends ConsumerWidget {
               subtitle: const Text('导出为表格、Markdown 和日历文件'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/settings/export'),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              key: const Key('settings-check-update'),
+              leading: const Icon(Icons.system_update_alt_rounded),
+              title: const Text('检查更新'),
+              subtitle: Text(
+                update.candidate != null
+                    ? '发现新版本 v${update.candidate!.version}，点击立即更新'
+                    : '当前版本 v$appVersion',
+                style: update.candidate != null
+                    ? TextStyle(color: c.primary)
+                    : null,
+              ),
+              trailing: update.phase == UpdatePhase.checking
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.chevron_right),
+              onTap: update.phase == UpdatePhase.checking
+                  ? null
+                  : () => triggerManualUpdateCheck(context, ref),
             ),
             const Divider(height: 1),
             ListTile(

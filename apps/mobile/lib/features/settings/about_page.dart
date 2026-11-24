@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/jk_tokens.g.dart';
@@ -6,9 +7,11 @@ import '../../app/version.dart';
 import '../../shared/ui/jk_logo.dart';
 import '../../shared/ui/jk_page.dart';
 import '../consent/policy_text.dart';
+import '../update/update_dialog.dart';
+import '../update/update_service.dart';
 
-/// 关于：版本、字体说明、隐私政策与开源许可。
-class AboutPage extends StatelessWidget {
+/// 关于：版本、应用内检查更新、字体说明、隐私政策与开源许可。
+class AboutPage extends ConsumerWidget {
   const AboutPage({super.key});
 
   void _show(BuildContext context, String title, String body) =>
@@ -22,9 +25,10 @@ class AboutPage extends StatelessWidget {
       );
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final c = context.jkColors;
     final text = Theme.of(context).textTheme;
+    final update = ref.watch(appUpdateControllerProvider);
     return JkPage(
       title: '关于',
       children: [
@@ -41,6 +45,26 @@ class AboutPage extends StatelessWidget {
         const SizedBox(height: JkTokens.spacingXl),
         JkCard(
           children: [
+            ListTile(
+              key: const Key('about-check-update'),
+              title: const Text('检查更新'),
+              subtitle: update.candidate != null
+                  ? Text(
+                      '发现新版本 v${update.candidate!.version}',
+                      style: TextStyle(color: c.primary),
+                    )
+                  : null,
+              trailing: update.phase == UpdatePhase.checking
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.chevron_right),
+              onTap: update.phase == UpdatePhase.checking
+                  ? null
+                  : () => triggerManualUpdateCheck(context, ref),
+            ),
+            const Divider(height: 1),
             ListTile(
               title: const Text('隐私政策'),
               trailing: const Icon(Icons.chevron_right),
