@@ -2,6 +2,19 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [1.7.0](https://github.com/vvangz/JikeLog/compare/v1.6.0...v1.7.0) (2026-11-24)
+
+
+### 新功能
+
+* **mobile:** 新增 Android 与 Windows 应用内覆盖更新 ([317a1aa](https://github.com/vvangz/JikeLog/commit/317a1aaf75a2ea300637ac2af53b62fa1c7c1d97))
+* **tokens:** 更换全端深浅主题为深海群青配色并更新应用图标 ([2e98938](https://github.com/vvangz/JikeLog/commit/2e989380278dfebc9362bca51c4584b6b4efdf08))
+
+
+### 文档
+
+* 更新设计规范、使用说明及 v1.7.0 开发日志与发布说明 ([7006d98](https://github.com/vvangz/JikeLog/commit/7006d986e3f95356d5bb9c8c5f3097213b288a8a))
+
 ## [1.6.0](https://github.com/vvangz/JikeLog/compare/v1.5.0...v1.6.0) (2026-11-24)
 
 
