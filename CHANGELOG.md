@@ -7,7 +7,6 @@
 
 ### 新功能
 
-* **mobile:** improve markdown editing ([5fe71a0](https://github.com/vvangz/JikeLog/commit/5fe71a0516efc17d1c3f170e53a3d23009d7e86c))
 * **mobile:** improve markdown editing ([f52af28](https://github.com/vvangz/JikeLog/commit/f52af28cfeeb466e437aeb5cbd357f2520269fea))
 * **mobile:** 增强 Markdown 实时语法高亮、列表续接重排、快捷键与交互预览 ([7b7f1b7](https://github.com/vvangz/JikeLog/commit/7b7f1b7560e075913ec66c8ee71ec1055894f4b6))
 
