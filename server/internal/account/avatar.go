@@ -113,7 +113,7 @@ func (s *Service) UploadAvatar(ctx context.Context, p auth.Principal, contentTyp
 	})
 	if err != nil {
 		// 写库失败时尽力清理已上传的新对象，避免残留孤儿文件
-		_ = s.avatars.Delete(context.WithoutCancel(ctx), newKey)
+		_ = s.avatars.Delete(context.WithoutCancel(httpx.RequestContext(ctx)), newKey)
 		if db.IsNotFound(err) {
 			return dbgen.User{}, httpx.Unauthorized("账号不存在或已注销")
 		}
@@ -121,7 +121,7 @@ func (s *Service) UploadAvatar(ctx context.Context, p auth.Principal, contentTyp
 	}
 
 	if oldKey != nil && *oldKey != "" && *oldKey != newKey {
-		_ = s.avatars.Delete(context.WithoutCancel(ctx), *oldKey)
+		_ = s.avatars.Delete(context.WithoutCancel(httpx.RequestContext(ctx)), *oldKey)
 	}
 	return updated, nil
 }
@@ -172,7 +172,7 @@ func (s *Service) DeleteAvatar(ctx context.Context, p auth.Principal) (dbgen.Use
 		return dbgen.User{}, fmt.Errorf("清除用户头像记录失败: %w", err)
 	}
 	if s.avatars != nil && oldKey != nil && *oldKey != "" {
-		_ = s.avatars.Delete(context.WithoutCancel(ctx), *oldKey)
+		_ = s.avatars.Delete(context.WithoutCancel(httpx.RequestContext(ctx)), *oldKey)
 	}
 	return updated, nil
 }

@@ -137,7 +137,7 @@ func (s *Service) DeleteAccount(ctx context.Context, p auth.Principal, current, 
 		return fmt.Errorf("删除账号失败: %w", err)
 	}
 	for _, fn := range s.onDeleted {
-		fn(context.WithoutCancel(ctx), u.ID)
+		fn(context.WithoutCancel(httpx.RequestContext(ctx)), u.ID)
 	}
 	return nil
 }
