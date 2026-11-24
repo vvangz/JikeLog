@@ -2,6 +2,20 @@
 
 本文件从 v0.2.0 起由 [Release Please](https://github.com/googleapis/release-please) 根据 Conventional Commits 自动生成。每个版本的详细说明见 [开发日志](docs/开发日志)。
 
+## [1.8.0](https://github.com/vvangz/JikeLog/compare/v1.7.0...v1.8.0) (2026-11-24)
+
+
+### 新功能
+
+* **mobile:** 全新设计「瞬刻书签」品牌徽标并更新多端应用图标 ([013287b](https://github.com/vvangz/JikeLog/commit/013287b38d8691b243e4c5a912f68e6413ed411f))
+* **mobile:** 接入自定义头像管理、离线缓存并更新文档 ([5190725](https://github.com/vvangz/JikeLog/commit/5190725b0bcdeb8e7768644463c8e33c15d9d4c4))
+* **server:** 支持用户自定义头像上传、下载与清除 ([4599749](https://github.com/vvangz/JikeLog/commit/45997497a43e45c1143a1b44bc20fd946cd8a94c))
+
+
+### 问题修复
+
+* **server:** 对象存储与异步清理改用 httpx.RequestContext 避免 gin.Context 复用竞争 ([8c9f754](https://github.com/vvangz/JikeLog/commit/8c9f754cbfa80184bb698c356072fb86bbd8943d))
+
 ## [1.7.0](https://github.com/vvangz/JikeLog/compare/v1.6.0...v1.7.0) (2026-11-24)
 
 
