@@ -53,8 +53,9 @@ type App struct {
 	logger      *slog.Logger
 }
 
-// ObjectStore 为对象存储（*storage.Store 实现）：附件直传直下与导出文件。
+// ObjectStore 为对象存储（*storage.Store 实现）：附件直传直下、用户头像与导出文件。
 type ObjectStore interface {
+	account.AvatarStore
 	attachment.ObjectStore
 	export.ObjectStore
 }
@@ -118,7 +119,7 @@ func NewApp(ctx context.Context, o Options) (*App, error) {
 	api := NewAPI(Handlers{
 		System:     newSystemHandler(o),
 		Auth:       auth.NewHandler(authSvc),
-		Account:    account.NewHandler(account.NewService(tx, authSvc, limiter, onDeleted)),
+		Account:    account.NewHandler(account.NewService(tx, authSvc, limiter, o.Store, onDeleted)),
 		Sync:       syncer.NewHandler(syncSvc, sessions),
 		Attachment: attachment.NewHandler(attSvc, sessions),
 		Export:     export.NewHandler(exports),

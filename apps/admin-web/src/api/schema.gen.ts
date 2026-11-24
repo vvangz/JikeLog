@@ -241,6 +241,31 @@ export interface paths {
         patch: operations["updateMe"];
         trace?: never;
     };
+    "/api/v1/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取当前用户自定义头像
+         * @description 返回当前用户已上传的头像图片二进制内容；未设置自定义头像时返回 404（`AVATAR_NOT_FOUND`）。
+         */
+        get: operations["getMyAvatar"];
+        /**
+         * 上传或更换自定义头像
+         * @description 接受 Base64 编码的 JPEG/PNG/WebP 图片（解码后不超过 2 MiB，尺寸 1–4096 像素），服务端校验魔数与尺寸后写入对象存储并返回最新账号信息（含新 `avatarVersion`）。
+         */
+        put: operations["uploadMyAvatar"];
+        post?: never;
+        /** 清除自定义头像（恢复默认头像） */
+        delete: operations["deleteMyAvatar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/sms/send": {
         parameters: {
             query?: never;
@@ -1115,6 +1140,11 @@ export interface components {
              * @example 138****5678
              */
             phoneMasked?: string;
+            /**
+             * @description 自定义头像版本标识（内容哈希前缀），未设置自定义头像时不返回
+             * @example a1b2c3d4e5f60718
+             */
+            avatarVersion?: string;
             /** Format: date-time */
             createdAt: string;
         };
@@ -1135,6 +1165,15 @@ export interface components {
         };
         UpdateMeRequest: {
             nickname: components["schemas"]["Nickname"];
+        };
+        UploadAvatarRequest: {
+            /**
+             * @description 头像图片 MIME 类型，服务端同时按文件头魔数校验
+             * @enum {string}
+             */
+            contentType: "image/jpeg" | "image/png" | "image/webp";
+            /** @description 图片内容的标准 Base64 编码，解码后不超过 2 MiB，尺寸 1–4096 像素 */
+            data: string;
         };
         /** @description 当前密码与当前手机号验证码二选一 */
         VerifyIdentityRequest: {
@@ -1975,6 +2014,78 @@ export interface operations {
         };
         responses: {
             /** @description 修改后的账号信息 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getMyAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 头像图片 */
+            200: {
+                headers: {
+                    ETag?: string;
+                    "Cache-Control"?: string;
+                    "X-Content-Type-Options"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    uploadMyAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadAvatarRequest"];
+            };
+        };
+        responses: {
+            /** @description 上传后的账号信息 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserEnvelope"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    deleteMyAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 清除后的账号信息 */
             200: {
                 headers: {
                     [name: string]: unknown;

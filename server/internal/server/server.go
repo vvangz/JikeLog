@@ -70,6 +70,8 @@ func NewAPI(h Handlers) API {
 const (
 	// maxBodyBytes 为 JSON 请求体上限；附件走对象存储直传，不经过 API。
 	maxBodyBytes = 1 << 20
+	// maxAvatarBodyBytes 为自定义头像上传的请求体上限（2 MiB 原图经 Base64 编码约 2.7 MiB）。
+	maxAvatarBodyBytes = 3 << 20
 	// maxPushBodyBytes 为批量推送的请求体上限（最多 100 条变更，长文本可达 10 万字）。
 	maxPushBodyBytes = 4 << 20
 	// wsRoute 为实时通知的 WebSocket 路由（在契约中以说明文字描述，不由代码生成器注册）。
@@ -90,7 +92,10 @@ func NewRouter(cfg config.Config, logger *slog.Logger, api API, authn *auth.Serv
 	r.Use(
 		httpx.RequestID(), httpx.SecurityHeaders(), httpx.AccessLog(logger), httpx.Recovery(logger),
 		httpx.CORS(cfg.HTTP.CORSOrigins), httpx.ClientIP(),
-		httpx.BodyLimit(maxBodyBytes, map[string]int64{"/api/v1/sync/push": maxPushBodyBytes}),
+		httpx.BodyLimit(maxBodyBytes, map[string]int64{
+			"/api/v1/sync/push": maxPushBodyBytes,
+			"/api/v1/me/avatar": maxAvatarBodyBytes,
+		}),
 		authenticate(authn, admins),
 	)
 	r.NoRoute(func(c *gin.Context) {

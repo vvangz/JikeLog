@@ -41,13 +41,14 @@ type Service struct {
 	tx      db.TxRunner
 	auth    *auth.Service
 	limiter *ratelimit.Limiter
+	avatars AvatarStore
 	// onDeleted 在账号删除后调用，用于清理数据库之外的数据（对象存储中的附件、密钥缓存）。
 	onDeleted []func(ctx context.Context, userID uuid.UUID)
 }
 
 // NewService 创建 Service。onDeleted 在账号删除（事务提交）后依次调用。
-func NewService(tx db.TxRunner, authSvc *auth.Service, limiter *ratelimit.Limiter, onDeleted ...func(ctx context.Context, userID uuid.UUID)) *Service {
-	return &Service{tx: tx, auth: authSvc, limiter: limiter, onDeleted: onDeleted}
+func NewService(tx db.TxRunner, authSvc *auth.Service, limiter *ratelimit.Limiter, avatars AvatarStore, onDeleted ...func(ctx context.Context, userID uuid.UUID)) *Service {
+	return &Service{tx: tx, auth: authSvc, limiter: limiter, avatars: avatars, onDeleted: onDeleted}
 }
 
 // currentUser 读取调用方账号；账号已被删除时按未登录处理。

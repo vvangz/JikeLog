@@ -1,6 +1,7 @@
 package account
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/vvangz/JikeLog/server/internal/apigen"
@@ -69,6 +70,68 @@ func (h *Handler) UpdateMe(ctx context.Context, req apigen.UpdateMeRequestObject
 		return nil, err
 	}
 	return apigen.UpdateMe200JSONResponse(userEnvelope(ctx, auth.ToUser(u))), nil
+}
+
+// GetMyAvatar 实现 GET /api/v1/me/avatar。
+func (h *Handler) GetMyAvatar(ctx context.Context, _ apigen.GetMyAvatarRequestObject) (apigen.GetMyAvatarResponseObject, error) {
+	p, err := auth.MustPrincipal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	av, err := h.svc.GetAvatar(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	etag := `"` + av.ETag + `"`
+	cacheControl := "private, max-age=3600"
+	nosniff := "nosniff"
+	headers := apigen.GetMyAvatar200ResponseHeaders{
+		ETag:                &etag,
+		CacheControl:        &cacheControl,
+		XContentTypeOptions: &nosniff,
+	}
+	body := bytes.NewReader(av.Bytes)
+	size := int64(len(av.Bytes))
+	switch av.ContentType {
+	case "image/png":
+		return apigen.GetMyAvatar200ImagepngResponse{Body: body, Headers: headers, ContentLength: size}, nil
+	case "image/webp":
+		return apigen.GetMyAvatar200ImagewebpResponse{Body: body, Headers: headers, ContentLength: size}, nil
+	default:
+		return apigen.GetMyAvatar200ImagejpegResponse{Body: body, Headers: headers, ContentLength: size}, nil
+	}
+}
+
+// UploadMyAvatar 实现 PUT /api/v1/me/avatar。
+func (h *Handler) UploadMyAvatar(ctx context.Context, req apigen.UploadMyAvatarRequestObject) (apigen.UploadMyAvatarResponseObject, error) {
+	p, err := auth.MustPrincipal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return nil, errEmptyBody
+	}
+	if !req.Body.ContentType.Valid() {
+		return nil, httpx.Validation(map[string]string{"contentType": "仅支持 JPEG、PNG 或 WebP 格式"})
+	}
+	u, err := h.svc.UploadAvatar(ctx, p, string(req.Body.ContentType), req.Body.Data)
+	if err != nil {
+		return nil, err
+	}
+	return apigen.UploadMyAvatar200JSONResponse(userEnvelope(ctx, auth.ToUser(u))), nil
+}
+
+// DeleteMyAvatar 实现 DELETE /api/v1/me/avatar。
+func (h *Handler) DeleteMyAvatar(ctx context.Context, _ apigen.DeleteMyAvatarRequestObject) (apigen.DeleteMyAvatarResponseObject, error) {
+	p, err := auth.MustPrincipal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	u, err := h.svc.DeleteAvatar(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	return apigen.DeleteMyAvatar200JSONResponse(userEnvelope(ctx, auth.ToUser(u))), nil
 }
 
 // SendAccountSms 实现 POST /api/v1/me/sms/send。

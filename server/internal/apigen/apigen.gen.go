@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -415,6 +416,27 @@ const (
 func (e TokenPairTokenType) Valid() bool {
 	switch e {
 	case TokenPairTokenTypeBearer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UploadAvatarRequestContentType.
+const (
+	UploadAvatarRequestContentTypeImagejpeg UploadAvatarRequestContentType = "image/jpeg"
+	UploadAvatarRequestContentTypeImagepng  UploadAvatarRequestContentType = "image/png"
+	UploadAvatarRequestContentTypeImagewebp UploadAvatarRequestContentType = "image/webp"
+)
+
+// Valid indicates whether the value is a known member of the UploadAvatarRequestContentType enum.
+func (e UploadAvatarRequestContentType) Valid() bool {
+	switch e {
+	case UploadAvatarRequestContentTypeImagejpeg:
+		return true
+	case UploadAvatarRequestContentTypeImagepng:
+		return true
+	case UploadAvatarRequestContentTypeImagewebp:
 		return true
 	default:
 		return false
@@ -1535,12 +1557,28 @@ type UpdateMeRequest struct {
 	Nickname Nickname `json:"nickname"`
 }
 
+// UploadAvatarRequest defines model for UploadAvatarRequest.
+type UploadAvatarRequest struct {
+	// ContentType 头像图片 MIME 类型，服务端同时按文件头魔数校验
+	ContentType UploadAvatarRequestContentType `json:"contentType"`
+
+	// Data 图片内容的标准 Base64 编码，解码后不超过 2 MiB，尺寸 1–4096 像素
+	Data string `json:"data"`
+}
+
+// UploadAvatarRequestContentType 头像图片 MIME 类型，服务端同时按文件头魔数校验
+type UploadAvatarRequestContentType string
+
 // User defines model for User.
 type User struct {
-	CreatedAt time.Time          `json:"createdAt"`
-	HasPhone  bool               `json:"hasPhone"`
-	Id        openapi_types.UUID `json:"id"`
-	Nickname  string             `json:"nickname"`
+	// AvatarVersion 自定义头像版本标识（内容哈希前缀），未设置自定义头像时不返回
+	//
+	// Example: a1b2c3d4e5f60718
+	AvatarVersion *string            `json:"avatarVersion,omitempty"`
+	CreatedAt     time.Time          `json:"createdAt"`
+	HasPhone      bool               `json:"hasPhone"`
+	Id            openapi_types.UUID `json:"id"`
+	Nickname      string             `json:"nickname"`
 
 	// PhoneMasked 脱敏后的手机号，未绑定时不返回
 	//
@@ -1714,6 +1752,9 @@ type CreateExportJSONRequestBody = ExportRequest
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeRequest
 
+// UploadMyAvatarJSONRequestBody defines body for UploadMyAvatar for application/json ContentType.
+type UploadMyAvatarJSONRequestBody = UploadAvatarRequest
+
 // DeleteAccountJSONRequestBody defines body for DeleteAccount for application/json ContentType.
 type DeleteAccountJSONRequestBody = VerifyIdentityRequest
 
@@ -1839,6 +1880,15 @@ type ServerInterface interface {
 	// UpdateMe 修改资料
 	// (PATCH /api/v1/me)
 	UpdateMe(c *gin.Context)
+	// DeleteMyAvatar 清除自定义头像（恢复默认头像）
+	// (DELETE /api/v1/me/avatar)
+	DeleteMyAvatar(c *gin.Context)
+	// GetMyAvatar 获取当前用户自定义头像
+	// (GET /api/v1/me/avatar)
+	GetMyAvatar(c *gin.Context)
+	// UploadMyAvatar 上传或更换自定义头像
+	// (PUT /api/v1/me/avatar)
+	UploadMyAvatar(c *gin.Context)
 	// DeleteAccount 注销账号
 	// (POST /api/v1/me/deletion)
 	DeleteAccount(c *gin.Context)
@@ -2617,6 +2667,45 @@ func (siw *ServerInterfaceWrapper) UpdateMe(c *gin.Context) {
 	siw.Handler.UpdateMe(c)
 }
 
+// DeleteMyAvatar operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMyAvatar(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.DeleteMyAvatar(c)
+}
+
+// GetMyAvatar operation middleware
+func (siw *ServerInterfaceWrapper) GetMyAvatar(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetMyAvatar(c)
+}
+
+// UploadMyAvatar operation middleware
+func (siw *ServerInterfaceWrapper) UploadMyAvatar(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.UploadMyAvatar(c)
+}
+
 // DeleteAccount operation middleware
 func (siw *ServerInterfaceWrapper) DeleteAccount(c *gin.Context) {
 
@@ -3021,6 +3110,9 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/api/v1/auth/logout", wrapper.Logout)
 	router.GET(options.BaseURL+"/api/v1/me", wrapper.GetMe)
 	router.PATCH(options.BaseURL+"/api/v1/me", wrapper.UpdateMe)
+	router.DELETE(options.BaseURL+"/api/v1/me/avatar", wrapper.DeleteMyAvatar)
+	router.GET(options.BaseURL+"/api/v1/me/avatar", wrapper.GetMyAvatar)
+	router.PUT(options.BaseURL+"/api/v1/me/avatar", wrapper.UploadMyAvatar)
 	router.POST(options.BaseURL+"/api/v1/me/sms/send", wrapper.SendAccountSms)
 	router.PUT(options.BaseURL+"/api/v1/me/password", wrapper.ChangePassword)
 	router.PUT(options.BaseURL+"/api/v1/me/phone", wrapper.BindPhone)
@@ -4336,6 +4428,203 @@ func (response UpdateMedefaultJSONResponse) VisitUpdateMeResponse(w http.Respons
 	return err
 }
 
+type DeleteMyAvatarRequestObject struct {
+}
+
+type DeleteMyAvatarResponseObject interface {
+	VisitDeleteMyAvatarResponse(w http.ResponseWriter) error
+}
+
+type DeleteMyAvatar200JSONResponse UserEnvelope
+
+func (response DeleteMyAvatar200JSONResponse) VisitDeleteMyAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyAvatardefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response DeleteMyAvatardefaultJSONResponse) VisitDeleteMyAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyAvatarRequestObject struct {
+}
+
+type GetMyAvatarResponseObject interface {
+	VisitGetMyAvatarResponse(w http.ResponseWriter) error
+}
+
+type GetMyAvatar200ResponseHeaders struct {
+	CacheControl        *string
+	ETag                *string
+	XContentTypeOptions *string
+}
+
+type GetMyAvatar200ImagejpegResponse struct {
+	Body          io.Reader
+	Headers       GetMyAvatar200ResponseHeaders
+	ContentLength int64
+}
+
+func (response GetMyAvatar200ImagejpegResponse) VisitGetMyAvatarResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	if response.Headers.XContentTypeOptions != nil {
+		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetMyAvatar200ImagepngResponse struct {
+	Body          io.Reader
+	Headers       GetMyAvatar200ResponseHeaders
+	ContentLength int64
+}
+
+func (response GetMyAvatar200ImagepngResponse) VisitGetMyAvatarResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/png")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	if response.Headers.XContentTypeOptions != nil {
+		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetMyAvatar200ImagewebpResponse struct {
+	Body          io.Reader
+	Headers       GetMyAvatar200ResponseHeaders
+	ContentLength int64
+}
+
+func (response GetMyAvatar200ImagewebpResponse) VisitGetMyAvatarResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/webp")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	if response.Headers.XContentTypeOptions != nil {
+		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetMyAvatardefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response GetMyAvatardefaultJSONResponse) VisitGetMyAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadMyAvatarRequestObject struct {
+	Body *UploadMyAvatarJSONRequestBody
+}
+
+type UploadMyAvatarResponseObject interface {
+	VisitUploadMyAvatarResponse(w http.ResponseWriter) error
+}
+
+type UploadMyAvatar200JSONResponse UserEnvelope
+
+func (response UploadMyAvatar200JSONResponse) VisitUploadMyAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadMyAvatardefaultJSONResponse struct {
+	Body       ErrorEnvelope
+	StatusCode int
+}
+
+func (response UploadMyAvatardefaultJSONResponse) VisitUploadMyAvatarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteAccountRequestObject struct {
 	Body *DeleteAccountJSONRequestBody
 }
@@ -5147,6 +5436,15 @@ type StrictServerInterface interface {
 	// UpdateMe 修改资料
 	// (PATCH /api/v1/me)
 	UpdateMe(ctx context.Context, request UpdateMeRequestObject) (UpdateMeResponseObject, error)
+	// DeleteMyAvatar 清除自定义头像（恢复默认头像）
+	// (DELETE /api/v1/me/avatar)
+	DeleteMyAvatar(ctx context.Context, request DeleteMyAvatarRequestObject) (DeleteMyAvatarResponseObject, error)
+	// GetMyAvatar 获取当前用户自定义头像
+	// (GET /api/v1/me/avatar)
+	GetMyAvatar(ctx context.Context, request GetMyAvatarRequestObject) (GetMyAvatarResponseObject, error)
+	// UploadMyAvatar 上传或更换自定义头像
+	// (PUT /api/v1/me/avatar)
+	UploadMyAvatar(ctx context.Context, request UploadMyAvatarRequestObject) (UploadMyAvatarResponseObject, error)
 	// DeleteAccount 注销账号
 	// (POST /api/v1/me/deletion)
 	DeleteAccount(ctx context.Context, request DeleteAccountRequestObject) (DeleteAccountResponseObject, error)
@@ -6152,6 +6450,85 @@ func (sh *strictHandler) UpdateMe(ctx *gin.Context) {
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(UpdateMeResponseObject); ok {
 		if err := validResponse.VisitUpdateMeResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMyAvatar operation middleware
+func (sh *strictHandler) DeleteMyAvatar(ctx *gin.Context) {
+	var request DeleteMyAvatarRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMyAvatar(ctx, request.(DeleteMyAvatarRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMyAvatar")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(DeleteMyAvatarResponseObject); ok {
+		if err := validResponse.VisitDeleteMyAvatarResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMyAvatar operation middleware
+func (sh *strictHandler) GetMyAvatar(ctx *gin.Context) {
+	var request GetMyAvatarRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMyAvatar(ctx, request.(GetMyAvatarRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMyAvatar")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetMyAvatarResponseObject); ok {
+		if err := validResponse.VisitGetMyAvatarResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UploadMyAvatar operation middleware
+func (sh *strictHandler) UploadMyAvatar(ctx *gin.Context) {
+	var request UploadMyAvatarRequestObject
+
+	var body UploadMyAvatarJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.UploadMyAvatar(ctx, request.(UploadMyAvatarRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UploadMyAvatar")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(UploadMyAvatarResponseObject); ok {
+		if err := validResponse.VisitUploadMyAvatarResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {

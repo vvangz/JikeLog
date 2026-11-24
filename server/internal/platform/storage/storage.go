@@ -169,6 +169,14 @@ func (s *Store) PutFile(ctx context.Context, key, path, contentType string) erro
 	return nil
 }
 
+// Put 把数据流直接上传为对象（用于头像等服务端校验后的小文件）。
+func (s *Store) Put(ctx context.Context, key string, r io.Reader, size int64, contentType string) error {
+	if _, err := s.internal.PutObject(ctx, s.bucket, key, r, size, minio.PutObjectOptions{ContentType: contentType}); err != nil {
+		return fmt.Errorf("上传对象失败: %w", err)
+	}
+	return nil
+}
+
 func isNotFound(err error) bool {
 	r := minio.ToErrorResponse(err)
 	return r.Code == "NoSuchKey" || r.StatusCode == http.StatusNotFound

@@ -217,7 +217,14 @@ func SMSSentEnvelope(ctx context.Context) apigen.SmsSentEnvelope {
 
 // ToUser 把数据库用户转换为接口模型（手机号脱敏）。
 func ToUser(u dbgen.User) apigen.User {
-	out := apigen.User{Id: u.ID, Username: u.Username, Nickname: u.Nickname, CreatedAt: u.CreatedAt, HasPhone: u.Phone != nil}
+	out := apigen.User{
+		Id:            u.ID,
+		Username:      u.Username,
+		Nickname:      u.Nickname,
+		CreatedAt:     u.CreatedAt,
+		HasPhone:      u.Phone != nil,
+		AvatarVersion: u.AvatarEtag,
+	}
 	if u.Phone != nil {
 		m := MaskPhone(*u.Phone)
 		out.PhoneMasked = &m

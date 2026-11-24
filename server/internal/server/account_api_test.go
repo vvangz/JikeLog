@@ -1,11 +1,21 @@
 package server
 
 import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"errors"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/vvangz/JikeLog/server/internal/platform/storage"
 )
 
 func TestUpdateMe(t *testing.T) {
@@ -222,4 +232,132 @@ func TestRevocationDoesNotDependOnRedis(t *testing.T) {
 	a.expect(a.call(http.MethodGet, "/api/v1/me", nil, s.access), http.StatusOK, "")
 	a.expect(a.call(http.MethodDelete, "/api/v1/me/devices/"+other.deviceID, nil, s.access), http.StatusOK, "")
 	a.expect(a.call(http.MethodGet, "/api/v1/me", nil, other.access), http.StatusUnauthorized, "UNAUTHORIZED")
+}
+
+func TestAvatarUploadGetReplaceDelete(t *testing.T) {
+	a := newTestApp(t)
+	s := a.register("uma_avatar", "secret123", "install-001")
+
+	// 初始状态未设置自定义头像
+	me := a.call(http.MethodGet, "/api/v1/me", nil, s.access)
+	a.expect(me, http.StatusOK, "")
+	if me.str("data", "avatarVersion") != "" {
+		t.Fatalf("初始不应有 avatarVersion: %q", me.str("data", "avatarVersion"))
+	}
+	a.expect(a.call(http.MethodGet, "/api/v1/me/avatar", nil, s.access), http.StatusNotFound, "AVATAR_NOT_FOUND")
+
+	// 构造测试 PNG 与 JPEG
+	img := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	img.Set(0, 0, color.RGBA{R: 0x2D, G: 0x46, B: 0xD8, A: 0xFF})
+	var pngBuf, jpgBuf bytes.Buffer
+	if err := png.Encode(&pngBuf, img); err != nil {
+		t.Fatal(err)
+	}
+	if err := jpeg.Encode(&jpgBuf, img, &jpeg.Options{Quality: 85}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 拒绝非法请求
+	a.expect(a.call(http.MethodPut, "/api/v1/me/avatar", map[string]any{
+		"contentType": "image/svg+xml",
+		"data":        base64.StdEncoding.EncodeToString([]byte("<svg/>")),
+	}, s.access), http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+	a.expect(a.call(http.MethodPut, "/api/v1/me/avatar", map[string]any{
+		"contentType": "image/png",
+		"data":        "not-valid-base64!!!",
+	}, s.access), http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+	a.expect(a.call(http.MethodPut, "/api/v1/me/avatar", map[string]any{
+		"contentType": "image/jpeg",
+		"data":        base64.StdEncoding.EncodeToString(pngBuf.Bytes()),
+	}, s.access), http.StatusUnprocessableEntity, "VALIDATION_FAILED")
+
+	// 上传 PNG
+	up1 := a.call(http.MethodPut, "/api/v1/me/avatar", map[string]any{
+		"contentType": "image/png",
+		"data":        base64.StdEncoding.EncodeToString(pngBuf.Bytes()),
+	}, s.access)
+	a.expect(up1, http.StatusOK, "")
+	v1 := up1.str("data", "avatarVersion")
+	if len(v1) != 16 {
+		t.Fatalf("avatarVersion 长度应为 16: %q", v1)
+	}
+	var key1 string
+	if err := a.pool.QueryRow(context.Background(), "SELECT avatar_key FROM users WHERE id = $1", s.userID).Scan(&key1); err != nil {
+		t.Fatal(err)
+	}
+
+	// GET 返回原始 PNG、正确 Content-Type 与安全头
+	getRaw := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/me/avatar", nil)
+		req.Header.Set("Authorization", "Bearer "+s.access)
+		rec := httptest.NewRecorder()
+		a.h.ServeHTTP(rec, req)
+		return rec
+	}
+	got1 := getRaw()
+	if got1.Code != http.StatusOK {
+		t.Fatalf("GET avatar = %d, want 200", got1.Code)
+	}
+	if ct := got1.Header().Get("Content-Type"); ct != "image/png" {
+		t.Errorf("Content-Type = %q, want image/png", ct)
+	}
+	if got1.Header().Get("ETag") != `"`+v1+`"` {
+		t.Errorf("ETag = %q, want %q", got1.Header().Get("ETag"), `"`+v1+`"`)
+	}
+	if got1.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q", got1.Header().Get("X-Content-Type-Options"))
+	}
+	if !bytes.Equal(got1.Body.Bytes(), pngBuf.Bytes()) {
+		t.Error("下载的 PNG 字节与上传不一致")
+	}
+
+	// 更换为 JPEG：版本变化、返回 JPEG、旧 PNG 对象已删除
+	up2 := a.call(http.MethodPut, "/api/v1/me/avatar", map[string]any{
+		"contentType": "image/jpeg",
+		"data":        base64.StdEncoding.EncodeToString(jpgBuf.Bytes()),
+	}, s.access)
+	a.expect(up2, http.StatusOK, "")
+	v2 := up2.str("data", "avatarVersion")
+	if v2 == "" || v2 == v1 {
+		t.Fatalf("更换头像后版本应变化: v1=%q v2=%q", v1, v2)
+	}
+	got2 := getRaw()
+	if got2.Code != http.StatusOK || got2.Header().Get("Content-Type") != "image/jpeg" {
+		t.Fatalf("更换后 GET = %d ct=%q", got2.Code, got2.Header().Get("Content-Type"))
+	}
+	if !bytes.Equal(got2.Body.Bytes(), jpgBuf.Bytes()) {
+		t.Error("下载的 JPEG 字节与上传不一致")
+	}
+	if _, err := a.store.Size(context.Background(), key1); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("旧头像对象 %s 应已删除，got err=%v", key1, err)
+	}
+
+	// 清除头像：恢复默认头像且对象已删除
+	var key2 string
+	if err := a.pool.QueryRow(context.Background(), "SELECT avatar_key FROM users WHERE id = $1", s.userID).Scan(&key2); err != nil {
+		t.Fatal(err)
+	}
+	del := a.call(http.MethodDelete, "/api/v1/me/avatar", nil, s.access)
+	a.expect(del, http.StatusOK, "")
+	if del.str("data", "avatarVersion") != "" {
+		t.Errorf("清除后不应返回 avatarVersion: %q", del.str("data", "avatarVersion"))
+	}
+	a.expect(a.call(http.MethodGet, "/api/v1/me/avatar", nil, s.access), http.StatusNotFound, "AVATAR_NOT_FOUND")
+	if _, err := a.store.Size(context.Background(), key2); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("清除后头像对象 %s 应已删除，got err=%v", key2, err)
+	}
+
+	// 再次上传后注销账号，确认对象存储按用户前缀自动清理
+	a.expect(a.call(http.MethodPut, "/api/v1/me/avatar", map[string]any{
+		"contentType": "image/png",
+		"data":        base64.StdEncoding.EncodeToString(pngBuf.Bytes()),
+	}, s.access), http.StatusOK, "")
+	var key3 string
+	if err := a.pool.QueryRow(context.Background(), "SELECT avatar_key FROM users WHERE id = $1", s.userID).Scan(&key3); err != nil {
+		t.Fatal(err)
+	}
+	a.expect(a.call(http.MethodPost, "/api/v1/me/deletion", map[string]any{"currentPassword": "secret123"}, s.access), http.StatusOK, "")
+	if _, err := a.store.Size(context.Background(), key3); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("注销账号后头像对象 %s 应被自动清理，got err=%v", key3, err)
+	}
 }
